@@ -157,7 +157,8 @@ export default [
             'id-denylist': 'off',
             'no-undefined': 'off',
             'no-empty-function': 'off',
-            'func-style': 'off'
+            'func-style': 'off',
+            'no-invalid-this': 'off'
         }
     }
 ];

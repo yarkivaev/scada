@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm test              # Run all tests with Mocha
 npm test -- --grep "pattern"  # Run tests matching pattern
+npm run coverage      # Run tests with coverage report
 npm run lint          # Run ESLint
 npm run lint:fix      # Run ESLint with auto-fix
 ```
