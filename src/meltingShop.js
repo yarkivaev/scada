@@ -2,18 +2,22 @@
  * Melting shop containing melting machines and their meltings.
  * Provides initialization for all contained machines.
  *
- * @param {object} meltingMachines - initialized list of melting machines
+ * @param {string} name - unique identifier for the shop
+ * @param {object} meltingMachines - initialized wrapper of melting machines
  * @param {object} meltings - collection managing melting sessions
- * @returns {object} shop with machines, meltings properties and init method
+ * @returns {object} shop with name, machines, meltings properties and init method
  *
  * @example
- *   const shop = meltingShop(initializedList(machine1, machine2), meltings());
- *   shop.machines.list(); // [machine1, machine2]
- *   shop.meltings.start(machine1); // start melting session
+ *   const shop = meltingShop('shop1', initialized({ m1: machine }, Object.values), meltings());
+ *   shop.name(); // 'shop1'
+ *   shop.machines.init().m1; // access machine by key
  *   shop.init();
  */
-export default function meltingShop(meltingMachines, meltings) {
+export default function meltingShop(name, meltingMachines, meltings) {
     return {
+        name() {
+            return name;
+        },
         machines: meltingMachines,
         meltings,
         init() {

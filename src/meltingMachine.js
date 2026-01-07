@@ -33,6 +33,9 @@ export default function meltingMachine(name, sensors, alerts) {
         },
         dispense(w) {
             weight -= w;
+        },
+        init() {
+            return this;
         }
     };
 }

@@ -24,9 +24,9 @@ plant → meltingShop → meltingMachine
                     monitoredMeltingMachine (decorator with periodic monitoring)
 ```
 
-- **plant**: Top-level container holding melting shops via `initializedList`
-- **meltingShop**: Contains melting machines via `initializedList`
-- **meltingMachine**: Tracks weight, sensor measurements (voltage, cosphi), and alerts
+- **plant**: Top-level container holding melting shops via `initialized`
+- **meltingShop**: Contains melting machines via `initialized`, has name() method
+- **meltingMachine**: Tracks weight, sensor measurements, and alerts
 - **monitoredMeltingMachine**: Wraps machine with periodic rule evaluation via `interval`
 
 ### Melting Session Lifecycle
@@ -50,7 +50,7 @@ alerts.trigger() → alert → acknowledge() → acknowledgedAlert
 
 ### Utilities
 
-- **initializedList**: Batch initialization wrapper calling `init()` on each item
+- **initialized**: Collection-agnostic batch initialization wrapper; `init()` calls init on items once and returns the collection
 - **interval**: Wraps `setInterval` for periodic actions
 
 ## Elegant Objects Principles

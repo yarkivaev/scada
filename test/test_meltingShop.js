@@ -4,12 +4,10 @@ import meltingShop from '../src/meltingShop.js';
 function fakeMachines() {
     return {
         initialized: false,
-        items: [],
-        list() {
-            return this.items;
-        },
+        collection: {},
         init() {
             this.initialized = true;
+            return this.collection;
         }
     };
 }
@@ -24,36 +22,43 @@ function fakeMeltings() {
 }
 
 describe('meltingShop', function() {
-    it('returns machines property', function() {
-        const machines = fakeMachines();
-        const shop = meltingShop(machines, fakeMeltings());
-        assert(shop.machines === machines);
+    it('returns name from name method', function() {
+        const name = `shop${Math.random()}`;
+        const shop = meltingShop(name, fakeMachines(), fakeMeltings());
+        assert(shop.name() === name, 'name does not match');
     });
 
-    it('returns machines list from machines property', function() {
+    it('returns machines property', function() {
         const machines = fakeMachines();
-        machines.items = [{ name: `m${Math.random()}` }];
-        const shop = meltingShop(machines, fakeMeltings());
-        assert(shop.machines.list().length === 1);
+        const shop = meltingShop(`shop${Math.random()}`, machines, fakeMeltings());
+        assert(shop.machines === machines, 'machines property mismatch');
+    });
+
+    it('returns machines collection from init', function() {
+        const machines = fakeMachines();
+        const key = `m${Math.random()}`;
+        machines.collection = { [key]: { name: key } };
+        const shop = meltingShop(`shop${Math.random()}`, machines, fakeMeltings());
+        assert(shop.machines.init()[key] !== undefined, 'machine not found in collection');
     });
 
     it('calls init on machines when init is called', function() {
         const machines = fakeMachines();
-        const shop = meltingShop(machines, fakeMeltings());
+        const shop = meltingShop(`shop${Math.random()}`, machines, fakeMeltings());
         shop.init();
-        assert(machines.initialized === true);
+        assert(machines.initialized === true, 'machines were not initialized');
     });
 
     it('returns meltings property', function() {
         const meltings = fakeMeltings();
-        const shop = meltingShop(fakeMachines(), meltings);
-        assert(shop.meltings === meltings);
+        const shop = meltingShop(`shop${Math.random()}`, fakeMachines(), meltings);
+        assert(shop.meltings === meltings, 'meltings property mismatch');
     });
 
     it('returns meltings list from meltings property', function() {
         const meltings = fakeMeltings();
         meltings.items = [{ id: `melting${Math.random()}` }];
-        const shop = meltingShop(fakeMachines(), meltings);
-        assert(shop.meltings.all().length === 1);
+        const shop = meltingShop(`shop${Math.random()}`, fakeMachines(), meltings);
+        assert(shop.meltings.all().length === 1, 'expected one melting');
     });
 });

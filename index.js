@@ -4,9 +4,9 @@
  * alerting systems, and plant hierarchy.
  *
  * @example
- *   import { plant, meltingShop, meltingMachine, meltings, alerts } from 'scada';
- *   const shop = meltingShop(initializedList(machine), meltings());
- *   const p = plant(initializedList(shop));
+ *   import { plant, meltingShop, meltingMachine, meltings, alerts, initialized } from 'scada';
+ *   const shop = meltingShop('shop1', initialized({ m1: machine }, Object.values), meltings());
+ *   const p = plant(initialized({ shop1: shop }, Object.values));
  */
 
 // Plant hierarchy
@@ -29,4 +29,4 @@ export { default as alerts } from './src/alerts.js';
 
 // Utilities
 export { default as interval } from './src/interval.js';
-export { default as initializedList } from './src/initializedList.js';
+export { default as initialized } from './src/initialized.js';

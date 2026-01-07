@@ -11,11 +11,12 @@ npm install scada
 ## Usage
 
 ```javascript
-import { plant, meltingShop, meltingMachine, meltings, alerts } from 'scada';
+import { plant, meltingShop, meltingMachine, meltings, alerts, initialized } from 'scada';
 
-const machine = meltingMachine('icht1', voltageSensor, cosphiSensor, alertHistory);
-const shop = meltingShop(initializedList(machine), meltings());
-const factory = plant(initializedList(shop));
+const machine = meltingMachine('icht1', sensors, alertHistory);
+const shop = meltingShop('shop1', initialized({ icht1: machine }, Object.values), meltings());
+const factory = plant(initialized({ shop1: shop }, Object.values));
+factory.init(); // initializes all shops and machines
 ```
 
 ## Modules
@@ -32,7 +33,7 @@ const factory = plant(initializedList(shop));
 - `alert` - Immutable alert record
 - `acknowledgedAlert` - Acknowledged alert record
 - `interval` - Periodic action executor
-- `initializedList` - List with batch initialization
+- `initialized` - Collection-agnostic batch initialization wrapper
 
 ## License
 
