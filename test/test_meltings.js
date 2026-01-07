@@ -1,12 +1,15 @@
 import assert from 'assert';
 import meltings from '../src/meltings.js';
 
-function fakeMelting(id, _machine, _startTime, onStop) {
+function fakeMelting(id, _machine, _startTime, chronology, onStop) {
     return {
         id() {
             return id;
         },
         end: undefined,
+        chronology() {
+            return chronology;
+        },
         stop() {
             const completed = {
                 id() {
@@ -14,6 +17,9 @@ function fakeMelting(id, _machine, _startTime, onStop) {
                 },
                 end() {
                     return new Date();
+                },
+                chronology() {
+                    return chronology;
                 }
             };
             onStop(completed);
@@ -23,9 +29,13 @@ function fakeMelting(id, _machine, _startTime, onStop) {
 }
 
 function fakeMachine() {
+    const initial = Math.random() * 100;
     return {
         name() {
             return `machine${  Math.random()}`;
+        },
+        weight() {
+            return initial;
         }
     };
 }
@@ -170,6 +180,32 @@ describe('meltings', function() {
         list.start(machine);
         subscription.cancel();
         list.start(machine);
-        assert(count === 1);
+        assert(count === 1, 'subscriber was notified after cancel');
+    });
+
+    it('provides chronology on active melting', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        const active = list.start(machine);
+        assert(active.chronology() !== undefined, 'chronology not provided');
+    });
+
+    it('allows load through chronology', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        const active = list.start(machine);
+        const amount = Math.random() * 500;
+        active.chronology().load(amount);
+        assert(active.chronology().get().loaded === amount, 'load amount mismatch');
+    });
+
+    it('tracks chronology through stop', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        const active = list.start(machine);
+        const loaded = Math.random() * 500;
+        active.chronology().load(loaded);
+        const completed = active.stop();
+        assert(completed.chronology().get().loaded === loaded, 'chronology values mismatch');
     });
 });

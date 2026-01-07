@@ -1,8 +1,9 @@
 import events from './events.js';
+import chronology from './chronology.js';
 
 /**
  * Collection of melting sessions associated with machines.
- * Automatically generates unique IDs and updates when sessions complete.
+ * Automatically generates unique IDs, creates chronology, and updates when sessions complete.
  *
  * @param {function} melting - factory function to create active meltings
  * @returns {object} collection with start, all, find, stream methods
@@ -10,6 +11,8 @@ import events from './events.js';
  * @example
  *   const list = meltings(activeMelting);
  *   const active = list.start(machine);
+ *   active.chronology().load(500);
+ *   active.chronology().dispense(480);
  *   active.stop();
  *   list.all(); // returns completed meltings only
  *   list.find(machine); // returns completed meltings for machine
@@ -25,7 +28,8 @@ export default function meltings(melting) {
             const id = `m${  counter}`;
             const item = { machine, melting: null };
             items.push(item);
-            const active = melting(id, machine, new Date(), (completed) => {
+            const chron = chronology(machine.weight());
+            const active = melting(id, machine, new Date(), chron, (completed) => {
                 item.melting = completed;
                 bus.emit({ type: 'completed', melting: completed });
             });

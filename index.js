@@ -19,6 +19,7 @@ export { default as monitoredMeltingMachine } from './src/monitoredMeltingMachin
 export { default as activeMelting } from './src/activeMelting.js';
 export { default as completedMelting } from './src/completedMelting.js';
 export { default as meltings } from './src/meltings.js';
+export { default as chronology } from './src/chronology.js';
 
 // Rule engine
 export { default as meltingRuleEngine } from './src/meltingRuleEngine.js';
