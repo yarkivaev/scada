@@ -23,6 +23,18 @@ function fakeMeltings() {
     };
 }
 
+function fakeAlerts() {
+    return {
+        items: [],
+        all() {
+            return this.items;
+        },
+        stream() {
+            return { cancel() {} };
+        }
+    };
+}
+
 describe('meltingShop', function() {
     it('returns name from name method', function() {
         const name = `shop${Math.random()}`;
@@ -62,5 +74,17 @@ describe('meltingShop', function() {
         meltings.items = [{ id: `melting${Math.random()}` }];
         const shop = meltingShop(`shop${Math.random()}`, fakeMachines(), meltings);
         assert(shop.meltings.all().length === 1, 'expected one melting');
+    });
+
+    it('returns alerts property', function() {
+        const alerts = fakeAlerts();
+        const shop = meltingShop(`shop${Math.random()}`, fakeMachines(), fakeMeltings(), alerts);
+        assert(shop.alerts === alerts, 'alerts property mismatch');
+    });
+
+    it('returns alerts with stream method', function() {
+        const alerts = fakeAlerts();
+        const shop = meltingShop(`shop${Math.random()}`, fakeMachines(), fakeMeltings(), alerts);
+        assert(typeof shop.alerts.stream === 'function', 'alerts has no stream method');
     });
 });

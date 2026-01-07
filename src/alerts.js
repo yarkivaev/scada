@@ -1,3 +1,5 @@
+import events from './events.js';
+
 /**
  * History of alert occurrences with filtering support.
  * Creates and stores alert events, replaces with acknowledged version on acknowledge.
@@ -5,16 +7,18 @@
  *
  * @param {function} alert - factory function to create alerts
  * @param {function} acknowledgedAlert - factory function to create acknowledged alerts
- * @returns {object} alerts history with trigger, all, find methods
+ * @returns {object} alerts history with trigger, all, find, stream methods
  *
  * @example
  *   const history = alerts(alert, acknowledgedAlert);
  *   const a = history.trigger('High voltage', new Date(), 'icht1');
  *   a.id; // 'alert-0'
  *   a.acknowledge(); // replaces with acknowledged version
+ *   history.stream((event) => console.log(event)); // subscribe to events
  */
 export default function alerts(alert, acknowledgedAlert) {
     const items = [];
+    const bus = events();
     let counter = 0;
     return {
         trigger(message, timestamp, object) {
@@ -24,8 +28,10 @@ export default function alerts(alert, acknowledgedAlert) {
             const created = alert(id, message, timestamp, object, () => {
                 const acknowledged = acknowledgedAlert(id, message, timestamp, object);
                 items[index] = acknowledged;
+                bus.emit({ type: 'acknowledged', alert: acknowledged });
             });
             items.push(created);
+            bus.emit({ type: 'created', alert: created });
             return created;
         },
         all(...filters) {
@@ -39,6 +45,7 @@ export default function alerts(alert, acknowledgedAlert) {
             return items.find((a) => {
                 return a.id === id;
             });
-        }
+        },
+        stream: bus.stream
     };
 }

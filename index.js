@@ -30,3 +30,4 @@ export { default as alerts } from './src/alerts.js';
 // Utilities
 export { default as interval } from './src/interval.js';
 export { default as initialized } from './src/initialized.js';
+export { default as events } from './src/events.js';

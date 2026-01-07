@@ -48,7 +48,7 @@ export default [
             'grouped-accessor-pairs': ['error', 'getBeforeSet'],
             'guard-for-in': 'error',
             'id-denylist': 'off',
-            'id-length': ['error', { 'min': 2, 'exceptions': ['i', 'j', 'k', 'x', 'y', 'z', 'a', 'b', 'p', 'w'] }],
+            'id-length': ['error', { 'min': 2, 'exceptions': ['i', 'j', 'k', 'x', 'y', 'z', 'a', 'b', 'p', 'w', 'e'] }],
             'max-classes-per-file': ['error', 1],
             'max-depth': ['error', 3],
             'max-lines': ['error', { 'max': 200, 'skipBlankLines': true, 'skipComments': true }],

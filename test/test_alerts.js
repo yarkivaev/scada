@@ -164,4 +164,47 @@ describe('alerts', function() {
         const history = alerts(fakeAlert, fakeAcknowledgedAlert);
         assert(history.find('nonexistent') === undefined);
     });
+
+    it('notifies subscriber when alert triggered', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        let received = null;
+        history.stream((e) => { received = e; });
+        history.trigger('msg', new Date(), 'obj');
+        assert(received !== null && received.type === 'created', 'subscriber was not notified on trigger');
+    });
+
+    it('notifies subscriber with created alert', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        let received = null;
+        history.stream((e) => { received = e; });
+        const added = history.trigger('msg', new Date(), 'obj');
+        assert(received.alert === added, 'subscriber did not receive created alert');
+    });
+
+    it('notifies subscriber when alert acknowledged', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        let received = null;
+        history.stream((e) => { received = e; });
+        const added = history.trigger('msg', new Date(), 'obj');
+        added.acknowledge();
+        assert(received !== null && received.type === 'acknowledged', 'subscriber was not notified on acknowledge');
+    });
+
+    it('notifies subscriber with acknowledged alert', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        let received = null;
+        history.stream((e) => { received = e; });
+        history.trigger('msg', new Date(), 'obj').acknowledge();
+        assert(received.alert.acknowledged === true, 'subscriber did not receive acknowledged alert');
+    });
+
+    it('stops notifying after subscription cancelled', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        let count = 0;
+        const sub = history.stream(() => { count += 1; });
+        history.trigger('msg1', new Date(), 'obj');
+        sub.cancel();
+        history.trigger('msg2', new Date(), 'obj');
+        assert(count === 1, 'subscriber was notified after cancellation');
+    });
 });

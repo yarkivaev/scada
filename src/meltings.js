@@ -1,3 +1,5 @@
+import events from './events.js';
+
 /**
  * Collection of melting sessions associated with machines.
  * Automatically generates unique IDs and updates when sessions complete.
@@ -15,13 +17,8 @@
  */
 export default function meltings(melting) {
     const items = [];
-    const subscribers = [];
+    const bus = events();
     let counter = 0;
-    function notify(event) {
-        subscribers.forEach((callback) => {
-            callback(event);
-        });
-    }
     return {
         start(machine) {
             counter += 1;
@@ -30,10 +27,10 @@ export default function meltings(melting) {
             items.push(item);
             const active = melting(id, machine, new Date(), (completed) => {
                 item.melting = completed;
-                notify({ type: 'completed', melting: completed });
+                bus.emit({ type: 'completed', melting: completed });
             });
             item.melting = active;
-            notify({ type: 'started', melting: active });
+            bus.emit({ type: 'started', melting: active });
             return active;
         },
         all() {
@@ -48,14 +45,6 @@ export default function meltings(melting) {
                 return item.melting;
             });
         },
-        stream(callback) {
-            subscribers.push(callback);
-            return {
-                cancel() {
-                    const index = subscribers.indexOf(callback);
-                    subscribers.splice(index, 1);
-                }
-            };
-        }
+        stream: bus.stream
     };
 }
