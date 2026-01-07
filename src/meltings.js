@@ -3,7 +3,7 @@
  * Automatically generates unique IDs and updates when sessions complete.
  *
  * @param {function} melting - factory function to create active meltings
- * @returns {object} collection with start, all, find methods
+ * @returns {object} collection with start, all, find, stream methods
  *
  * @example
  *   const list = meltings(activeMelting);
@@ -11,10 +11,17 @@
  *   active.stop();
  *   list.all(); // returns completed meltings only
  *   list.find(machine); // returns completed meltings for machine
+ *   list.stream((event) => console.log(event)); // subscribe to events
  */
 export default function meltings(melting) {
     const items = [];
+    const subscribers = [];
     let counter = 0;
+    function notify(event) {
+        subscribers.forEach((callback) => {
+            callback(event);
+        });
+    }
     return {
         start(machine) {
             counter += 1;
@@ -23,8 +30,10 @@ export default function meltings(melting) {
             items.push(item);
             const active = melting(id, machine, new Date(), (completed) => {
                 item.melting = completed;
+                notify({ type: 'completed', melting: completed });
             });
             item.melting = active;
+            notify({ type: 'started', melting: active });
             return active;
         },
         all() {
@@ -38,6 +47,15 @@ export default function meltings(melting) {
             }).map((item) => {
                 return item.melting;
             });
+        },
+        stream(callback) {
+            subscribers.push(callback);
+            return {
+                cancel() {
+                    const index = subscribers.indexOf(callback);
+                    subscribers.splice(index, 1);
+                }
+            };
         }
     };
 }

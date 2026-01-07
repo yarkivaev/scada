@@ -4,8 +4,8 @@
  * alerting systems, and plant hierarchy.
  *
  * @example
- *   import { plant, meltingShop, meltingMachine, alerts } from 'scada';
- *   const shop = meltingShop(initializedList(machine));
+ *   import { plant, meltingShop, meltingMachine, meltings, alerts } from 'scada';
+ *   const shop = meltingShop(initializedList(machine), meltings());
  *   const p = plant(initializedList(shop));
  */
 

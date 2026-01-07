@@ -11,10 +11,10 @@ npm install scada
 ## Usage
 
 ```javascript
-import { plant, meltingShop, meltingMachine, alerts } from 'scada';
+import { plant, meltingShop, meltingMachine, meltings, alerts } from 'scada';
 
 const machine = meltingMachine('icht1', voltageSensor, cosphiSensor, alertHistory);
-const shop = meltingShop(initializedList(machine));
+const shop = meltingShop(initializedList(machine), meltings());
 const factory = plant(initializedList(shop));
 ```
 

@@ -3,32 +3,23 @@
  * Supports loading and dispensing metal during melting operations.
  *
  * @param {string} name - unique machine identifier
- * @param {object} voltageSensor - sensor providing voltage measurements
- * @param {object} cosphiSensor - sensor providing power factor measurements
+ * @param {object} sensors - object containing sensor instances
  * @param {object} alerts - centralized alerts collection
- * @returns {object} machine with name, measurements, alerts, weight, load, dispense
+ * @returns {object} machine with name, sensors, alerts, weight, load, dispense
  *
  * @example
- *   const machine = meltingMachine('icht1', voltageSensor(), cosphiSensor(), alerts());
+ *   const machine = meltingMachine('icht1', { voltage: voltageSensor(), cosphi: cosphiSensor() }, alerts());
+ *   machine.sensors.voltage.measurements(range);
  *   machine.load(500);
  *   machine.weight(); // 500
- *   machine.dispense(480);
- *   machine.weight(); // 20
  */
-export default function meltingMachine(
-    name, voltageSensor, cosphiSensor, alerts
-) {
+export default function meltingMachine(name, sensors, alerts) {
     let weight = 0;
     return {
         name() {
             return name;
         },
-        measurements(range) {
-            return {
-                voltage: voltageSensor.measurements(range),
-                cosphi: cosphiSensor.measurements(range)
-            };
-        },
+        sensors,
         alerts() {
             return alerts.all((item) => {
                 return item.object === name;

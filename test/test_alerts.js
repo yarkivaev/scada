@@ -1,8 +1,9 @@
 import assert from 'assert';
 import alerts from '../src/alerts.js';
 
-function fakeAlert(message, timestamp, object, acknowledge) {
+function fakeAlert(id, message, timestamp, object, acknowledge) {
     return {
+        id,
         message,
         timestamp,
         object,
@@ -11,8 +12,9 @@ function fakeAlert(message, timestamp, object, acknowledge) {
     };
 }
 
-function fakeAcknowledgedAlert(message, timestamp, object) {
+function fakeAcknowledgedAlert(id, message, timestamp, object) {
     return {
+        id,
         message,
         timestamp,
         object,
@@ -25,6 +27,18 @@ describe('alerts', function() {
         const history = alerts(fakeAlert, fakeAcknowledgedAlert);
         const message = `msg${  Math.random()}`;
         assert(history.trigger(message, new Date(), 'obj') !== undefined);
+    });
+
+    it('returns alert with generated id', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        assert(history.trigger('msg', new Date(), 'obj').id === 'alert-0');
+    });
+
+    it('returns sequential ids for multiple alerts', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        history.trigger('msg1', new Date(), 'obj');
+        const second = history.trigger('msg2', new Date(), 'obj');
+        assert(second.id === 'alert-1');
     });
 
     it('returns alert with correct message', function() {
@@ -113,6 +127,12 @@ describe('alerts', function() {
         assert(history.all()[0].acknowledged === true);
     });
 
+    it('preserves id after acknowledge', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        history.trigger('msg', new Date(), 'obj').acknowledge();
+        assert(history.all()[0].id === 'alert-0');
+    });
+
     it('preserves message after acknowledge', function() {
         const history = alerts(fakeAlert, fakeAcknowledgedAlert);
         const message = `msg${  Math.random()}`;
@@ -132,5 +152,16 @@ describe('alerts', function() {
         const object = `obj${  Math.random()}`;
         history.trigger('msg', new Date(), object).acknowledge();
         assert(history.all()[0].object === object);
+    });
+
+    it('finds alert by id', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        history.trigger('msg', new Date(), 'obj');
+        assert(history.find('alert-0') !== undefined);
+    });
+
+    it('returns undefined when alert not found', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        assert(history.find('nonexistent') === undefined);
     });
 });

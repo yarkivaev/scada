@@ -5,7 +5,7 @@
  * @param {object} machine - the melting machine to monitor
  * @param {object} ruleEngine - engine that evaluates measurements and triggers alerts
  * @param {function} interval - factory to create periodic intervals
- * @returns {object} monitored machine with name, measurements, alerts, init methods
+ * @returns {object} monitored machine with name, sensors, alerts, init methods
  *
  * @example
  *   const monitored = monitoredMeltingMachine(machine, ruleEngine(), interval);
@@ -16,21 +16,21 @@ export default function monitoredMeltingMachine(machine, ruleEngine, interval) {
         name() {
             return machine.name();
         },
-        measurements(range) {
-            return machine.measurements(range);
-        },
+        sensors: machine.sensors,
         alerts() {
             return machine.alerts();
         },
         init() {
-            const self = this;
             interval(1000, () => {
                 const now = new Date();
                 const range = {
                     start: new Date(now.getTime() - 1000),
                     end: now
                 };
-                const snapshot = self.measurements(range);
+                const snapshot = {};
+                Object.keys(machine.sensors).forEach((key) => {
+                    snapshot[key] = machine.sensors[key].measurements(range);
+                });
                 ruleEngine.evaluate(snapshot);
             }).start();
         }

@@ -1,13 +1,22 @@
 import assert from 'assert';
 import monitoredMeltingMachine from '../src/monitoredMeltingMachine.js';
 
-function fakeMachine(name, measurements, alerts) {
+function fakeSensor(value) {
+    return {
+        measurements() {
+            return value;
+        }
+    };
+}
+
+function fakeMachine(name, voltageValue, cosphiValue, alerts) {
     return {
         name() {
             return name;
         },
-        measurements() {
-            return measurements;
+        sensors: {
+            voltage: fakeSensor(voltageValue),
+            cosphi: fakeSensor(cosphiValue)
         },
         alerts() {
             return alerts;
@@ -43,43 +52,33 @@ function fakeInterval() {
 describe('monitoredMeltingMachine', function() {
     it('returns name from machine', function() {
         const name = `machine${  Math.random()}`;
-        const machine = fakeMachine(name, {}, []);
+        const machine = fakeMachine(name, 0, 0, []);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
         const monitored = monitoredMeltingMachine(machine, engine, int.capture);
         assert(monitored.name() === name);
     });
 
-    it('returns measurements from machine', function() {
-        const data = { voltage: Math.random(), cosphi: Math.random() };
-        const machine = fakeMachine('m1', data, []);
+    it('exposes sensors from machine', function() {
+        const machine = fakeMachine('m1', 0, 0, []);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
         const monitored = monitoredMeltingMachine(machine, engine, int.capture);
-        assert(monitored.measurements().voltage === data.voltage);
+        assert(monitored.sensors === machine.sensors);
     });
 
-    it('passes range to machine measurements', function() {
-        let received = null;
-        const machine = {
-            name() { return 'm1'; },
-            measurements(range) {
-                received = range;
-                return {};
-            },
-            alerts() { return []; }
-        };
+    it('returns voltage measurements through sensors', function() {
+        const voltage = Math.random();
+        const machine = fakeMachine('m1', voltage, 0, []);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
         const monitored = monitoredMeltingMachine(machine, engine, int.capture);
-        const range = { start: new Date(), end: new Date() };
-        monitored.measurements(range);
-        assert(received === range);
+        assert(monitored.sensors.voltage.measurements() === voltage);
     });
 
     it('returns alerts from machine', function() {
         const alerts = [{ message: `alert${  Math.random()}` }];
-        const machine = fakeMachine('m1', {}, alerts);
+        const machine = fakeMachine('m1', 0, 0, alerts);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
         const monitored = monitoredMeltingMachine(machine, engine, int.capture);
@@ -87,7 +86,7 @@ describe('monitoredMeltingMachine', function() {
     });
 
     it('starts interval when init is called', function() {
-        const machine = fakeMachine('m1', {}, []);
+        const machine = fakeMachine('m1', 0, 0, []);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
         const monitored = monitoredMeltingMachine(machine, engine, int.capture);
@@ -96,13 +95,13 @@ describe('monitoredMeltingMachine', function() {
     });
 
     it('calls ruleEngine evaluate with measurements', function() {
-        const data = { voltage: Math.random(), cosphi: Math.random() };
-        const machine = fakeMachine('m1', data, []);
+        const voltage = Math.random();
+        const cosphi = Math.random();
+        const machine = fakeMachine('m1', voltage, cosphi, []);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
-        const monitored = monitoredMeltingMachine(machine, engine, int.capture);
-        monitored.init();
+        monitoredMeltingMachine(machine, engine, int.capture).init();
         int.callback();
-        assert(engine.evaluated.voltage === data.voltage);
+        assert(engine.evaluated.voltage === voltage);
     });
 });

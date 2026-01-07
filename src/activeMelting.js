@@ -8,7 +8,7 @@ import completedMelting from './completedMelting.js';
  * @param {object} machine - the melting machine running this session
  * @param {Date} startTime - when the melting session started
  * @param {function} onStop - callback invoked with completedMelting when stopped
- * @returns {object} active melting with id and stop methods
+ * @returns {object} active melting with id, machine, start, stop methods
  *
  * @example
  *   const active = activeMelting('m1', machine, new Date(), function(completed) {
@@ -22,10 +22,14 @@ export default function activeMelting(id, machine, startTime, onStop) {
         id() {
             return id;
         },
+        machine() {
+            return machine;
+        },
+        start() {
+            return startTime;
+        },
         stop() {
-            const end = new Date();
-            const range = { start: startTime, end };
-            const completed = completedMelting(id, startTime, end, machine.measurements(range));
+            const completed = completedMelting(id, machine, startTime, new Date());
             onStop(completed);
             return completed;
         }

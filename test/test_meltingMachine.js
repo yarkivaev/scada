@@ -17,67 +17,55 @@ function fakeAlerts(items) {
     };
 }
 
+function fakeSensors(voltage, cosphi) {
+    return { voltage, cosphi };
+}
+
 describe('meltingMachine', function() {
     it('returns name when name is called', function() {
         const id = `machine${Math.random()}`;
-        const machine = meltingMachine(id, fakeSensor(0), fakeSensor(0), fakeAlerts([]));
+        const machine = meltingMachine(id, fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         assert(machine.name() === id);
     });
 
-    it('returns voltage from sensor in measurements', function() {
-        const voltage = Math.random();
-        const machine = meltingMachine('m1', fakeSensor(voltage), fakeSensor(0), fakeAlerts([]));
-        assert(machine.measurements().voltage === voltage);
+    it('exposes voltage sensor in sensors', function() {
+        const voltage = fakeSensor(Math.random());
+        const machine = meltingMachine('m1', fakeSensors(voltage, fakeSensor(0)), fakeAlerts([]));
+        assert(machine.sensors.voltage === voltage);
     });
 
-    it('returns cosphi from sensor in measurements', function() {
-        const cosphi = Math.random();
-        const machine = meltingMachine('m1', fakeSensor(0), fakeSensor(cosphi), fakeAlerts([]));
-        assert(machine.measurements().cosphi === cosphi);
+    it('exposes cosphi sensor in sensors', function() {
+        const cosphi = fakeSensor(Math.random());
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), cosphi), fakeAlerts([]));
+        assert(machine.sensors.cosphi === cosphi);
     });
 
-    it('passes range to voltage sensor', function() {
-        let received = null;
-        const sensor = {
-            measurements(range) {
-                received = range;
-                return 0;
-            }
-        };
-        const machine = meltingMachine('m1', sensor, fakeSensor(0), fakeAlerts([]));
-        const range = { start: new Date(), end: new Date() };
-        machine.measurements(range);
-        assert(received === range);
+    it('returns voltage measurements through sensors', function() {
+        const value = Math.random();
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(value), fakeSensor(0)), fakeAlerts([]));
+        assert(machine.sensors.voltage.measurements() === value);
     });
 
-    it('passes range to cosphi sensor', function() {
-        let received = null;
-        const sensor = {
-            measurements(range) {
-                received = range;
-                return 0;
-            }
-        };
-        const machine = meltingMachine('m1', fakeSensor(0), sensor, fakeAlerts([]));
-        const range = { start: new Date(), end: new Date() };
-        machine.measurements(range);
-        assert(received === range);
+    it('returns cosphi measurements through sensors', function() {
+        const value = Math.random();
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(value)), fakeAlerts([]));
+        assert(machine.sensors.cosphi.measurements() === value);
     });
 
     it('returns zero weight initially', function() {
-        const machine = meltingMachine('m1', fakeSensor(0), fakeSensor(0), fakeAlerts([]));
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         assert(machine.weight() === 0);
     });
 
     it('increases weight when load is called', function() {
-        const machine = meltingMachine('m1', fakeSensor(0), fakeSensor(0), fakeAlerts([]));
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         const amount = Math.floor(Math.random() * 1000);
         machine.load(amount);
         assert(machine.weight() === amount);
     });
 
     it('decreases weight when dispense is called', function() {
-        const machine = meltingMachine('m1', fakeSensor(0), fakeSensor(0), fakeAlerts([]));
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         machine.load(100);
         const amount = Math.floor(Math.random() * 50);
         machine.dispense(amount);
@@ -85,7 +73,7 @@ describe('meltingMachine', function() {
     });
 
     it('accumulates weight across multiple loads', function() {
-        const machine = meltingMachine('m1', fakeSensor(0), fakeSensor(0), fakeAlerts([]));
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         machine.load(100);
         machine.load(50);
         assert(machine.weight() === 150);
@@ -98,13 +86,13 @@ describe('meltingMachine', function() {
             { object: 'other', message: 'alert2' },
             { object: id, message: 'alert3' }
         ];
-        const machine = meltingMachine(id, fakeSensor(0), fakeSensor(0), fakeAlerts(items));
+        const machine = meltingMachine(id, fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts(items));
         assert(machine.alerts().length === 2);
     });
 
     it('returns empty alerts when no matching alerts exist', function() {
         const items = [{ object: 'other', message: 'alert' }];
-        const machine = meltingMachine('m1', fakeSensor(0), fakeSensor(0), fakeAlerts(items));
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts(items));
         assert(machine.alerts().length === 0);
     });
 });

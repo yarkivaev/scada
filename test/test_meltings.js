@@ -111,4 +111,65 @@ describe('meltings', function() {
         active.stop();
         assert(list.all()[0].melting.end !== undefined);
     });
+
+    it('notifies subscriber when melting starts', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        let received = null;
+        list.stream((event) => {
+            received = event;
+        });
+        list.start(machine);
+        assert(received.type === 'started');
+    });
+
+    it('notifies subscriber with started melting', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        let received = null;
+        list.stream((event) => {
+            received = event;
+        });
+        list.start(machine);
+        assert(received.melting.id() === 'm1');
+    });
+
+    it('notifies subscriber when melting completes', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        let received = null;
+        list.stream((event) => {
+            if (event.type === 'completed') {
+                received = event;
+            }
+        });
+        list.start(machine).stop();
+        assert(received.type === 'completed');
+    });
+
+    it('notifies subscriber with completed melting', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        let received = null;
+        list.stream((event) => {
+            if (event.type === 'completed') {
+                received = event;
+            }
+        });
+        list.start(machine).stop();
+        assert(received.melting.id() === 'm1');
+    });
+
+    it('stops notifying after cancel is called', function() {
+        const list = meltings(fakeMelting);
+        const machine = fakeMachine();
+        let count = 0;
+        const subscription = list.stream(() => {
+            count += 1;
+        });
+        list.start(machine);
+        subscription.cancel();
+        list.start(machine);
+        assert(count === 1);
+    });
 });
