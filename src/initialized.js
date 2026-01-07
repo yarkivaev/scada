@@ -1,16 +1,16 @@
 /**
  * Wrapper that provides batch initialization for a collection.
- * Calls init() on each item once, then returns the collection.
- * Subsequent calls to init() return the collection without re-initializing.
+ * init() initializes items once, get() returns the collection.
  *
  * @param {object} collection - object or array containing items with init method
  * @param {function} toList - function that extracts array of items from collection
- * @returns {object} wrapper with init method that returns the collection
+ * @returns {object} wrapper with init() and get() methods
  *
  * @example
  *   const machines = initialized({ icht1: machine }, Object.values);
- *   machines.init(); // initializes all items once
- *   machines.init().icht1; // returns collection, no re-init
+ *   machines.init();        // initializes all items once
+ *   machines.get().icht1;   // access by key
+ *   Object.values(machines.get()); // iterate
  */
 export default function initialized(collection, toList) {
     let done = false;
@@ -22,6 +22,8 @@ export default function initialized(collection, toList) {
                 });
                 done = true;
             }
+        },
+        get() {
             return collection;
         }
     };

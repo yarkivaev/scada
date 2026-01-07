@@ -11,23 +11,23 @@ function fakeItem() {
 }
 
 describe('initialized', function() {
-    it('returns empty object from init when empty object provided', function() {
+    it('returns empty object from get when empty object provided', function() {
         const container = initialized({}, Object.values);
-        assert(Object.keys(container.init()).length === 0, 'expected empty object');
+        assert(Object.keys(container.get()).length === 0, 'expected empty object');
     });
 
-    it('returns single item from init when one item provided', function() {
+    it('returns single item from get when one item provided', function() {
         const item = fakeItem();
         const container = initialized({ item }, Object.values);
-        assert(container.init().item === item, 'expected item in collection');
+        assert(container.get().item === item, 'expected item in collection');
     });
 
-    it('returns all items from init when multiple items provided', function() {
+    it('returns all items from get when multiple items provided', function() {
         const first = fakeItem();
         const second = fakeItem();
         const third = fakeItem();
         const container = initialized({ first, second, third }, Object.values);
-        assert(Object.keys(container.init()).length === 3, 'expected three items');
+        assert(Object.keys(container.get()).length === 3, 'expected three items');
     });
 
     it('calls init on single item when init is called', function() {
@@ -56,18 +56,18 @@ describe('initialized', function() {
         assert(count === 1, 'init was called more than once');
     });
 
-    it('returns same collection on subsequent init calls', function() {
+    it('returns same collection from get on multiple calls', function() {
         const item = fakeItem();
         const container = initialized({ item }, Object.values);
-        const first = container.init();
-        const second = container.init();
+        const first = container.get();
+        const second = container.get();
         assert(first === second, 'collections are not the same reference');
     });
 
-    it('allows access by key after init', function() {
+    it('allows access by key from get', function() {
         const item = fakeItem();
         const key = `key${Math.random()}`;
         const container = initialized({ [key]: item }, Object.values);
-        assert(container.init()[key] === item, 'could not access item by key');
+        assert(container.get()[key] === item, 'could not access item by key');
     });
 });

@@ -7,6 +7,8 @@ function fakeShops() {
         collection: {},
         init() {
             this.initialized = true;
+        },
+        get() {
             return this.collection;
         }
     };
@@ -19,12 +21,12 @@ describe('plant', function() {
         assert(factory.shops === shops, 'shops property mismatch');
     });
 
-    it('returns shops collection from init', function() {
+    it('returns shops collection from get', function() {
         const shops = fakeShops();
         const key = `s${Math.random()}`;
         shops.collection = { [key]: { name: key } };
         const factory = plant(shops);
-        assert(factory.shops.init()[key] !== undefined, 'shop not found in collection');
+        assert(factory.shops.get()[key] !== undefined, 'shop not found in collection');
     });
 
     it('calls init on shops when init is called', function() {

@@ -7,6 +7,8 @@ function fakeMachines() {
         collection: {},
         init() {
             this.initialized = true;
+        },
+        get() {
             return this.collection;
         }
     };
@@ -34,12 +36,12 @@ describe('meltingShop', function() {
         assert(shop.machines === machines, 'machines property mismatch');
     });
 
-    it('returns machines collection from init', function() {
+    it('returns machines collection from get', function() {
         const machines = fakeMachines();
         const key = `m${Math.random()}`;
         machines.collection = { [key]: { name: key } };
         const shop = meltingShop(`shop${Math.random()}`, machines, fakeMeltings());
-        assert(shop.machines.init()[key] !== undefined, 'machine not found in collection');
+        assert(shop.machines.get()[key] !== undefined, 'machine not found in collection');
     });
 
     it('calls init on machines when init is called', function() {
