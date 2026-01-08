@@ -32,3 +32,6 @@ export { default as alerts } from './src/alerts.js';
 export { default as interval } from './src/interval.js';
 export { default as initialized } from './src/initialized.js';
 export { default as events } from './src/events.js';
+
+// Sensors
+export { default as scyllaSensor } from './src/scyllaSensor.js';
