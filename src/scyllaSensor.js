@@ -21,7 +21,8 @@ export default function scyllaSensor(connection, topic, displayName, unit) {
         name() {
             return displayName;
         },
-        async measurements(range) {
+        async measurements(range, step) {
+            void step;
             const rows = await connection.query(
                 'SELECT ts, value FROM scada.metrics WHERE topic = ? AND ts >= ? AND ts <= ?',
                 [topic, range.start, range.end]
