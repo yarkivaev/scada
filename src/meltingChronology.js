@@ -9,7 +9,7 @@
  *
  * @example
  *   const chron = meltingChronology(machine, startTime, endTime);
- *   chron.get(); // { start, end, initial, weight }
+ *   chron.get(); // { start, end, initial, weight, loaded, dispensed }
  *   chron.get(someTime); // state at specific time
  */
 export default function meltingChronology(machine, start, end) {
@@ -18,12 +18,15 @@ export default function meltingChronology(machine, start, end) {
             const machineChron = machine.chronology();
             const defaultTime = end === undefined ? new Date() : end;
             const queryTime = datetime === undefined ? defaultTime : datetime;
-            const initial = machineChron.get(start).weight;
-            const current = machineChron.get(queryTime).weight;
+            const initial = machineChron.get({ type: 'point', at: start }).weight;
+            const current = machineChron.get({ type: 'point', at: queryTime }).weight;
+            const range = machineChron.get({ type: 'range', from: start, to: queryTime });
             const result = {
                 start,
                 initial,
-                weight: current
+                weight: current,
+                loaded: range.loaded,
+                dispensed: range.dispensed
             };
             if (end !== undefined) {
                 result.end = end;

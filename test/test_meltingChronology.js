@@ -103,4 +103,49 @@ describe('meltingChronology', function() {
         const chron = meltingChronology(machine, start, undefined);
         assert(chron.get().initial === initial, 'initial at start mismatch');
     });
+
+    it('returns loaded and dispensed for melting period', function() {
+        const base = Date.now();
+        const start = new Date(base - 4000);
+        const loadTime = new Date(base - 3000);
+        const dispenseTime = new Date(base - 2000);
+        const end = new Date(base - 1000);
+        const history = [
+            { timestamp: start, weight: 0 },
+            { timestamp: loadTime, weight: 500 },
+            { timestamp: dispenseTime, weight: 20 }
+        ];
+        const machine = fakeMachine(0, history);
+        const chron = meltingChronology(machine, start, end);
+        const result = chron.get();
+        assert(result.loaded === 500, 'loaded mismatch');
+        assert(result.dispensed === 480, 'dispensed mismatch');
+    });
+
+    it('returns zero loaded and dispensed for no operations', function() {
+        const base = Date.now();
+        const start = new Date(base - 2000);
+        const end = new Date(base - 1000);
+        const history = [{ timestamp: start, weight: 100 }];
+        const machine = fakeMachine(100, history);
+        const chron = meltingChronology(machine, start, end);
+        const result = chron.get();
+        assert(result.loaded === 0, 'loaded should be zero');
+        assert(result.dispensed === 0, 'dispensed should be zero');
+    });
+
+    it('returns loaded for active melting up to current time', function() {
+        const base = Date.now();
+        const start = new Date(base - 3000);
+        const loadTime = new Date(base - 2000);
+        const history = [
+            { timestamp: start, weight: 0 },
+            { timestamp: loadTime, weight: 300 }
+        ];
+        const machine = fakeMachine(0, history);
+        const chron = meltingChronology(machine, start, undefined);
+        const result = chron.get();
+        assert(result.loaded === 300, 'loaded mismatch for active melting');
+        assert(result.dispensed === 0, 'dispensed should be zero');
+    });
 });

@@ -57,7 +57,7 @@ export default function meltings() {
                 return completed;
             }
             const start = opts.start === undefined ? new Date() : new Date(opts.start);
-            const item = { machine, melting: null };
+            const item = { machine, melting: undefined };
             items.push(item);
             const active = activeMelting(id, machine, start, (completed) => {
                 item.melting = completed;
