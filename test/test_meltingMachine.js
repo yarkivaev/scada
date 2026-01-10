@@ -113,4 +113,12 @@ describe('meltingMachine', function() {
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         assert(machine.init() === machine, 'init should return self');
     });
+
+    it('sets weight in chronology when reset is called', function() {
+        const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
+        machine.load(100);
+        const amount = Math.floor(Math.random() * 500);
+        machine.reset(amount);
+        assert(machine.chronology().get({ type: 'current' }).weight === amount, 'weight after reset mismatch');
+    });
 });

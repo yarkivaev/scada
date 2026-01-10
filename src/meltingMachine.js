@@ -42,6 +42,10 @@ export default function meltingMachine(name, sensors, alerts, initial) {
             current -= w;
             history.push({ timestamp: new Date(), weight: current });
         },
+        reset(w) {
+            current = w;
+            history.push({ timestamp: new Date(), weight: current });
+        },
         init() {
             return this;
         }
