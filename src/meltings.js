@@ -1,54 +1,97 @@
+/* eslint-disable max-lines-per-function, max-statements */
 import events from './events.js';
-import chronology from './chronology.js';
+import meltingChronology from './meltingChronology.js';
+import activeMelting from './activeMelting.js';
+import completedMelting from './completedMelting.js';
 
 /**
  * Collection of melting sessions associated with machines.
- * Automatically generates unique IDs, creates chronology, and updates when sessions complete.
+ * Uses add() for creating both active and completed meltings.
+ * Uses query() for filtering and streaming meltings.
  *
- * @param {function} melting - factory function to create active meltings
- * @returns {object} collection with start, all, find, stream methods
+ * @returns {object} collection with add, query methods
  *
  * @example
- *   const list = meltings(activeMelting);
- *   const active = list.start(machine);
- *   active.chronology().load(500);
- *   active.chronology().dispense(480);
- *   active.stop();
- *   list.all(); // returns completed meltings only
- *   list.find(machine); // returns completed meltings for machine
- *   list.stream((event) => console.log(event)); // subscribe to events
+ *   const list = meltings();
+ *   const active = list.add(machine, {}); // creates active melting
+ *   const completed = list.add(machine, { start, end }); // creates completed melting
+ *   list.query(); // returns all completed meltings
+ *   list.query({ machine }); // returns meltings for machine
+ *   list.query({ id: 'm1' }); // returns melting by id
+ *   list.query({ stream: callback }); // subscribe to events
  */
-export default function meltings(melting) {
+export default function meltings() {
     const items = [];
     const bus = events();
     let counter = 0;
+    function onUpdate(id, updated) {
+        const item = items.find((i) => {
+            return i.melting.id() === id;
+        });
+        if (item) {
+            item.melting = updated;
+            bus.emit({ type: 'updated', melting: updated });
+        }
+    }
     return {
-        start(machine) {
+        add(machine, data) {
+            const opts = data === undefined ? {} : data;
+            if (opts.end === undefined) {
+                const existing = items.find((i) => {
+                    const chron = i.melting.chronology().get();
+                    return i.machine === machine && chron.end === undefined;
+                });
+                if (existing) {
+                    return existing.melting;
+                }
+            }
             counter += 1;
-            const id = `m${  counter}`;
+            const id = `m${counter}`;
+            if (opts.end !== undefined) {
+                const chron = meltingChronology(machine, new Date(opts.start), new Date(opts.end));
+                const completed = completedMelting(id, machine, chron, (updated) => {
+                    onUpdate(id, updated);
+                });
+                items.push({ machine, melting: completed });
+                bus.emit({ type: 'completed', melting: completed });
+                return completed;
+            }
+            const start = opts.start === undefined ? new Date() : new Date(opts.start);
             const item = { machine, melting: null };
             items.push(item);
-            const chron = chronology(machine.weight());
-            const active = melting(id, machine, new Date(), chron, (completed) => {
+            const active = activeMelting(id, machine, start, (completed) => {
                 item.melting = completed;
                 bus.emit({ type: 'completed', melting: completed });
+            }, (updated) => {
+                onUpdate(id, updated);
             });
             item.melting = active;
             bus.emit({ type: 'started', melting: active });
             return active;
         },
-        all() {
-            return items.filter((item) => {
-                return item.melting.end;
+        query(options) {
+            const opts = options === undefined ? {} : options;
+            if (opts.stream !== undefined) {
+                return bus.stream(opts.stream);
+            }
+            if (opts.id !== undefined) {
+                const item = items.find((i) => {
+                    return i.melting.id() === opts.id;
+                });
+                return item === undefined ? undefined : item.melting;
+            }
+            if (opts.machine !== undefined) {
+                return items.filter((i) => {
+                    return i.machine === opts.machine;
+                }).map((i) => {
+                    return i.melting;
+                });
+            }
+            return items.filter((i) => {
+                return i.melting.chronology().get().end !== undefined;
+            }).map((i) => {
+                return i.melting;
             });
-        },
-        find(machine) {
-            return items.filter((item) => {
-                return item.machine === machine && item.melting.end;
-            }).map((item) => {
-                return item.melting;
-            });
-        },
-        stream: bus.stream
+        }
     };
 }

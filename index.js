@@ -13,13 +13,14 @@
 export { default as plant } from './src/plant.js';
 export { default as meltingShop } from './src/meltingShop.js';
 export { default as meltingMachine } from './src/meltingMachine.js';
+export { default as machineChronology } from './src/machineChronology.js';
 export { default as monitoredMeltingMachine } from './src/monitoredMeltingMachine.js';
 
 // Melting operations
 export { default as activeMelting } from './src/activeMelting.js';
 export { default as completedMelting } from './src/completedMelting.js';
 export { default as meltings } from './src/meltings.js';
-export { default as chronology } from './src/chronology.js';
+export { default as meltingChronology } from './src/meltingChronology.js';
 
 // Rule engine
 export { default as meltingRuleEngine } from './src/meltingRuleEngine.js';
@@ -35,3 +36,4 @@ export { default as events } from './src/events.js';
 
 // Sensors
 export { default as scyllaSensor } from './src/scyllaSensor.js';
+export { default as clickhouseSensor } from './src/clickhouseSensor.js';

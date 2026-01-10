@@ -11,8 +11,8 @@
  * @returns {object} sensor with name, measurements and stream methods
  *
  * @example
- *   const sensor = scyllaSensor(conn, 'icht1/voltage', 'Напряжение', 'V');
- *   sensor.name(); // 'Напряжение'
+ *   const sensor = scyllaSensor(conn, 'icht1/voltage', 'Voltage', 'V');
+ *   sensor.name(); // 'Voltage'
  *   await sensor.measurements({ start, end }); // array of readings
  *   sensor.stream(since, 1000, callback); // live stream
  */

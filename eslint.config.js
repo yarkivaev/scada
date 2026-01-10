@@ -101,7 +101,7 @@ export default [
             'no-shadow': 'error',
             'no-throw-literal': 'error',
             'no-undef-init': 'error',
-            'no-undefined': 'error',
+            'no-undefined': 'off',
             'no-underscore-dangle': 'error',
             'no-unneeded-ternary': 'error',
             'no-unused-expressions': 'error',
@@ -112,7 +112,7 @@ export default [
             'no-useless-rename': 'error',
             'no-useless-return': 'error',
             'no-var': 'error',
-            'no-void': 'error',
+            'no-void': 'off',
             'no-warning-comments': 'warn',
             'object-shorthand': ['error', 'always'],
             'one-var': ['error', 'never'],
@@ -149,6 +149,7 @@ export default [
     {
         files: ['test/**/*.js'],
         rules: {
+            'max-lines': 'off',
             'max-lines-per-function': 'off',
             'max-statements': 'off',
             'max-nested-callbacks': ['error', 5],

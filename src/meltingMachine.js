@@ -1,20 +1,26 @@
+import machineChronology from './machineChronology.js';
+
 /**
- * Melting machine that tracks metal weight and sensor measurements.
+ * Melting machine that tracks metal weight history and sensor measurements.
  * Supports loading and dispensing metal during melting operations.
+ * Weight history is tracked for historical queries.
  *
  * @param {string} name - unique machine identifier
  * @param {object} sensors - object containing sensor instances
  * @param {object} alerts - centralized alerts collection
- * @returns {object} machine with name, sensors, alerts, weight, load, dispense
+ * @param {number} initial - initial weight (defaults to 0)
+ * @returns {object} machine with name, sensors, alerts, chronology, load, dispense
  *
  * @example
- *   const machine = meltingMachine('icht1', { voltage: voltageSensor(), cosphi: cosphiSensor() }, alerts());
- *   machine.sensors.voltage.measurements(range);
+ *   const machine = meltingMachine('icht1', { voltage: voltageSensor() }, alerts());
  *   machine.load(500);
- *   machine.weight(); // 500
+ *   machine.chronology().get().weight; // 500
+ *   machine.chronology().get(pastDate).weight; // weight at pastDate
  */
-export default function meltingMachine(name, sensors, alerts) {
-    let weight = 0;
+export default function meltingMachine(name, sensors, alerts, initial) {
+    const start = initial === undefined ? 0 : initial;
+    const history = [{ timestamp: new Date(), weight: start }];
+    let current = start;
     return {
         name() {
             return name;
@@ -25,14 +31,16 @@ export default function meltingMachine(name, sensors, alerts) {
                 return item.object === name;
             });
         },
-        weight() {
-            return weight;
+        chronology() {
+            return machineChronology(start, history);
         },
         load(w) {
-            weight += w;
+            current += w;
+            history.push({ timestamp: new Date(), weight: current });
         },
         dispense(w) {
-            weight -= w;
+            current -= w;
+            history.push({ timestamp: new Date(), weight: current });
         },
         init() {
             return this;

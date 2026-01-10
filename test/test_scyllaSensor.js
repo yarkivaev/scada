@@ -71,7 +71,7 @@ describe('scyllaSensor', function() {
 
     it('returns display name when name is called', function() {
         const topic = `topic${Math.random()}`;
-        const name = `Напряжение${Math.random()}`;
+        const name = `Voltage${Math.random()}`;
         const unit = `V${Math.random()}`;
         const sensor = scyllaSensor(conn, topic, name, unit);
         assert(sensor.name() === name, 'name mismatch');
