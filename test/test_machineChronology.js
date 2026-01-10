@@ -121,11 +121,11 @@ describe('machineChronology', function() {
     it('throws when unknown query type is provided', function() {
         const history = [{ timestamp: new Date(), weight: 100 }];
         const chron = machineChronology(0, history);
-        const type = 'unknown_' + Math.random();
+        const type = `unknown_${Math.random()}`;
         let thrown = false;
         try {
             chron.get({ type });
-        } catch (e) {
+        } catch {
             thrown = true;
         }
         assert(thrown === true, 'did not throw for unknown query type');

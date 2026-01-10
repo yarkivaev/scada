@@ -8,7 +8,7 @@ function connection(client) {
         async query(sql, params = {}) {
             const result = await client.query({
                 query: sql,
-                query_params: params,
+                query_params: params, // eslint-disable-line camelcase
                 format: 'JSONEachRow'
             });
             return result.json();
