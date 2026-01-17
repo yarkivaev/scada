@@ -1,21 +1,33 @@
 /**
  * Immutable chronology that queries shared machine weight history.
  * Supports point-in-time and range queries via query object.
+ * Optionally includes sensor readings in current snapshot.
  *
  * @param {number} initial - initial weight when machine was created
  * @param {array} history - shared mutable array of { timestamp, weight } entries
+ * @param {object} sensors - optional sensor objects keyed by name with current() method
  * @returns {object} chronology with get method
  *
  * @example
  *   const history = [{ timestamp: new Date(), weight: 0 }];
- *   const chron = machineChronology(0, history);
+ *   const chron = machineChronology(0, history, { voltage: sensor });
  *   chron.get({ type: 'current' }).weight; // current weight
+ *   chron.get({ type: 'current' }).voltage; // current voltage reading
  *   chron.get({ type: 'point', at: someDate }).weight; // weight at someDate
  *   chron.get({ type: 'range', from: start, to: end }); // { loaded, dispensed }
  */
-export default function machineChronology(initial, history) {
-    function current() {
-        return { weight: history[history.length - 1].weight };
+// eslint-disable-next-line max-lines-per-function
+export default function machineChronology(initial, history, sensors) {
+    async function current() {
+        const result = { weight: history[history.length - 1].weight };
+        if (sensors) {
+            const keys = Object.keys(sensors);
+            const values = await Promise.all(keys.map((key) => {
+                return sensors[key].current();
+            }));
+            keys.forEach((key, i) => { result[key] = values[i]; });
+        }
+        return result;
     }
     function point(datetime) {
         const time = new Date(datetime).getTime();

@@ -2,18 +2,20 @@ import assert from 'assert';
 import machineChronology from '../src/machineChronology.js';
 
 describe('machineChronology', function() {
-    it('returns current weight from last history entry', function() {
+    it('returns current weight from last history entry', async function() {
         const weight = Math.random() * 1000;
         const history = [{ timestamp: new Date(), weight }];
         const chron = machineChronology(0, history);
-        assert(chron.get({ type: 'current' }).weight === weight, 'current weight mismatch');
+        const result = await chron.get({ type: 'current' });
+        assert(result.weight === weight, 'current weight mismatch');
     });
 
-    it('returns initial weight when history has only initial entry', function() {
+    it('returns initial weight when history has only initial entry', async function() {
         const initial = Math.random() * 1000;
         const history = [{ timestamp: new Date(), weight: initial }];
         const chron = machineChronology(initial, history);
-        assert(chron.get({ type: 'current' }).weight === initial, 'initial weight mismatch');
+        const result = await chron.get({ type: 'current' });
+        assert(result.weight === initial, 'initial weight mismatch');
     });
 
     it('returns historical weight at specific datetime', function() {
@@ -48,12 +50,13 @@ describe('machineChronology', function() {
         assert(chron.get({ type: 'point', at: query }).weight === 200, 'should return weight at or before query time');
     });
 
-    it('reflects updates to shared history array', function() {
+    it('reflects updates to shared history array', async function() {
         const history = [{ timestamp: new Date(), weight: 100 }];
         const chron = machineChronology(100, history);
         const weight = Math.random() * 500;
         history.push({ timestamp: new Date(), weight });
-        assert(chron.get({ type: 'current' }).weight === weight, 'should reflect history updates');
+        const result = await chron.get({ type: 'current' });
+        assert(result.weight === weight, 'should reflect history updates');
     });
 
     it('returns loaded and dispensed for range query', function() {
@@ -129,5 +132,51 @@ describe('machineChronology', function() {
             thrown = true;
         }
         assert(thrown === true, 'did not throw for unknown query type');
+    });
+
+    it('includes sensor values in current query result', async function() {
+        const weight = Math.random() * 1000;
+        const voltage = Math.random() * 400;
+        const history = [{ timestamp: new Date(), weight }];
+        const sensors = {
+            voltage: { current() { return Promise.resolve({ value: voltage, unit: 'V' }); } }
+        };
+        const chron = machineChronology(0, history, sensors);
+        const result = await chron.get({ type: 'current' });
+        assert(result.voltage.value === voltage, 'sensor value not included in current');
+    });
+
+    it('includes multiple sensors in current query result', async function() {
+        const weight = Math.random() * 1000;
+        const voltage = Math.random() * 400;
+        const cosphi = Math.random();
+        const history = [{ timestamp: new Date(), weight }];
+        const sensors = {
+            voltage: { current() { return Promise.resolve({ value: voltage, unit: 'V' }); } },
+            cosphi: { current() { return Promise.resolve({ value: cosphi, unit: '' }); } }
+        };
+        const chron = machineChronology(0, history, sensors);
+        const result = await chron.get({ type: 'current' });
+        assert(result.voltage.value === voltage, 'voltage not included');
+        assert(result.cosphi.value === cosphi, 'cosphi not included');
+    });
+
+    it('returns weight without sensors when sensors not provided', async function() {
+        const weight = Math.random() * 1000;
+        const history = [{ timestamp: new Date(), weight }];
+        const chron = machineChronology(0, history);
+        const result = await chron.get({ type: 'current' });
+        assert(result.weight === weight, 'weight mismatch without sensors');
+    });
+
+    it('returns weight with sensors in current query', async function() {
+        const weight = Math.random() * 1000;
+        const history = [{ timestamp: new Date(), weight }];
+        const sensors = {
+            voltage: { current() { return Promise.resolve({ value: 380, unit: 'V' }); } }
+        };
+        const chron = machineChronology(0, history, sensors);
+        const result = await chron.get({ type: 'current' });
+        assert(result.weight === weight, 'weight mismatch with sensors');
     });
 });

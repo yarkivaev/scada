@@ -32,7 +32,7 @@ export default function meltingMachine(name, sensors, alerts, initial) {
             });
         },
         chronology() {
-            return machineChronology(start, history);
+            return machineChronology(start, history, sensors);
         },
         load(w) {
             current += w;

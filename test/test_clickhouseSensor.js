@@ -105,6 +105,25 @@ describe('clickhouseSensor', function() {
         assert(result.length >= 1, 'expected at least one measurement');
     });
 
+    it('returns measurement within one second range', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const now = new Date();
+        const value = Math.random() * 100;
+        await client.insert({
+            table: 'scada.metrics',
+            values: [{ topic, ts: now.getTime(), value }],
+            format: 'JSONEachRow'
+        });
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.measurements({
+            start: new Date(now.getTime() - 1000),
+            end: now
+        }, 1000);
+        assert(result.length >= 1, 'expected measurement within one second range');
+    });
+
     it('returns measurements with correct value', async function() {
         const topic = `topic${Math.random()}`;
         const name = `name${Math.random()}`;
@@ -185,5 +204,84 @@ describe('clickhouseSensor', function() {
             setTimeout(resolve, 200);
         });
         assert(count === before, 'callback was called after cancel');
+    });
+
+    it('returns zero value when no data exists for current', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.current();
+        assert(result.value === 0, 'expected zero value for missing data');
+    });
+
+    it('returns correct unit when no data exists for current', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.current();
+        assert(result.unit === unit, 'unit mismatch for missing data');
+    });
+
+    it('returns timestamp when no data exists for current', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.current();
+        assert(result.timestamp instanceof Date, 'timestamp should be Date');
+    });
+
+    it('returns latest value when data exists for current', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const now = new Date();
+        const value = Math.random() * 100;
+        await client.insert({
+            table: 'scada.metrics',
+            values: [{ topic, ts: now.getTime(), value }],
+            format: 'JSONEachRow'
+        });
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.current();
+        assert(Math.abs(result.value - value) < 0.001, 'current value mismatch');
+    });
+
+    it('returns correct unit when data exists for current', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `cosφ${Math.random()}`;
+        const now = new Date();
+        const value = Math.random() * 100;
+        await client.insert({
+            table: 'scada.metrics',
+            values: [{ topic, ts: now.getTime(), value }],
+            format: 'JSONEachRow'
+        });
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.current();
+        assert(result.unit === unit, 'current unit mismatch');
+    });
+
+    it('returns most recent value when multiple data points exist', async function() {
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const now = new Date();
+        const older = Math.random() * 50;
+        const newer = Math.random() * 50 + 50;
+        await client.insert({
+            table: 'scada.metrics',
+            values: [
+                { topic, ts: now.getTime() - 5000, value: older },
+                { topic, ts: now.getTime(), value: newer }
+            ],
+            format: 'JSONEachRow'
+        });
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const result = await sensor.current();
+        assert(Math.abs(result.value - newer) < 0.001, 'should return most recent value');
     });
 });

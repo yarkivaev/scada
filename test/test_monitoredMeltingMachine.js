@@ -5,6 +5,9 @@ function fakeSensor(value) {
     return {
         measurements() {
             return value;
+        },
+        current() {
+            return Promise.resolve({ value, unit: '', timestamp: new Date() });
         }
     };
 }
@@ -20,6 +23,20 @@ function fakeMachine(name, voltageValue, cosphiValue, alerts) {
         },
         alerts() {
             return alerts;
+        },
+        chronology() {
+            return {
+                get(query) {
+                    if (query.type === 'current') {
+                        return Promise.resolve({
+                            weight: 0,
+                            voltage: { value: voltageValue, unit: 'V', timestamp: new Date() },
+                            cosphi: { value: cosphiValue, unit: '', timestamp: new Date() }
+                        });
+                    }
+                    return Promise.resolve({ weight: 0 });
+                }
+            };
         }
     };
 }
@@ -94,14 +111,32 @@ describe('monitoredMeltingMachine', function() {
         assert(int.started === true);
     });
 
-    it('calls ruleEngine evaluate with measurements', function() {
+    it('calls ruleEngine evaluate with measurements', async function() {
         const voltage = Math.random();
         const cosphi = Math.random();
         const machine = fakeMachine('m1', voltage, cosphi, []);
         const engine = fakeRuleEngine();
         const int = fakeInterval();
         monitoredMeltingMachine(machine, engine, int.capture).init();
-        int.callback();
-        assert(engine.evaluated.voltage === voltage);
+        await int.callback();
+        assert(engine.evaluated.voltage.value === voltage, 'voltage not passed to rule engine');
+    });
+
+    it('exposes chronology from machine', function() {
+        const machine = fakeMachine('m1', 0, 0, []);
+        const engine = fakeRuleEngine();
+        const int = fakeInterval();
+        const monitored = monitoredMeltingMachine(machine, engine, int.capture);
+        assert(typeof monitored.chronology === 'function', 'chronology should be a function');
+    });
+
+    it('returns chronology from wrapped machine', async function() {
+        const voltage = Math.random();
+        const machine = fakeMachine('m1', voltage, 0, []);
+        const engine = fakeRuleEngine();
+        const int = fakeInterval();
+        const monitored = monitoredMeltingMachine(machine, engine, int.capture);
+        const result = await monitored.chronology().get({ type: 'current' });
+        assert(result.voltage.value === voltage, 'chronology should delegate to machine');
     });
 });

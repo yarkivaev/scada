@@ -5,6 +5,9 @@ function fakeSensor(value) {
     return {
         measurements() {
             return value;
+        },
+        current() {
+            return Promise.resolve({ value, unit: '', timestamp: new Date() });
         }
     };
 }
@@ -52,37 +55,42 @@ describe('meltingMachine', function() {
         assert(machine.sensors.cosphi.measurements() === value, 'cosphi measurements mismatch');
     });
 
-    it('returns zero weight from chronology initially', function() {
+    it('returns zero weight from chronology initially', async function() {
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
-        assert(machine.chronology().get({ type: 'current' }).weight === 0, 'initial weight not zero');
+        const result = await machine.chronology().get({ type: 'current' });
+        assert(result.weight === 0, 'initial weight not zero');
     });
 
-    it('returns initial weight from chronology when provided', function() {
+    it('returns initial weight from chronology when provided', async function() {
         const initial = Math.random() * 1000;
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]), initial);
-        assert(machine.chronology().get({ type: 'current' }).weight === initial, 'initial weight mismatch');
+        const result = await machine.chronology().get({ type: 'current' });
+        assert(result.weight === initial, 'initial weight mismatch');
     });
 
-    it('increases weight in chronology when load is called', function() {
+    it('increases weight in chronology when load is called', async function() {
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         const amount = Math.floor(Math.random() * 1000);
         machine.load(amount);
-        assert(machine.chronology().get({ type: 'current' }).weight === amount, 'weight after load mismatch');
+        const result = await machine.chronology().get({ type: 'current' });
+        assert(result.weight === amount, 'weight after load mismatch');
     });
 
-    it('decreases weight in chronology when dispense is called', function() {
+    it('decreases weight in chronology when dispense is called', async function() {
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         machine.load(100);
         const amount = Math.floor(Math.random() * 50);
         machine.dispense(amount);
-        assert(machine.chronology().get({ type: 'current' }).weight === 100 - amount, 'weight after dispense mismatch');
+        const result = await machine.chronology().get({ type: 'current' });
+        assert(result.weight === 100 - amount, 'weight after dispense mismatch');
     });
 
-    it('accumulates weight across multiple loads in chronology', function() {
+    it('accumulates weight across multiple loads in chronology', async function() {
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         machine.load(100);
         machine.load(50);
-        assert(machine.chronology().get({ type: 'current' }).weight === 150, 'accumulated weight mismatch');
+        const result = await machine.chronology().get({ type: 'current' });
+        assert(result.weight === 150, 'accumulated weight mismatch');
     });
 
     it('returns historical weight from chronology at specific time', function() {
@@ -114,11 +122,12 @@ describe('meltingMachine', function() {
         assert(machine.init() === machine, 'init should return self');
     });
 
-    it('sets weight in chronology when reset is called', function() {
+    it('sets weight in chronology when reset is called', async function() {
         const machine = meltingMachine('m1', fakeSensors(fakeSensor(0), fakeSensor(0)), fakeAlerts([]));
         machine.load(100);
         const amount = Math.floor(Math.random() * 500);
         machine.reset(amount);
-        assert(machine.chronology().get({ type: 'current' }).weight === amount, 'weight after reset mismatch');
+        const result = await machine.chronology().get({ type: 'current' });
+        assert(result.weight === amount, 'weight after reset mismatch');
     });
 });
