@@ -1,32 +1,51 @@
+import pubsub from './pubsub.js';
+
 /**
- * Simple event emitter for pub/sub pattern.
- * Provides emit() to publish events and stream() to subscribe.
- * Abstraction point for future message broker integration.
+ * Append-only event log for system occurrences.
+ * Events are immutable and never modified after creation.
+ * Optionally evaluates rules when events are created.
  *
- * @returns {object} emitter with emit() and stream() methods
+ * @param {function} factory - factory function to create event records
+ * @param {object} rules - optional rules collection to evaluate on create
+ * @returns {object} log with create, all, find, stream methods
  *
  * @example
- *   const bus = events();
- *   const sub = bus.stream((e) => console.log(e));
- *   bus.emit({ type: 'created', data: {...} });
- *   sub.cancel();
+ *   const log = events(event, rules([rule1, rule2]));
+ *   const e = log.create(new Date(), {machine: 'icht1'}, ['sensor']);
+ *   log.all();                              // returns all events
+ *   log.all((e) => e.labels().includes('sensor')); // filter events
+ *   log.find('ev-0');                       // find by id
+ *   log.stream((evt) => console.log(evt));  // subscribe to new events
  */
-export default function events() {
-    const subscribers = [];
+export default function events(factory, rules) {
+    const items = [];
+    const bus = pubsub();
+    let counter = 0;
     return {
-        emit(event) {
-            subscribers.forEach((cb) => {
-                cb(event);
+        create(timestamp, properties, labels) {
+            const id = `ev-${counter}`;
+            counter += 1;
+            const tags = labels === undefined ? [] : labels;
+            const e = factory(id, timestamp, properties, tags);
+            items.push(e);
+            bus.emit({ type: 'created', event: e });
+            if (rules !== undefined) {
+                rules.evaluate({ event: e });
+            }
+            return e;
+        },
+        all(...filters) {
+            return items.filter((e) => {
+                return filters.every((filter) => {
+                    return filter(e);
+                });
             });
         },
-        stream(callback) {
-            subscribers.push(callback);
-            return {
-                cancel() {
-                    const index = subscribers.indexOf(callback);
-                    subscribers.splice(index, 1);
-                }
-            };
-        }
+        find(id) {
+            return items.find((e) => {
+                return e.id() === id;
+            });
+        },
+        stream: bus.stream
     };
 }

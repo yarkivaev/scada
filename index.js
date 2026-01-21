@@ -1,7 +1,7 @@
 /**
  * SCADA domain objects for industrial plant monitoring.
  * Provides immutable objects for modeling melting operations,
- * alerting systems, and plant hierarchy.
+ * alerting systems, events, and plant hierarchy.
  *
  * @example
  *   import { plant, meltingShop, meltingMachine, meltings, alerts, initialized } from 'scada';
@@ -22,7 +22,13 @@ export { default as completedMelting } from './src/completedMelting.js';
 export { default as meltings } from './src/meltings.js';
 export { default as meltingChronology } from './src/meltingChronology.js';
 
-// Rule engine
+// Events system
+export { default as event } from './src/event.js';
+export { default as events } from './src/events.js';
+export { default as rule } from './src/rule.js';
+export { default as rules } from './src/rules.js';
+
+// Rule engine (legacy)
 export { default as meltingRuleEngine } from './src/meltingRuleEngine.js';
 
 // Alerting
@@ -32,7 +38,7 @@ export { default as alerts } from './src/alerts.js';
 // Utilities
 export { default as interval } from './src/interval.js';
 export { default as initialized } from './src/initialized.js';
-export { default as events } from './src/events.js';
+export { default as pubsub } from './src/pubsub.js';
 
 // Sensors
 export { default as scyllaSensor } from './src/scyllaSensor.js';

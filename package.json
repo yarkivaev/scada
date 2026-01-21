@@ -1,6 +1,6 @@
 {
   "name": "scada",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SCADA domain objects for plant monitoring",
   "type": "module",
   "main": "index.js",

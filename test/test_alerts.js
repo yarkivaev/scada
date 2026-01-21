@@ -1,23 +1,26 @@
+/* eslint-disable max-params */
 import assert from 'assert';
 import alerts from '../src/alerts.js';
 
-function fakeAlert(id, message, timestamp, object, acknowledge) {
+function fakeAlert(id, message, timestamp, object, source, acknowledge) {
     return {
         id,
         message,
         timestamp,
         object,
+        event: source,
         acknowledge,
         acknowledged: false
     };
 }
 
-function fakeAcknowledgedAlert(id, message, timestamp, object) {
+function fakeAcknowledgedAlert(id, message, timestamp, object, source) {
     return {
         id,
         message,
         timestamp,
         object,
+        event: source,
         acknowledged: true
     };
 }
@@ -206,5 +209,25 @@ describe('alerts', function() {
         sub.cancel();
         history.trigger('msg2', new Date(), 'obj');
         assert(count === 1, 'subscriber was notified after cancellation');
+    });
+
+    it('returns alert with source event reference', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        const source = { id: () => {return `ev-${Math.random()}`} };
+        const added = history.trigger('msg', new Date(), 'obj', source);
+        assert(added.event === source, 'event reference mismatch');
+    });
+
+    it('returns alert with undefined event when no source provided', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        const added = history.trigger('msg', new Date(), 'obj');
+        assert(added.event === undefined, 'event should be undefined');
+    });
+
+    it('preserves event reference after acknowledge', function() {
+        const history = alerts(fakeAlert, fakeAcknowledgedAlert);
+        const source = { id: () => {return `ev-${Math.random()}`} };
+        history.trigger('msg', new Date(), 'obj', source).acknowledge();
+        assert(history.all()[0].event === source, 'event reference not preserved');
     });
 });

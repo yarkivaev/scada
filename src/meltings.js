@@ -1,5 +1,5 @@
 /* eslint-disable max-lines-per-function, max-statements */
-import events from './events.js';
+import pubsub from './pubsub.js';
 import meltingChronology from './meltingChronology.js';
 import activeMelting from './activeMelting.js';
 import completedMelting from './completedMelting.js';
@@ -22,7 +22,7 @@ import completedMelting from './completedMelting.js';
  */
 export default function meltings() {
     const items = [];
-    const bus = events();
+    const bus = pubsub();
     let counter = 0;
     function onUpdate(id, updated) {
         const item = items.find((i) => {

@@ -6,15 +6,17 @@
  * @param {object} meltingMachines - initialized wrapper of melting machines
  * @param {object} meltings - collection managing melting sessions
  * @param {object} alerts - alerts collection for the shop
- * @returns {object} shop with name, machines, meltings, alerts properties and init method
+ * @param {object} events - events collection shared from plant
+ * @returns {object} shop with name, machines, meltings, alerts, events properties and init method
  *
  * @example
- *   const shop = meltingShop('shop1', initialized({ m1: machine }, Object.values), meltings(), alerts());
+ *   const shop = meltingShop('shop1', initialized({ m1: machine }, Object.values), meltings(), alerts(), events());
  *   shop.name(); // 'shop1'
  *   shop.machines.init().m1; // access machine by key
+ *   shop.events.create(new Date(), {}, ['label']);
  *   shop.init();
  */
-export default function meltingShop(name, meltingMachines, meltings, alerts) {
+export default function meltingShop(name, meltingMachines, meltings, alerts, events) {
     return {
         name() {
             return name;
@@ -22,6 +24,7 @@ export default function meltingShop(name, meltingMachines, meltings, alerts) {
         machines: meltingMachines,
         meltings,
         alerts,
+        events,
         init() {
             meltingMachines.init();
         },

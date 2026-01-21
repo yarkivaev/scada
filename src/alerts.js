@@ -1,8 +1,8 @@
-import events from './events.js';
+import pubsub from './pubsub.js';
 
 /**
  * History of alert occurrences with filtering support.
- * Creates and stores alert events, replaces with acknowledged version on acknowledge.
+ * Creates and stores alerts, replaces with acknowledged version on acknowledge.
  * Generates unique IDs for each alert.
  *
  * @param {function} alert - factory function to create alerts
@@ -14,19 +14,20 @@ import events from './events.js';
  *   const a = history.trigger('High voltage', new Date(), 'icht1');
  *   a.id; // 'alert-0'
  *   a.acknowledge(); // replaces with acknowledged version
- *   history.stream((event) => console.log(event)); // subscribe to events
+ *   history.trigger('From event', new Date(), 'icht1', sourceEvent); // with event
+ *   history.stream((evt) => console.log(evt)); // subscribe to events
  */
 export default function alerts(alert, acknowledgedAlert) {
     const items = [];
-    const bus = events();
+    const bus = pubsub();
     let counter = 0;
     return {
-        trigger(message, timestamp, object) {
+        trigger(message, timestamp, object, source) {
             const id = `alert-${counter}`;
             counter += 1;
             const index = items.length;
-            const created = alert(id, message, timestamp, object, () => {
-                const acknowledged = acknowledgedAlert(id, message, timestamp, object);
+            const created = alert(id, message, timestamp, object, source, () => {
+                const acknowledged = acknowledgedAlert(id, message, timestamp, object, source);
                 items[index] = acknowledged;
                 bus.emit({ type: 'acknowledged', alert: acknowledged });
             });
