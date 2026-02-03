@@ -1,6 +1,6 @@
 {
-  "name": "scada",
-  "version": "1.1.0",
+  "name": "@yarkivaev/scada",
+  "version": "1.1.1",
   "description": "SCADA domain objects for plant monitoring",
   "type": "module",
   "main": "index.js",
