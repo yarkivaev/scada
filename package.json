@@ -1,7 +1,11 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "SCADA domain objects for plant monitoring",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yarkivaev/scada"
+  },
   "type": "module",
   "main": "index.js",
   "scripts": {
