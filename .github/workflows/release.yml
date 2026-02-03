@@ -25,13 +25,6 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-      - name: Create tag
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
       - uses: actions/setup-node@v4
         if: steps.check.outputs.exists == 'false'
         with:
@@ -43,5 +36,16 @@ jobs:
         if: steps.check.outputs.exists == 'false'
       - run: npm ci
         if: steps.check.outputs.exists == 'false'
+      - run: npm run lint
+        if: steps.check.outputs.exists == 'false'
+      - run: npm test
+        if: steps.check.outputs.exists == 'false'
+      - name: Create tag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
       - run: npm publish --access public
         if: steps.check.outputs.exists == 'false'
