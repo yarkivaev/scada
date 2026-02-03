@@ -35,13 +35,17 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.check.outputs.exists == 'false'
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
+      - run: npm install -g npm@latest
+        if: steps.check.outputs.exists == 'false'
+      - run: npm --version
+        if: steps.check.outputs.exists == 'false'
       - run: npm ci
         if: steps.check.outputs.exists == 'false'
       - run: npm run lint
         if: steps.check.outputs.exists == 'false'
       - run: npm test
         if: steps.check.outputs.exists == 'false'
-      - run: npm publish --provenance --access public
+      - run: npm publish --access public
         if: steps.check.outputs.exists == 'false'
