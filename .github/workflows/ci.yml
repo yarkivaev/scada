@@ -5,26 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - name: Check version is newer than all existing tags
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          LATEST=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -n1)
-          if [ -n "$LATEST" ]; then
-            if [ "$(printf '%s\n' "$LATEST" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ] || [ "$LATEST" = "$VERSION" ]; then
-              echo "Error: package.json version ($VERSION) must be greater than latest tag (v$LATEST)"
-              exit 1
-            fi
-          fi
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
+  ci:
+    uses: yarkivaev/npm-workflows/.github/workflows/ci.yml@main
+    with:
+      node-version: '22'
