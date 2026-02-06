@@ -66,17 +66,21 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
         stream(since, step, callback) {
             let lastTs = since;
             const timer = setInterval(async () => {
-                const rows = await connection.query(
-                    `SELECT ts, value FROM scada.metrics
-                     WHERE topic = {topic:String} AND ts > {since:DateTime64(3)}
-                     ORDER BY ts LIMIT 100`,
-                    { topic, since: formatDateTime(lastTs) }
-                );
-                rows.forEach((row) => {
-                    const timestamp = new Date(row.ts);
-                    callback({ timestamp, value: row.value, unit });
-                    lastTs = timestamp;
-                });
+                try {
+                    const rows = await connection.query(
+                        `SELECT ts, value FROM scada.metrics
+                         WHERE topic = {topic:String} AND ts > {since:DateTime64(3)}
+                         ORDER BY ts LIMIT 100`,
+                        { topic, since: formatDateTime(lastTs) }
+                    );
+                    rows.forEach((row) => {
+                        const timestamp = new Date(row.ts);
+                        callback({ timestamp, value: row.value, unit });
+                        lastTs = timestamp;
+                    });
+                } catch (err) {
+                    console.error('Stream query failed:', err.message);
+                }
             }, step);
             return {
                 cancel() {

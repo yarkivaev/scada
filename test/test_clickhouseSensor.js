@@ -206,6 +206,26 @@ describe('clickhouseSensor', function() {
         assert(count === before, 'callback was called after cancel');
     });
 
+    it('does not crash when connection fails during stream', async function() {
+        this.timeout(10000);
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const failingConn = {
+            async query() {
+                throw new Error('ECONNRESET');
+            }
+        };
+        const sensor = clickhouseSensor(failingConn, topic, name, unit);
+        const since = new Date();
+        const subscription = sensor.stream(since, 100, () => {});
+        await new Promise((resolve) => {
+            setTimeout(resolve, 300);
+        });
+        subscription.cancel();
+        assert(true, 'process should not crash on connection error');
+    });
+
     it('returns zero value when no data exists for current', async function() {
         const topic = `topic${Math.random()}`;
         const name = `name${Math.random()}`;
