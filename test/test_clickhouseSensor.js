@@ -212,8 +212,8 @@ describe('clickhouseSensor', function() {
         const name = `name${Math.random()}`;
         const unit = `unit${Math.random()}`;
         const failingConn = {
-            async query() {
-                throw new Error('ECONNRESET');
+            query() {
+                return Promise.reject(new Error('ECONNRESET'));
             }
         };
         const sensor = clickhouseSensor(failingConn, topic, name, unit);

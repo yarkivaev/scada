@@ -79,7 +79,7 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
                         lastTs = timestamp;
                     });
                 } catch (err) {
-                    console.error('Stream query failed:', err.message);
+                    console.error('Stream query failed:', err.message); // eslint-disable-line no-console
                 }
             }, step);
             return {
