@@ -35,6 +35,10 @@ export { default as meltingRuleEngine } from './src/meltingRuleEngine.js';
 export { alert, acknowledgedAlert } from './src/alert.js';
 export { default as alerts } from './src/alerts.js';
 
+// Timeline
+export { default as segments } from './src/segments.js';
+export { default as requests } from './src/requests.js';
+
 // Utilities
 export { default as interval } from './src/interval.js';
 export { default as initialized } from './src/initialized.js';

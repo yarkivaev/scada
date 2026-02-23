@@ -39,7 +39,7 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
             if (rows.length === 0) {
                 return { timestamp: new Date(), value: 0, unit };
             }
-            return { timestamp: new Date(rows[0].ts), value: rows[0].value, unit };
+            return { timestamp: new Date(`${rows[0].ts}Z`), value: rows[0].value, unit };
         },
         async measurements(range, step) {
             const seconds = Math.max(1, Math.floor(step / 1000));
@@ -60,7 +60,7 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
                 }
             );
             return rows.map((row) => {
-                return { timestamp: new Date(row.ts), value: row.value, unit };
+                return { timestamp: new Date(`${row.ts}Z`), value: row.value, unit };
             });
         },
         stream(since, step, callback) {
@@ -74,7 +74,7 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
                         { topic, since: formatDateTime(lastTs) }
                     );
                     rows.forEach((row) => {
-                        const timestamp = new Date(row.ts);
+                        const timestamp = new Date(`${row.ts}Z`);
                         callback({ timestamp, value: row.value, unit });
                         lastTs = timestamp;
                     });
