@@ -173,6 +173,39 @@ describe('scyllaSensor', function() {
         assert(received !== null && received.value === value, 'callback was not called with correct value');
     });
 
+    it('streams measurements bounded by clock', async function() {
+        this.timeout(5000);
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const now = new Date();
+        const past = new Date(now.getTime() - 2000);
+        const future = new Date(now.getTime() + 5000);
+        const pastValue = Math.random() * 100;
+        const futureValue = Math.random() * 100;
+        await client.execute(
+            'INSERT INTO scada.metrics (topic, ts, value) VALUES (?, ?, ?)',
+            [topic, past, pastValue],
+            { prepare: true }
+        );
+        await client.execute(
+            'INSERT INTO scada.metrics (topic, ts, value) VALUES (?, ?, ?)',
+            [topic, future, futureValue],
+            { prepare: true }
+        );
+        const sensor = scyllaSensor(conn, topic, name, unit);
+        const since = new Date(now.getTime() - 5000);
+        const received = [];
+        const subscription = sensor.stream(since, 100, (measurement) => {
+            received.push(measurement);
+        }, () => { return now; });
+        await new Promise((resolve) => {
+            setTimeout(resolve, 500);
+        });
+        subscription.cancel();
+        assert(received.every((item) => { return item.timestamp <= now; }), 'stream emitted measurement beyond clock boundary');
+    });
+
     it('cancels streaming when cancel is called', async function() {
         this.timeout(5000);
         const topic = `topic${Math.random()}`;

@@ -285,6 +285,37 @@ describe('clickhouseSensor', function() {
         assert(result.unit === unit, 'current unit mismatch');
     });
 
+    it('streams measurements bounded by clock', async function() {
+        this.timeout(5000);
+        const topic = `topic${Math.random()}`;
+        const name = `name${Math.random()}`;
+        const unit = `unit${Math.random()}`;
+        const now = new Date();
+        const past = new Date(now.getTime() - 2000);
+        const future = new Date(now.getTime() + 5000);
+        const pastValue = Math.random() * 100;
+        const futureValue = Math.random() * 100;
+        await client.insert({
+            table: 'scada.metrics',
+            values: [
+                { topic, ts: past.getTime(), value: pastValue },
+                { topic, ts: future.getTime(), value: futureValue }
+            ],
+            format: 'JSONEachRow'
+        });
+        const sensor = clickhouseSensor(conn, topic, name, unit);
+        const since = new Date(now.getTime() - 5000);
+        const received = [];
+        const subscription = sensor.stream(since, 100, (measurement) => {
+            received.push(measurement);
+        }, () => { return now; });
+        await new Promise((resolve) => {
+            setTimeout(resolve, 500);
+        });
+        subscription.cancel();
+        assert(received.every((item) => { return item.timestamp <= now; }), 'stream emitted measurement beyond clock boundary');
+    });
+
     it('returns most recent value when multiple data points exist', async function() {
         const topic = `topic${Math.random()}`;
         const name = `name${Math.random()}`;

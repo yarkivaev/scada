@@ -63,15 +63,16 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
                 return { timestamp: new Date(`${row.ts}Z`), value: row.value, unit };
             });
         },
-        stream(since, step, callback) {
+        stream(since, step, callback, clock) {
+            const time = clock || (() => { return new Date(); });
             let lastTs = since;
             const timer = setInterval(async () => {
                 try {
                     const rows = await connection.query(
                         `SELECT ts, value FROM scada.metrics
-                         WHERE topic = {topic:String} AND ts > {since:DateTime64(3)}
+                         WHERE topic = {topic:String} AND ts > {since:DateTime64(3)} AND ts <= {until:DateTime64(3)}
                          ORDER BY ts LIMIT 100`,
-                        { topic, since: formatDateTime(lastTs) }
+                        { topic, since: formatDateTime(lastTs), until: formatDateTime(time()) }
                     );
                     rows.forEach((row) => {
                         const timestamp = new Date(`${row.ts}Z`);

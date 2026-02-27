@@ -31,12 +31,13 @@ export default function scyllaSensor(connection, topic, displayName, unit) {
                 return { timestamp: row.ts, value: row.value, unit };
             });
         },
-        stream(since, step, callback) {
+        stream(since, step, callback, clock) {
+            const time = clock || (() => { return new Date(); });
             let lastTs = since;
             const timer = setInterval(async () => {
                 const rows = await connection.query(
-                    'SELECT ts, value FROM scada.metrics WHERE topic = ? AND ts > ? LIMIT 100',
-                    [topic, lastTs]
+                    'SELECT ts, value FROM scada.metrics WHERE topic = ? AND ts > ? AND ts <= ? LIMIT 100',
+                    [topic, lastTs, time()]
                 );
                 rows.forEach((row) => {
                     callback({ timestamp: row.ts, value: row.value, unit });
