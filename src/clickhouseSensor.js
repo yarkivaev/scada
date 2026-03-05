@@ -15,7 +15,7 @@
  * @example
  *   const sensor = clickhouseSensor(conn, 'icht1/voltage', 'Voltage', 'V');
  *   sensor.name(); // 'Voltage'
- *   await sensor.current(); // { timestamp, value, unit }
+ *   await sensor.current(); // { found: true, timestamp, value, unit } or { found: false }
  *   await sensor.measurements({ start, end }, 60000); // downsampled to 1-minute intervals
  *   sensor.stream(since, 1000, callback); // live stream
  */
@@ -37,16 +37,16 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
                 { topic }
             );
             if (rows.length === 0) {
-                return { timestamp: new Date(), value: 0, unit };
+                return { found: false };
             }
-            return { timestamp: new Date(`${rows[0].ts}Z`), value: rows[0].value, unit };
+            return { found: true, timestamp: new Date(`${rows[0].ts}Z`), value: rows[0].value, unit };
         },
         async measurements(range, step) {
             const seconds = Math.max(1, Math.floor(step / 1000));
             const rows = await connection.query(
                 `SELECT
                     toStartOfInterval(ts, INTERVAL ${seconds} SECOND) as ts,
-                    avg(value) as value
+                    anyLast(value) as value
                 FROM scada.metrics
                 WHERE topic = {topic:String}
                   AND ts >= toStartOfInterval({start:DateTime64(3)}, INTERVAL ${seconds} SECOND)

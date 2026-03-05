@@ -25,7 +25,9 @@ export default function machineChronology(initial, history, sensors) {
             const values = await Promise.all(keys.map((key) => {
                 return sensors[key].current();
             }));
-            keys.forEach((key, i) => { result[key] = values[i]; });
+            keys.forEach((key, i) => {
+                result[key] = values[i].found ? values[i] : { value: 0, unit: '' };
+            });
         }
         return result;
     }

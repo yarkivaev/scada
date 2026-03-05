@@ -226,31 +226,29 @@ describe('clickhouseSensor', function() {
         assert(true, 'process should not crash on connection error');
     });
 
-    it('returns zero value when no data exists for current', async function() {
+    it('returns found false when no data exists for current', async function() {
         const topic = `topic${Math.random()}`;
         const name = `name${Math.random()}`;
         const unit = `unit${Math.random()}`;
         const sensor = clickhouseSensor(conn, topic, name, unit);
         const result = await sensor.current();
-        assert(result.value === 0, 'expected zero value for missing data');
+        assert(result.found === false, 'expected found false for missing data');
     });
 
-    it('returns correct unit when no data exists for current', async function() {
+    it('returns found true when data exists for current', async function() {
         const topic = `topic${Math.random()}`;
         const name = `name${Math.random()}`;
         const unit = `unit${Math.random()}`;
+        const now = new Date();
+        const value = Math.random() * 100;
+        await client.insert({
+            table: 'scada.metrics',
+            values: [{ topic, ts: now.getTime(), value }],
+            format: 'JSONEachRow'
+        });
         const sensor = clickhouseSensor(conn, topic, name, unit);
         const result = await sensor.current();
-        assert(result.unit === unit, 'unit mismatch for missing data');
-    });
-
-    it('returns timestamp when no data exists for current', async function() {
-        const topic = `topic${Math.random()}`;
-        const name = `name${Math.random()}`;
-        const unit = `unit${Math.random()}`;
-        const sensor = clickhouseSensor(conn, topic, name, unit);
-        const result = await sensor.current();
-        assert(result.timestamp instanceof Date, 'timestamp should be Date');
+        assert(result.found === true, 'expected found true when data exists');
     });
 
     it('returns latest value when data exists for current', async function() {

@@ -139,7 +139,7 @@ describe('machineChronology', function() {
         const voltage = Math.random() * 400;
         const history = [{ timestamp: new Date(), weight }];
         const sensors = {
-            voltage: { current() { return Promise.resolve({ value: voltage, unit: 'V' }); } }
+            voltage: { current() { return Promise.resolve({ found: true, value: voltage, unit: 'V' }); } }
         };
         const chron = machineChronology(0, history, sensors);
         const result = await chron.get({ type: 'current' });
@@ -152,13 +152,24 @@ describe('machineChronology', function() {
         const cosphi = Math.random();
         const history = [{ timestamp: new Date(), weight }];
         const sensors = {
-            voltage: { current() { return Promise.resolve({ value: voltage, unit: 'V' }); } },
-            cosphi: { current() { return Promise.resolve({ value: cosphi, unit: '' }); } }
+            voltage: { current() { return Promise.resolve({ found: true, value: voltage, unit: 'V' }); } },
+            cosphi: { current() { return Promise.resolve({ found: true, value: cosphi, unit: '' }); } }
         };
         const chron = machineChronology(0, history, sensors);
         const result = await chron.get({ type: 'current' });
         assert(result.voltage.value === voltage, 'voltage not included');
         assert(result.cosphi.value === cosphi, 'cosphi not included');
+    });
+
+    it('returns zero value for sensor with no data', async function() {
+        const weight = Math.random() * 1000;
+        const history = [{ timestamp: new Date(), weight }];
+        const sensors = {
+            voltage: { current() { return Promise.resolve({ found: false }); } }
+        };
+        const chron = machineChronology(0, history, sensors);
+        const result = await chron.get({ type: 'current' });
+        assert(result.voltage.value === 0, 'absent sensor should default to zero');
     });
 
     it('returns weight without sensors when sensors not provided', async function() {
@@ -173,7 +184,7 @@ describe('machineChronology', function() {
         const weight = Math.random() * 1000;
         const history = [{ timestamp: new Date(), weight }];
         const sensors = {
-            voltage: { current() { return Promise.resolve({ value: 380, unit: 'V' }); } }
+            voltage: { current() { return Promise.resolve({ found: true, value: 380, unit: 'V' }); } }
         };
         const chron = machineChronology(0, history, sensors);
         const result = await chron.get({ type: 'current' });
