@@ -24,7 +24,7 @@ describe('requests', function() {
         const collection = requests();
         const id = `r-${Math.random()}`;
         collection.add({ id, name: `n-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options: ['x'] });
-        collection.respond(id, { label: 'on' });
+        collection.respond(id, { tags: ['on'], properties: {} });
         assert(collection.query().length === 0, 'resolved request still in query');
     });
 
@@ -32,30 +32,30 @@ describe('requests', function() {
         const collection = requests();
         const id = `r-${Math.random()}`;
         collection.add({ id, name: `n-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options: ['y'] });
-        const result = collection.respond(id, { label: `lbl-${Math.random()}` });
+        const result = collection.respond(id, { tags: [`tàg-${Math.random()}`], properties: {} });
         assert(result.id === id, 'respond did not return correct id');
     });
 
     it('returns response body fields on respond', function() {
         const collection = requests();
         const id = `r-${Math.random()}`;
-        const label = `làbel-${Math.random()}`;
+        const tags = [`làbel-${Math.random()}`];
         collection.add({ id, name: `n-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options: ['z'] });
-        const result = collection.respond(id, { label });
-        assert(result.label === label, 'respond did not include body fields');
+        const result = collection.respond(id, { tags, properties: {} });
+        assert.deepStrictEqual(result.tags, tags, 'respond did not include body fields');
     });
 
     it('returns undefined when responding to unknown request', function() {
         const collection = requests();
-        assert(collection.respond(`unknown-${Math.random()}`, { label: 'x' }) === undefined, 'respond did not return undefined for unknown');
+        assert(collection.respond(`unknown-${Math.random()}`, { tags: ['x'], properties: {} }) === undefined, 'respond did not return undefined for unknown');
     });
 
     it('returns undefined when responding to already resolved request', function() {
         const collection = requests();
         const id = `r-${Math.random()}`;
         collection.add({ id, name: `n-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options: ['a'] });
-        collection.respond(id, { label: 'first' });
-        assert(collection.respond(id, { label: 'second' }) === undefined, 'respond did not return undefined for resolved');
+        collection.respond(id, { tags: ['first'], properties: {} });
+        assert(collection.respond(id, { tags: ['second'], properties: {} }) === undefined, 'respond did not return undefined for resolved');
     });
 
     it('emits created event on add', function() {
@@ -81,7 +81,7 @@ describe('requests', function() {
         collection.add({ id, name: `n-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options: ['c'] });
         let received = null;
         collection.stream((e) => { received = e; });
-        collection.respond(id, { label: 'on' });
+        collection.respond(id, { tags: ['on'], properties: {} });
         assert(received !== null && received.type === 'resolved', 'resolved event not emitted');
     });
 
@@ -91,7 +91,7 @@ describe('requests', function() {
         collection.add({ id, name: `n-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options: ['d'] });
         let received = null;
         collection.stream((e) => { received = e; });
-        collection.respond(id, { label: 'on' });
+        collection.respond(id, { tags: ['on'], properties: {} });
         assert(received.request.id === id, 'resolved event has wrong request');
     });
 

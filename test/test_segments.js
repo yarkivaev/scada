@@ -36,21 +36,29 @@ describe('segments', function() {
         assert(collection.query()[0].duration === duration, 'segment duration not preserved');
     });
 
-    it('relabels segment by start time', function() {
+    it('relabels segment tags by start time', function() {
         const collection = segments();
         const start = new Date('2026-03-15T10:00:00Z');
-        collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
-        const label = `héating-${Math.random()}`;
-        collection.relabel(start, label);
-        assert(collection.query()[0].name === label, 'segment not relabeled');
+        collection.add({ name: `off-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
+        const tags = [`héating-${Math.random()}`];
+        collection.relabel(start, tags, {});
+        assert.deepStrictEqual(collection.query()[0].tags, tags, 'segment tags not set after relabel');
+    });
+
+    it('relabels segment properties by start time', function() {
+        const collection = segments();
+        const start = new Date('2026-03-15T10:00:00Z');
+        collection.add({ name: `off-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
+        const properties = { weight: Math.floor(Math.random() * 1000) };
+        collection.relabel(start, [`tàg-${Math.random()}`], properties);
+        assert.deepStrictEqual(collection.query()[0].properties, properties, 'segment properties not set after relabel');
     });
 
     it('does not relabel when start time does not match', function() {
         const collection = segments();
-        const name = `orig-${Math.random()}`;
-        collection.add({ name, startTime: new Date('2026-03-15T10:00:00Z'), endTime: new Date(), duration: 60 });
-        collection.relabel(new Date('2026-03-15T11:00:00Z'), 'other');
-        assert(collection.query()[0].name === name, 'segment was incorrectly relabeled');
+        collection.add({ name: `orig-${Math.random()}`, tags: [], startTime: new Date('2026-03-15T10:00:00Z'), endTime: new Date(), duration: 60 });
+        collection.relabel(new Date('2026-03-15T11:00:00Z'), ['other'], {});
+        assert.deepStrictEqual(collection.query()[0].tags, [], 'segment was incorrectly relabeled');
     });
 
     it('filters segments by from option', function() {
@@ -97,20 +105,19 @@ describe('segments', function() {
         collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         let received = null;
         collection.stream((e) => { received = e; });
-        const label = `new-${Math.random()}`;
-        collection.relabel(start, label);
+        collection.relabel(start, [`tàg-${Math.random()}`], {});
         assert(received !== null && received.type === 'relabeled', 'relabeled event not emitted');
     });
 
-    it('emits relabeled event with updated name', function() {
+    it('emits relabeled event with updated tags', function() {
         const collection = segments();
         const start = new Date('2026-05-01T08:00:00Z');
         collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         let received = null;
         collection.stream((e) => { received = e; });
-        const label = `ñew-${Math.random()}`;
-        collection.relabel(start, label);
-        assert(received.segment.name === label, 'relabeled event has wrong name');
+        const tags = [`ñew-${Math.random()}`];
+        collection.relabel(start, tags, {});
+        assert.deepStrictEqual(received.segment.tags, tags, 'relabeled event has wrong tags');
     });
 
     it('stops notifying after subscription cancelled', function() {
@@ -128,6 +135,33 @@ describe('segments', function() {
         const options = { power: Math.floor(Math.random() * 1000) };
         collection.add({ name: `s-${Math.random()}`, startTime: new Date(), endTime: new Date(), duration: 60, options });
         assert(collection.query()[0].options === options, 'segment options not preserved');
+    });
+
+    it('retags segment tags by start time', function() {
+        const collection = segments();
+        const start = new Date('2026-03-15T10:00:00Z');
+        collection.add({ name: `off-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60, tags: [`öld-${Math.random()}`], options: ['a'] });
+        const tags = [`rétag-${Math.random()}`];
+        collection.retag(start, tags, {});
+        assert.deepStrictEqual(collection.query()[0].tags, tags, 'segment tags not set after retag');
+    });
+
+    it('retags segment and strips options', function() {
+        const collection = segments();
+        const start = new Date('2026-03-15T10:00:00Z');
+        collection.add({ name: `off-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60, options: ['a', 'b'] });
+        collection.retag(start, [`tàg-${Math.random()}`], {});
+        assert(collection.query()[0].options === undefined, 'options not stripped after retag');
+    });
+
+    it('emits relabeled event on retag', function() {
+        const collection = segments();
+        const start = new Date('2026-05-01T08:00:00Z');
+        collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
+        let received = null;
+        collection.stream((e) => { received = e; });
+        collection.retag(start, [`tàg-${Math.random()}`], {});
+        assert(received !== null && received.type === 'relabeled', 'relabeled event not emitted on retag');
     });
 
     it('returns copy of items from query without options', function() {

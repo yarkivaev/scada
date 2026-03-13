@@ -10,7 +10,7 @@ import pubsub from './pubsub.js';
  * @example
  *   const segs = segments();
  *   segs.add({ name: 'on', startTime: new Date(), endTime: new Date(), duration: 60 });
- *   segs.relabel(startTime, 'heating');
+ *   segs.relabel(startTime, ['heating'], {});
  *   segs.query(); // all segments
  *   segs.query({ from: '2024-01-01', to: '2024-01-02' }); // filtered
  *   const sub = segs.stream((e) => console.log(e));
@@ -24,12 +24,24 @@ export default function segments() {
             items.push(segment);
             bus.emit({ type: 'created', segment });
         },
-        relabel(start, name) {
+        relabel(start, tags, properties) {
             const found = items.find((item) => {
                 return item.startTime.getTime() === start.getTime();
             });
             if (found) {
-                found.name = name;
+                found.tags = tags;
+                found.properties = properties;
+                bus.emit({ type: 'relabeled', segment: found });
+            }
+        },
+        retag(start, tags, properties) {
+            const found = items.find((item) => {
+                return item.startTime.getTime() === start.getTime();
+            });
+            if (found) {
+                found.tags = tags;
+                found.properties = properties;
+                delete found.options;
                 bus.emit({ type: 'relabeled', segment: found });
             }
         },
