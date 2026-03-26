@@ -3,8 +3,11 @@ import { GenericContainer } from 'testcontainers';
 import { createClient } from '@clickhouse/client';
 import clickhouseSensor from '../src/clickhouseSensor.js';
 
-function connection(client) {
+function connection(client, baseUrl) {
     return {
+        url() {
+            return baseUrl;
+        },
         async query(sql, params = {}) {
             const result = await client.query({
                 query: sql,
@@ -52,7 +55,7 @@ describe('clickhouseSensor', function() {
                 value Float64
             ) ENGINE = MergeTree() ORDER BY (topic, ts)`
         });
-        conn = connection(client);
+        conn = connection(client, `http://${host}:${port}`);
     });
 
     after(async function() {
