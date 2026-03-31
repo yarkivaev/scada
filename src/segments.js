@@ -3,14 +3,14 @@ import pubsub from './pubsub.js';
 /**
  * Per-machine in-memory timeline segment collection.
  * Stores segments with name, startTime, endTime, duration.
- * Supports relabeling by startTime and streaming events via pubsub.
+ * Supports resolving by startTime and streaming events via pubsub.
  *
- * @returns {object} collection with add, relabel, query, stream methods
+ * @returns {object} collection with add, resolve, query, stream methods
  *
  * @example
  *   const segs = segments();
  *   segs.add({ name: 'on', startTime: new Date(), endTime: new Date(), duration: 60 });
- *   segs.relabel(startTime, ['heating'], {});
+ *   segs.resolve(startTime, ['heating'], {});
  *   segs.query(); // all segments
  *   segs.query({ from: '2024-01-01', to: '2024-01-02' }); // filtered
  *   const sub = segs.stream((e) => console.log(e));
@@ -24,14 +24,14 @@ export default function segments() {
             items.push(segment);
             bus.emit({ type: 'created', segment });
         },
-        relabel(start, tags, properties) {
+        resolve(start, tags, properties) {
             const found = items.find((item) => {
                 return item.startTime.getTime() === start.getTime();
             });
             if (found) {
                 found.tags = tags;
                 found.properties = properties;
-                bus.emit({ type: 'relabeled', segment: found });
+                bus.emit({ type: 'resolved', segment: found });
             }
         },
         retag(start, tags, properties) {
@@ -42,7 +42,7 @@ export default function segments() {
                 found.tags = tags;
                 found.properties = properties;
                 delete found.options;
-                bus.emit({ type: 'relabeled', segment: found });
+                bus.emit({ type: 'resolved', segment: found });
             }
         },
         query(options) {

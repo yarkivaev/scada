@@ -36,29 +36,29 @@ describe('segments', function() {
         assert(collection.query()[0].duration === duration, 'segment duration not preserved');
     });
 
-    it('relabels segment tags by start time', function() {
+    it('resolves segment tags by start time', function() {
         const collection = segments();
         const start = new Date('2026-03-15T10:00:00Z');
         collection.add({ name: `off-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         const tags = [`héating-${Math.random()}`];
-        collection.relabel(start, tags, {});
-        assert.deepStrictEqual(collection.query()[0].tags, tags, 'segment tags not set after relabel');
+        collection.resolve(start, tags, {});
+        assert.deepStrictEqual(collection.query()[0].tags, tags, 'segment tags not set after resolve');
     });
 
-    it('relabels segment properties by start time', function() {
+    it('resolves segment properties by start time', function() {
         const collection = segments();
         const start = new Date('2026-03-15T10:00:00Z');
         collection.add({ name: `off-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         const properties = { weight: Math.floor(Math.random() * 1000) };
-        collection.relabel(start, [`tàg-${Math.random()}`], properties);
-        assert.deepStrictEqual(collection.query()[0].properties, properties, 'segment properties not set after relabel');
+        collection.resolve(start, [`tàg-${Math.random()}`], properties);
+        assert.deepStrictEqual(collection.query()[0].properties, properties, 'segment properties not set after resolve');
     });
 
-    it('does not relabel when start time does not match', function() {
+    it('does not resolve when start time does not match', function() {
         const collection = segments();
         collection.add({ name: `orig-${Math.random()}`, tags: [], startTime: new Date('2026-03-15T10:00:00Z'), endTime: new Date(), duration: 60 });
-        collection.relabel(new Date('2026-03-15T11:00:00Z'), ['other'], {});
-        assert.deepStrictEqual(collection.query()[0].tags, [], 'segment was incorrectly relabeled');
+        collection.resolve(new Date('2026-03-15T11:00:00Z'), ['other'], {});
+        assert.deepStrictEqual(collection.query()[0].tags, [], 'segment was incorrectly resolved');
     });
 
     it('filters segments by from option', function() {
@@ -99,25 +99,25 @@ describe('segments', function() {
         assert(received.segment.name === name, 'created event has wrong segment');
     });
 
-    it('emits relabeled event on relabel', function() {
+    it('emits resolved event on resolve', function() {
         const collection = segments();
         const start = new Date('2026-05-01T08:00:00Z');
         collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         let received = null;
         collection.stream((e) => { received = e; });
-        collection.relabel(start, [`tàg-${Math.random()}`], {});
-        assert(received !== null && received.type === 'relabeled', 'relabeled event not emitted');
+        collection.resolve(start, [`tàg-${Math.random()}`], {});
+        assert(received !== null && received.type === 'resolved', 'resolved event not emitted');
     });
 
-    it('emits relabeled event with updated tags', function() {
+    it('emits resolved event with updated tags', function() {
         const collection = segments();
         const start = new Date('2026-05-01T08:00:00Z');
         collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         let received = null;
         collection.stream((e) => { received = e; });
         const tags = [`ñew-${Math.random()}`];
-        collection.relabel(start, tags, {});
-        assert.deepStrictEqual(received.segment.tags, tags, 'relabeled event has wrong tags');
+        collection.resolve(start, tags, {});
+        assert.deepStrictEqual(received.segment.tags, tags, 'resolved event has wrong tags');
     });
 
     it('stops notifying after subscription cancelled', function() {
@@ -154,14 +154,14 @@ describe('segments', function() {
         assert(collection.query()[0].options === undefined, 'options not stripped after retag');
     });
 
-    it('emits relabeled event on retag', function() {
+    it('emits resolved event on retag', function() {
         const collection = segments();
         const start = new Date('2026-05-01T08:00:00Z');
         collection.add({ name: `old-${Math.random()}`, startTime: start, endTime: new Date(), duration: 60 });
         let received = null;
         collection.stream((e) => { received = e; });
         collection.retag(start, [`tàg-${Math.random()}`], {});
-        assert(received !== null && received.type === 'relabeled', 'relabeled event not emitted on retag');
+        assert(received !== null && received.type === 'resolved', 'resolved event not emitted on retag');
     });
 
     it('returns copy of items from query without options', function() {

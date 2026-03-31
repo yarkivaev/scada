@@ -47,3 +47,4 @@ export { default as pubsub } from './src/pubsub.js';
 // Sensors
 export { default as scyllaSensor } from './src/scyllaSensor.js';
 export { default as clickhouseSensor } from './src/clickhouseSensor.js';
+export { default as sqliteSensor } from './src/sqliteSensor.js';
