@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "SCADA domain objects for plant monitoring",
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "globals": "^17.0.0",
     "mocha": "^10.2.0",
     "better-sqlite3": "^11.0.0",
+    "pg": "^8.0.0",
     "testcontainers": "^10.13.0"
   },
   "files": [
