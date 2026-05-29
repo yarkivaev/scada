@@ -1,5 +1,5 @@
 /**
- * @yarkivaev/scada v2 — generic industrial monitoring domain and HTTP API.
+ * scada v2 — generic industrial monitoring domain and HTTP API.
  */
 
 export { default as plant } from './src/domain/plant/plant.js';
