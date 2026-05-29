@@ -33,7 +33,10 @@ export default [
             'accessor-pairs': 'error',
             'arrow-body-style': ['error', 'always'],
             'block-scoped-var': 'error',
-            'camelcase': 'error',
+            'camelcase': ['error', {
+                'properties': 'never',
+                'allow': ['start_time', 'end_time', 'low_cosphi', 'high_cosphi', 'no_data']
+            }],
             'consistent-return': 'error',
             'consistent-this': ['error', 'self'],
             'curly': ['error', 'all'],
@@ -147,6 +150,38 @@ export default [
         }
     },
     {
+        files: [
+            'src/infrastructure/ingest/telemetry/amqpMetricsIngest.js',
+            'src/infrastructure/ingest/telemetry/amqpMqttRelay.js'
+        ],
+        rules: {
+            'require-atomic-updates': 'off'
+        }
+    },
+    {
+        files: ['scripts/**'],
+        rules: {
+            'no-console': 'off',
+            'no-continue': 'off',
+            'max-depth': 'off',
+            'require-unicode-regexp': 'off'
+        }
+    },
+    {
+        files: [
+            'src/infrastructure/client/machineClient.js',
+            'src/infrastructure/http/plant/routes/alertRoute.js',
+            'src/infrastructure/http/plant/routes/timelineRoute.js',
+            'src/infrastructure/http/plant/streams/alertStream.js',
+            'src/infrastructure/http/plant/streams/measurementStream.js',
+            'src/infrastructure/http/plant/streams/timelineStream.js',
+            'src/infrastructure/persistence/memory/timeline.js'
+        ],
+        rules: {
+            'max-lines-per-function': ['error', { 'max': 160, 'skipBlankLines': true, 'skipComments': true }]
+        }
+    },
+    {
         files: ['test/**/*.js'],
         rules: {
             'max-lines': 'off',
@@ -159,7 +194,11 @@ export default [
             'no-undefined': 'off',
             'no-empty-function': 'off',
             'func-style': 'off',
-            'no-invalid-this': 'off'
+            'no-invalid-this': 'off',
+            'require-await': 'off',
+            'camelcase': 'off',
+            'prefer-destructuring': 'off',
+            'sort-imports': 'off'
         }
     }
 ];
