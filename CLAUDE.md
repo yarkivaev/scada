@@ -15,7 +15,7 @@ npm run lint:eo       # Elegant Objects naming audit (no -er factories)
 
 ## CI/CD
 
-GitLab project `scada/scada` on `gitlab.scada.svsokol.ru`. Pipeline from `scada/gitlab-ci-templates`: test, validate-version, create-tag, release-npm (no Docker image from this repo).
+GitLab project `scada/scada` on `gitlab.scada.svsokol.ru`. Pipeline from `infra/gitlab-ci-templates`: test, validate-version, create-tag, release-npm (no Docker image from this repo).
 
 ## Layout
 

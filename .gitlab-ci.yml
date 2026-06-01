@@ -1,5 +1,5 @@
 include:
-  - project: 'scada/gitlab-ci-templates'
+  - project: 'infra/gitlab-ci-templates'
     file:
       - workflow.yml
       - test-npm.yml
