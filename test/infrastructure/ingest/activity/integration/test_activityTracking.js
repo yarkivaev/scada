@@ -3,6 +3,7 @@ import assert from 'assert';
 import { after, before, describe, it } from 'mocha';
 import { GenericContainer } from 'testcontainers';
 import { createClient } from '@clickhouse/client';
+import ciContainerImage from '../../../../helpers/ciContainerImage.js';
 import activityTracking from '../../../../../src/infrastructure/ingest/activity/activityTracking.js';
 
 /**
@@ -61,11 +62,11 @@ describe('activityTracking pipeline integration', function() {
     before(async function() {
         this.timeout(180000);
         const [lokiC, chC] = await Promise.all([
-            new GenericContainer('grafana/loki:2.9.0')
+            new GenericContainer(ciContainerImage('loki', '2.9.0'))
                 .withExposedPorts(3100)
                 .withStartupTimeout(60000)
                 .start(),
-            new GenericContainer('clickhouse/clickhouse-server:24')
+            new GenericContainer(ciContainerImage('clickhouse-server', '24'))
                 .withExposedPorts(8123)
                 .withStartupTimeout(60000)
                 .start()

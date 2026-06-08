@@ -1,5 +1,6 @@
 import assert from 'assert';
 import { GenericContainer } from 'testcontainers';
+import ciContainerImage from '../../../helpers/ciContainerImage.js';
 import clickhouseConnection from '../../../../src/infrastructure/persistence/clickhouse/connection.js';
 
 /**
@@ -14,7 +15,7 @@ describe('clickhouseConnection', function() {
 
     before(async function() {
         this.timeout(120000);
-        container = await new GenericContainer('clickhouse/clickhouse-server:24')
+        container = await new GenericContainer(ciContainerImage('clickhouse-server', '24'))
             .withExposedPorts(8123)
             .withStartupTimeout(90000)
             .start();

@@ -5,6 +5,7 @@ import { GenericContainer } from 'testcontainers';
 import mqtt from 'mqtt';
 import { createClient } from '@clickhouse/client';
 import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import ciContainerImage from '../../../../helpers/ciContainerImage.js';
 import mqttMetrics from '../../../../../src/infrastructure/ingest/mqtt/mqttMetrics.js';
 
 describe('mqttMetrics pipeline integration', function() {
@@ -18,12 +19,12 @@ describe('mqttMetrics pipeline integration', function() {
     before(async function() {
         this.timeout(180000);
         const [mqttC, chC] = await Promise.all([
-            new GenericContainer('eclipse-mosquitto:2')
+            new GenericContainer(ciContainerImage('eclipse-mosquitto', '2'))
                 .withExposedPorts(1883)
                 .withCommand(['mosquitto', '-c', '/mosquitto-no-auth.conf'])
                 .withStartupTimeout(30000)
                 .start(),
-            new GenericContainer('clickhouse/clickhouse-server:24')
+            new GenericContainer(ciContainerImage('clickhouse-server', '24'))
                 .withExposedPorts(8123)
                 .withStartupTimeout(60000)
                 .start()
