@@ -6,7 +6,9 @@ import {
     initialized,
     machine,
     plant,
+    pubsub,
     shop,
+    stompTimelineSegments,
     timeline
 } from '../../index.js';
 import plantApi from '../../src/application/plantApi.js';
@@ -28,7 +30,8 @@ function mapRow(item) {
     };
 }
 
-function timelineFromStore(store, machineId, decisions) {
+function machineTimeline(store, machineId, decisions) {
+    const bus = pubsub();
     const segments = segmentStateMemory(store);
     const read = {
         async list(range) {
@@ -53,7 +56,36 @@ function timelineFromStore(store, machineId, decisions) {
             });
         }
     };
-    return timeline(read, stompTimeline(decisions, machineId));
+    const stomp = stompTimeline(decisions, machineId);
+    const port = timeline(read, bus);
+    return {
+        list: port.list,
+        rowAt: port.rowAt,
+        pending: port.pending,
+        stream: port.stream,
+        bus,
+        async retag(start, tags, properties) {
+            await stomp.retag(start, tags, properties);
+            bus.emit({
+                type: 'resolved',
+                segment: {
+                    name: '',
+                    start_time: start,
+                    end_time: start,
+                    duration: 0,
+                    tags: JSON.stringify(tags),
+                    properties: JSON.stringify(properties)
+                }
+            });
+        },
+        async respond(requestId, body) {
+            const raw = decodeURIComponent(String(requestId));
+            const start = new Date(raw);
+            await stomp.respond(start, body.tags, body.properties || {});
+            bus.emit({ type: 'resolved', request: { id: requestId, start } });
+            return { id: requestId, ...body };
+        }
+    };
 }
 
 function fakeDecisions() {
@@ -61,6 +93,16 @@ function fakeDecisions() {
         async publish() {
             return undefined;
         }
+    };
+}
+
+function fakeStomp(ref) {
+    return function factory(collector) {
+        ref.collector = collector;
+        return {
+            start() {},
+            stop() {}
+        };
     };
 }
 
@@ -88,7 +130,7 @@ function sseCapture() {
 }
 
 /**
- * Composes plant API wiring and supervisor persist without timeline bus notify.
+ * Composes plant API wiring with STOMP segment bridge and supervisor persist.
  *
  * @returns {object} scene with afterSupervisorPersist method
  *
@@ -99,7 +141,9 @@ export default function segmentStreamScene() {
     const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
     const data = stateDataFake({});
     const store = data.seed;
-    const tl = timelineFromStore(store, machineId, fakeDecisions());
+    const tl = machineTimeline(store, machineId, fakeDecisions());
+    const stompRef = { collector: null };
+    stompTimelineSegments(fakeStomp(stompRef), { [machineId]: tl.bus });
     const history = alerts(alert, acknowledgedAlert);
     const item = machine(machineId, { sensors: {}, alerts: history, timeline: tl });
     const area = shop('meltingShop', initialized({ [machineId]: item }, Object.values), history);
@@ -116,17 +160,27 @@ export default function segmentStreamScene() {
                 url: `/api/v1/machines/${machineId}/segments/stream`,
                 headers: {}
             }, capture.res);
-            const start = new Date(Date.now() + Math.floor(Math.random() * 1e6));
+            const start = Date.now() + Math.floor(Math.random() * 1e6);
             store.segments.push({
                 machine: machineId,
                 name: 'on',
-                start_time: start.toISOString(),
-                end_time: start.toISOString(),
+                start_time: new Date(start).toISOString(),
+                end_time: new Date(start).toISOString(),
                 duration: 0,
                 options: null,
                 tags: null,
                 properties: null,
                 resolved: true
+            });
+            stompRef.collector.accept({
+                payload: JSON.stringify({
+                    name: 'on',
+                    machine: machineId,
+                    status: 'pending',
+                    start,
+                    end: start,
+                    duration: 0
+                })
             });
             await new Promise((resolve) => {
                 setImmediate(resolve);

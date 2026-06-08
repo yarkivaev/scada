@@ -1,57 +1,24 @@
-import pubsub from '../shared/pubsub.js';
-
-function parseStart(requestId) {
-    const raw = decodeURIComponent(String(requestId));
-    const start = new Date(raw);
-    if (Number.isNaN(start.getTime())) {
-        throw new RangeError(`Invalid request start time ${raw}`);
-    }
-    return start;
-}
-
-function resolvedStub(start, tags, properties) {
-    return {
-        name: '',
-        start_time: start,
-        end_time: start,
-        duration: 0,
-        tags: JSON.stringify(tags),
-        properties: JSON.stringify(properties)
-    };
-}
-
 /**
- * Composes PG read port and STOMP write port with local pubsub events.
+ * Read-only timeline port wired to a pubsub event bus.
  *
- * @param {object} pg - pgTimeline instance
- * @param {object} stomp - stompTimeline instance
- * @returns {object} timeline with list, retag, pending, respond, stream
+ * @param {object} read - read port with list, rowAt, pending
+ * @param {object} bus - pubsub instance with stream method
+ * @returns {object} timeline with list, rowAt, pending, stream
  *
  * @example
- *   const tl = timeline(pgTimeline(pool, 'icht1'), stompTimeline(decisions, 'icht1'));
+ *   const tl = timeline(pgTimeline(pool, 'icht1'), bus);
  *   await tl.list({ from: '2024-01-01' });
  */
-export default function timeline(pg, stomp) {
-    const bus = pubsub();
+export default function timeline(read, bus) {
     return {
         list(range) {
-            return pg.list(range);
+            return read.list(range);
         },
         rowAt(start) {
-            return pg.rowAt(start);
+            return read.rowAt(start);
         },
         pending() {
-            return pg.pending();
-        },
-        async retag(start, tags, properties) {
-            await stomp.retag(start, tags, properties);
-            bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties) });
-        },
-        async respond(requestId, body) {
-            const start = parseStart(requestId);
-            await stomp.respond(start, body.tags, body.properties || {});
-            bus.emit({ type: 'resolved', request: { id: requestId, start } });
-            return { id: requestId, ...body };
+            return read.pending();
         },
         stream: bus.stream
     };

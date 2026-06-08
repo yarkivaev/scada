@@ -4,6 +4,7 @@ import plantApi from './plantApi.js';
 import pgAlerts from '../infrastructure/persistence/pg/alerts.js';
 import postgresPool from '../infrastructure/persistence/postgresPool.js';
 import stompAlerts from '../infrastructure/messaging/stomp/alerts/stompAlerts.js';
+import stompTimelineSegments from '../infrastructure/messaging/stomp/stompTimelineSegments.js';
 import userDecisions from '../infrastructure/messaging/stomp/userDecisions.js';
 import { parseRequestTimeoutMs, virtualClock } from '@yarkivaev/simple-server';
 
@@ -13,6 +14,33 @@ function stompCollectorFactory(stompUrl, destination, credentials) {
         src.start();
         return src;
     };
+}
+
+function timelineBusesInPlant(p) {
+    const buses = {};
+    for (const area of Object.values(p.shops.get())) {
+        for (const [id, item] of Object.entries(area.machines.get())) {
+            if (item.timeline && item.timeline.bus) {
+                buses[id] = item.timeline.bus;
+            }
+        }
+    }
+    return buses;
+}
+
+function wireTimelineSegments(stomp, plant) {
+    if (!stomp || !stomp.url) {
+        return undefined;
+    }
+    const buses = timelineBusesInPlant(plant);
+    if (Object.keys(buses).length === 0) {
+        return undefined;
+    }
+    const credentials = { login: stomp.login, passcode: stomp.passcode, host: stomp.host };
+    return stompTimelineSegments(
+        stompCollectorFactory(stomp.url, '/exchange/scada.segments', credentials),
+        buses
+    );
 }
 
 async function initStomp(stomp, translations, requirePool) {
@@ -43,7 +71,7 @@ async function initStomp(stomp, translations, requirePool) {
  * Generic HTTP plant server with optional STOMP alerts and user decisions.
  *
  * @param {object} config - port, basePath, plantFactory, extraRoutes, translations, stomp, requirePool
- * @returns {Promise<object>} server, plant, api
+ * @returns {Promise<object>} server, plant, api, segments
  *
  * @example
  *   await plantServer({ port: 3000, basePath: '/api/v1', plantFactory, extraRoutes });
@@ -51,6 +79,7 @@ async function initStomp(stomp, translations, requirePool) {
 export default async function plantServer(config) {
     const { alerts, userDecisions: decisions } = await initStomp(config.stomp, config.translations, config.requirePool);
     const p = await config.plantFactory({ alerts, userDecisions: decisions });
+    const segments = wireTimelineSegments(config.stomp, p);
     const clock = virtualClock(() => {
         return new Date();
     });
@@ -69,5 +98,5 @@ export default async function plantServer(config) {
     await new Promise((resolve) => {
         server.listen(config.port, resolve);
     });
-    return { server, plant: p, api };
+    return { server, plant: p, api, segments };
 }
