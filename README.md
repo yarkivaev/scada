@@ -181,8 +181,24 @@ import stateDataFake from 'scada/stateDataFake';
 | `plantApi`, `siteServer`, `supervisorSink` | `central-site.js`, `edge-site.js` bins |
 | ClickHouse + PG adapters | `sokolPlant`, `edgePlant` wiring |
 
-Depend on a pinned version (`"scada": "2.3.1"`), not a local path, in downstream packages.
+Depend on a pinned version (`"scada": "2.3.3"`), not a local path, in downstream packages.
 
 ## CI/CD
 
 GitLab project `scada/scada`. Pipeline from `gitlab-ci-templates`: test, validate-version, create-tag, release-npm. This repo publishes an npm package only; container images are built in downstream deploy repos (e.g. `sokol-scada`).
+
+
+
+Задачи:
+- добавить к каждому пользовательскому действию метку, идентифицирующую оператора              high priority
+- настроить корректную работу алертов
+- добавить получение данных с датчиков контуров охлаждения воды, охлаждающих индукционные печи high priority
+- добавить получение данных с датчика температуры металла в индукционной печи
+- добавить получение информации о хим составе металла в индукционной печи
+- добавить возможность выделения циклов плавки металла. Информация о циклах плавки должна      high priority
+  отображаться в hmi, monitoring панели, ежедневных отчётах
+- добавить возможность указывать вес металла в определённых для этого сегментах и другие поля  higt priority
+- добавить возможность указывать ремонтные простои и отправлять их в 1с
+  - изменить структуру таким образом, чтобы была возможность поддержки иерархичной структуры
+    тегов
+  - настроить возможность отправки информации о ремонтных простоев

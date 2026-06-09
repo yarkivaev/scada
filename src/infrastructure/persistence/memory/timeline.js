@@ -1,92 +1,56 @@
-import pubsub from '../../../domain/shared/pubsub.js';
 import timeline from '../../../domain/timeline/timeline.js';
 
 /**
- * In-memory timeline bundle for tests (read + write + pubsub).
+ * In-memory segment store with timeline read port.
  *
- * @returns {object} timeline with list, retag, pending, respond, stream
+ * @returns {object} items, pending arrays and read port
  *
  * @example
- *   const tl = memoryTimelineFull();
- *   await tl.retag(new Date(), ['on'], {});
+ *   const store = memoryTimelineStore();
+ *   store.items.push({ name: 'on', start_time: new Date(), end_time: new Date(), duration: 0 });
  */
-export default function memoryTimelineFull() {
+export default function memoryTimelineStore() {
     const items = [];
     const pending = [];
-    const bus = pubsub();
-    const read = {
-        list(range) {
-            if (!range) {
-                return items.slice();
-            }
-            return items.filter((item) => {
-                if (range.from && item.end_time < new Date(range.from)) {
-                    return false;
-                }
-                if (range.to && item.start_time > new Date(range.to)) {
-                    return false;
-                }
-                return true;
-            });
-        },
-        rowAt(start) {
-            return items.find((item) => {
-                return item.start_time.getTime() === start.getTime();
-            }) || null;
-        },
-        pending() {
-            return pending.filter((item) => {
-                return !item.resolved;
-            });
-        }
-    };
-    const write = {
-        retag(start, tags, properties) {
-            const found = items.find((item) => {
-                return item.start_time.getTime() === start.getTime();
-            });
-            if (found) {
-                found.tags = tags;
-                found.properties = properties;
-                delete found.options;
-            }
-        },
-        respond(start, tags, properties) {
-            const found = pending.find((item) => {
-                return item.start_time.getTime() === start.getTime();
-            });
-            if (found) {
-                found.resolved = true;
-                found.tags = tags;
-                found.properties = properties;
-            }
-        }
-    };
-    const composed = timeline(read, write);
-    const originalStream = composed.stream;
     return {
-        list: composed.list,
-        rowAt: composed.rowAt,
-        pending: composed.pending,
-        retag: composed.retag,
-        respond: composed.respond,
-        stream(callback) {
-            const sub = originalStream(callback);
-            const busSub = bus.stream(callback);
-            return {
-                cancel() {
-                    sub.cancel();
-                    busSub.cancel();
+        items,
+        pending,
+        read: {
+            list(range) {
+                if (!range) {
+                    return items.slice();
                 }
-            };
-        },
-        seed(segment) {
-            items.push(segment);
-            bus.emit({ type: 'created', segment });
-        },
-        seedPending(request) {
-            pending.push({ ...request, resolved: false });
-            bus.emit({ type: 'created', request });
+                return items.filter((item) => {
+                    if (range.from && item.end_time < new Date(range.from)) {
+                        return false;
+                    }
+                    if (range.to && item.start_time > new Date(range.to)) {
+                        return false;
+                    }
+                    return true;
+                });
+            },
+            rowAt(start) {
+                return items.find((item) => {
+                    return item.start_time.getTime() === start.getTime();
+                }) || null;
+            },
+            pending() {
+                return pending.filter((item) => {
+                    return !item.resolved;
+                });
+            }
         }
     };
+}
+
+/**
+ * Builds in-memory timeline read port wired to a pubsub bus.
+ *
+ * @param {object} store - memoryTimelineStore instance
+ * @param {object} bus - pubsub instance
+ * @returns {object} timeline with list, rowAt, pending, stream
+ */
+export function memoryTimelineRead(store, bus) {
+    return timeline(store.read, bus);
 }

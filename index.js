@@ -20,13 +20,13 @@ export { default as siteServer } from './src/application/siteServer.js';
 
 export { default as pgTimeline } from './src/infrastructure/persistence/pg/timeline.js';
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';
-export { default as memoryTimelineFull } from './src/infrastructure/persistence/memory/timeline.js';
 export { default as clickhouseConnection } from './src/infrastructure/persistence/clickhouse/connection.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
 export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';
 export { metricsSinkFromPool as pgMetricsSink } from './src/infrastructure/persistence/pg/metrics.js';
 export { pgMetricsSensor } from './src/infrastructure/persistence/metricsSensor.js';
 export { default as stompTimeline } from './src/infrastructure/messaging/stomp/timeline.js';
+export { default as stompTimelineSegments } from './src/infrastructure/messaging/stomp/stompTimelineSegments.js';
 export { default as stateDataFromPool } from './src/infrastructure/persistence/stateDataFromPool.js';
 export { default as stateDataFromMemory } from './src/infrastructure/persistence/stateDataFromMemory.js';
 export { default as stateDataFake } from './src/infrastructure/persistence/stateDataFromMemory.js';

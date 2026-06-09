@@ -5,6 +5,7 @@ include:
       - test-npm.yml
       - validate-version.yml
       - create-tag.yml
+      - create-snapshot-tag.yml
       - release-npm.yml
 
 stages:
