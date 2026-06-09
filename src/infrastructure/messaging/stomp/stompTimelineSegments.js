@@ -8,7 +8,7 @@ function timestamps(parsed) {
 }
 
 function mapTags(parsed) {
-    if (parsed.tags === undefined) {
+    if (parsed.tags === undefined || parsed.tags === null) {
         return undefined;
     }
     return typeof parsed.tags === 'string' ? parsed.tags : JSON.stringify(parsed.tags);
