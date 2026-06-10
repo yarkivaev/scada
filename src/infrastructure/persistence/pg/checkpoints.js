@@ -1,3 +1,36 @@
+import segmentStatePg from './segments.js';
+
+function parseJsonField(raw) {
+    if (!raw) {
+        return null;
+    }
+    return JSON.parse(raw);
+}
+
+function segmentItem(row, machineId) {
+    if (!row) {
+        return null;
+    }
+    return {
+        machine: machineId,
+        name: row.name,
+        start: new Date(row.start_time).getTime() / 1000,
+        end: new Date(row.end_time).getTime() / 1000,
+        duration: row.duration,
+        tags: parseJsonField(row.tags),
+        options: parseJsonField(row.options),
+        properties: parseJsonField(row.properties)
+    };
+}
+
+function segmentAt(pool, machineId, startEpoch) {
+    const segments = segmentStatePg(pool);
+    const start = new Date(startEpoch * 1000);
+    return segments.rowAt(machineId, start).then((row) => {
+        return segmentItem(row, machineId);
+    });
+}
+
 function replayCursor(pool, machineId) {
     return pool.query(
         `WITH closed AS (
@@ -71,6 +104,9 @@ export default function checkpointStatePg(pool, metricsEnabled = true) {
                 return Promise.resolve([]);
             }
             return readings(pool, topics, from);
+        },
+        segment(machineId, startEpoch) {
+            return segmentAt(pool, machineId, startEpoch);
         }
     };
 }

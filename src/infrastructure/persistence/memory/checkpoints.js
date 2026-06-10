@@ -2,6 +2,37 @@ function sameInstant(a, b) {
     return new Date(a).getTime() === new Date(b).getTime();
 }
 
+function parseJsonField(raw) {
+    if (!raw) {
+        return null;
+    }
+    return JSON.parse(raw);
+}
+
+function segmentItem(row) {
+    if (!row) {
+        return null;
+    }
+    return {
+        machine: row.machine,
+        name: row.name,
+        start: new Date(row.start_time).getTime() / 1000,
+        end: new Date(row.end_time).getTime() / 1000,
+        duration: row.duration,
+        tags: parseJsonField(row.tags),
+        options: parseJsonField(row.options),
+        properties: parseJsonField(row.properties)
+    };
+}
+
+function segmentAt(store, machineId, startEpoch) {
+    const startMs = startEpoch * 1000;
+    const row = store.segments.find((item) => {
+        return item.machine === machineId && new Date(item.start_time).getTime() === startMs;
+    });
+    return segmentItem(row);
+}
+
 function replayCursorFor(store, machineId) {
     const closed = store.segments.filter((row) => {
         return row.machine === machineId && new Date(row.end_time) > new Date(row.start_time);
@@ -62,6 +93,9 @@ export default function checkpointStateMemory(store) {
                     value: Number(row.value)
                 };
             });
+        },
+        segment(machineId, startEpoch) {
+            return segmentAt(store, machineId, startEpoch);
         }
     };
 }

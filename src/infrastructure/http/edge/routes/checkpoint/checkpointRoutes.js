@@ -16,6 +16,27 @@ function toTopicList(topicParam) {
     return [];
 }
 
+function segmentRoute(token, checkpointState) {
+    return route('GET', '/v1/checkpoint/segment', async (req, res, params, query) => {
+        void params;
+        if (!hasAccess(req, token)) {
+            sendForbidden(res);
+            return;
+        }
+        if (!query.machineId) {
+            errorResponse('BAD_REQUEST', 'machineId is required', 400).send(res);
+            return;
+        }
+        const start = parseFrom(query.start);
+        if (start === null) {
+            errorResponse('BAD_REQUEST', 'start must be a number', 400).send(res);
+            return;
+        }
+        const item = await checkpointState.segment(query.machineId, start);
+        jsonResponse({ item }).send(res);
+    });
+}
+
 export default function checkpointRoutes(token, checkpointState) {
     return [
         route('GET', '/v1/checkpoint/replay-cursor', async (req, res, params, query) => {
@@ -31,6 +52,7 @@ export default function checkpointRoutes(token, checkpointState) {
             const cursor = await checkpointState.replayCursor(query.machineId);
             jsonResponse({ machineId: query.machineId, cursor }).send(res);
         }),
+        segmentRoute(token, checkpointState),
         route('GET', '/v1/checkpoint/pending-segments', async (req, res) => {
             if (!hasAccess(req, token)) {
                 sendForbidden(res);
