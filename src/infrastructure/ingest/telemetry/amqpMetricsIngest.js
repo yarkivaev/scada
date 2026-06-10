@@ -16,6 +16,23 @@ export function acceptTelemetryDeliver(codec, fields, content) {
 }
 
 /**
+ * Builds a queue consumer callback bound to one AMQP channel.
+ *
+ * @param {object} codec - metricsCodec instance
+ * @param {object} channel - amqplib channel with ack(msg)
+ * @returns {Function} consume callback for ch.consume
+ */
+export function telemetryConsumer(codec, channel) {
+    return (msg) => {
+        if (!msg) {
+            return;
+        }
+        acceptTelemetryDeliver(codec, msg.fields, msg.content);
+        channel.ack(msg);
+    };
+}
+
+/**
  * AMQP queue consumer that writes federated telemetry to a metrics sink.
  *
  * @param {string} amqpUrl - RabbitMQ AMQP URL
@@ -35,13 +52,6 @@ export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
     const breaker = circuit(threshold, timeout, clk);
     const collector = timedBatch(batch(sink, size, breaker), interval);
     const codec = metricsCodec(collector);
-    function consume(msg) {
-        if (!msg) {
-            return;
-        }
-        acceptTelemetryDeliver(codec, msg.fields, msg.content);
-        session.channel.ack(msg);
-    }
     return {
         async start() {
             if (session) {
@@ -56,7 +66,8 @@ export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
             }
             await ch.assertQueue(queue, { durable: true });
             ch.prefetch(prefetch);
-            const tag = await ch.consume(queue, consume, { noAck: false });
+            const onMessage = telemetryConsumer(codec, ch);
+            const tag = await ch.consume(queue, onMessage, { noAck: false });
             session = { conn, channel: ch, tag: tag.consumerTag };
         },
         async stop() {
