@@ -15,9 +15,6 @@ stages:
 
 variables:
   VERSION_CMD: "grep '\"version\"' package.json | head -1 | sed 's/.*\"\\([0-9.]*\\)\".*/\\1/'"
-  CI_MIRROR_PROJECT: infra/gitlab-ci-templates
-  REGISTRY: $CI_REGISTRY
-  CI_CONTAINER_REGISTRY: $CI_REGISTRY/infra/gitlab-ci-templates
 
 test:
   script:

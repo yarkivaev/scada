@@ -6,6 +6,8 @@ import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
+import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
+import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
 
 function stompFromEnv(env) {
     return {
@@ -49,6 +51,23 @@ function startMqtt(sink, env) {
     const pipeline = mqttMetrics(env.MQTT_URL, metricsSink, env.MQTT_TOPICS, mqttConfigFromEnv(env));
     pipeline.start();
     return pipeline;
+}
+
+/**
+ * Central-only operator routes backed by Postgres.
+ *
+ * @param {string} basePath - plant API base path
+ * @param {object} sink - supervisor sink with pool and profile
+ * @returns {array} route objects or empty array on edge profile
+ *
+ * @example
+ *   centralOperatorRoutes('/api/v1', sink);
+ */
+function centralOperatorRoutes(basePath, sink) {
+    if (sink.sinkDbProfile !== 'central') {
+        return [];
+    }
+    return operatorRoute(basePath, operatorsFromPg(sink.pool));
 }
 
 function startTelemetryIngest(env) {
@@ -112,7 +131,10 @@ export default async function siteServer(config) {
         plantFactory: (ctx) => {
             return config.plantFactory(ctx, sink);
         },
-        extraRoutes: config.extraRoutes
+        extraRoutes: (basePath, p, clock) => {
+            const userExtra = config.extraRoutes ? config.extraRoutes(basePath, p, clock) : [];
+            return [...centralOperatorRoutes(basePath, sink), ...userExtra];
+        }
     });
     return { sink, plant, mqtt, telemetry };
 }
