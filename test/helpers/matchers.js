@@ -41,3 +41,31 @@ export function hasSegmentCreatedOnOpenStream() {
         };
     };
 }
+
+/**
+ * Matcher for SSE text after operations upsert on an open stream.
+ *
+ * @returns {function} matcher expecting heartbeat and operation_created events
+ *
+ * @example
+ *   assertThat(text, hasOperationCreatedOnOpenStream());
+ */
+export function hasOperationCreatedOnOpenStream() {
+    return (sseText) => {
+        const open = sseText.includes('event: heartbeat\n');
+        const created = sseText.includes('event: operation_created\n');
+        if (open && created) {
+            return { pass: true };
+        }
+        if (!open) {
+            return {
+                pass: false,
+                message: 'operation stream did not emit heartbeat before upsert'
+            };
+        }
+        return {
+            pass: false,
+            message: 'open operation stream did not emit operation_created after upsert'
+        };
+    };
+}

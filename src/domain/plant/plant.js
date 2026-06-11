@@ -9,9 +9,10 @@
  *   const p = plant(initialized({ area: shop }, Object.values));
  *   p.init();
  */
-export default function plant(shops) {
+export default function plant(shops, options = {}) {
     return {
         shops,
+        operations: options.operations,
         init() {
             shops.init();
         }

@@ -5,6 +5,8 @@ import alertRoute from '../infrastructure/http/plant/routes/alertRoute.js';
 import alertStream from '../infrastructure/http/plant/streams/alertStream.js';
 import timelineRoute from '../infrastructure/http/plant/routes/timelineRoute.js';
 import timelineStream from '../infrastructure/http/plant/streams/timelineStream.js';
+import operationRoute from '../infrastructure/http/plant/routes/operationRoute.js';
+import operationStream from '../infrastructure/http/plant/streams/operationStream.js';
 import heartbeatStream from '../infrastructure/http/plant/streams/heartbeatStream.js';
 import simulationRoute from '../infrastructure/http/plant/routes/simulationRoute.js';
 import { routes } from '@yarkivaev/simple-server';
@@ -35,6 +37,8 @@ export default function plantApi(basePath, plant, config) {
         ...alertRoute(basePath, plant),
         ...timelineRoute(basePath, plant),
         ...timelineStream(basePath, plant, time),
+        ...operationRoute(basePath, plant),
+        ...operationStream(basePath, plant, time),
         ...heartbeatStream(basePath, time, opts.heartbeat),
         ...(time.jump ? simulationRoute(basePath, time) : []),
         ...extra

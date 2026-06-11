@@ -1,6 +1,7 @@
 import { clickhouseSink } from '@yarkivaev/source-to-sink';
 import supervisorSink from './supervisorSink.js';
 import plantServer from './plantServer.js';
+import plantOperations from './plantOperations.js';
 import edgeApi from '../infrastructure/http/edge/edgeApi.js';
 import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
@@ -90,6 +91,15 @@ function startTelemetryIngest(env) {
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
+    const wrapped = plantOperations(sink.dataAccess.operations);
+    sink.dataAccess.operations = {
+        upsert: (item) => {
+            return wrapped.upsert(item);
+        },
+        listForMachine: (machineId, kind, range) => {
+            return wrapped.port.listForMachine(machineId, kind, range);
+        }
+    };
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
         token: sink.apiToken,
@@ -110,7 +120,19 @@ export default async function siteServer(config) {
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
         plantFactory: (ctx) => {
-            return config.plantFactory(ctx, sink);
+            const built = config.plantFactory({ ...ctx, operations: wrapped.port }, sink);
+            return Promise.resolve(built).then((p) => {
+                if (p.operations) {
+                    return p;
+                }
+                return {
+                    ...p,
+                    operations: wrapped.port,
+                    init() {
+                        p.init();
+                    }
+                };
+            });
         },
         extraRoutes: config.extraRoutes
     });
