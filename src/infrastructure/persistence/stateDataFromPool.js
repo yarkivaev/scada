@@ -1,6 +1,5 @@
 import alertsStatePg from './pg/alerts.js';
 import checkpointStatePg from './pg/checkpoints.js';
-import ingestCheckpointStatePg from './pg/ingestCheckpoints.js';
 import metricsStateDisabled from './memory/metricsDisabled.js';
 import metricsStatePg from './pg/metrics.js';
 import operationStatePg from './pg/operations.js';
@@ -14,7 +13,6 @@ export default function stateDataFromPool(pool, options = {}) {
         alerts: alertsStatePg(pool),
         metrics,
         checkpoints: checkpointStatePg(pool, metricsEnabled),
-        operations: operationStatePg(pool),
-        ingestCheckpoints: ingestCheckpointStatePg(pool)
+        operations: operationStatePg(pool)
     };
 }

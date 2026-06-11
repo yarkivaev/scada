@@ -47,3 +47,20 @@ describe('pgOperations listForMachine', function() {
         assert(queries[0].sql.includes('occurred_at <='), 'list must filter by range end');
     });
 });
+
+describe('pgOperations latestSourceUpdatedAt', function() {
+    it('selects max source_updated_at for machine and kind', async function() {
+        const queries = [];
+        const pool = {
+            async query(sql, params) {
+                queries.push({ sql, params });
+                return { rows: [{ source_updated_at: null }] };
+            }
+        };
+        const store = operationStatePg(pool);
+        await store.latestSourceUpdatedAt('icht1', 'chem');
+        assert(queries[0].sql.includes('MAX(source_updated_at)'), 'cursor must use max source_updated_at');
+        assert(queries[0].sql.includes('machine = $1'), 'cursor must filter by machine');
+        assert(queries[0].sql.includes('kind = $2'), 'cursor must filter by kind');
+    });
+});

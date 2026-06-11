@@ -22,7 +22,6 @@ export { default as siteServer } from './src/application/siteServer.js';
 export { default as pgTimeline } from './src/infrastructure/persistence/pg/timeline.js';
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';
 export { default as pgOperations } from './src/infrastructure/persistence/pg/operations.js';
-export { default as pgIngestCheckpoints } from './src/infrastructure/persistence/pg/ingestCheckpoints.js';
 export { default as clickhouseConnection } from './src/infrastructure/persistence/clickhouse/connection.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
 export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';

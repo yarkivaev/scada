@@ -54,3 +54,55 @@ describe('memoryOperations listForMachine', function() {
         assert.strictEqual(rows.length, 1, 'list must exclude other machines');
     });
 });
+
+describe('memoryOperations latestSourceUpdatedAt', function() {
+    it('returns null when no rows exist for machine and kind', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const cursor = await port.latestSourceUpdatedAt('icht1', 'chem');
+        assert.strictEqual(cursor, null, 'empty store must yield null poll cursor');
+    });
+});
+
+describe('memoryOperations latestSourceUpdatedAt max', function() {
+    it('returns latest source_updated_at for matching machine and kind', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const earlier = new Date('2024-06-01T09:00:00.000Z');
+        const latest = new Date('2024-06-01T11:00:00.000Z');
+        store.operations.push(
+            {
+                machine: 'icht1',
+                occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+                kind: 'chem',
+                external_key: `a-${Math.random()}`,
+                payload: {},
+                source_updated_at: earlier,
+                source_id: '1',
+                ingested_at: new Date()
+            },
+            {
+                machine: 'icht1',
+                occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+                kind: 'chem',
+                external_key: `b-${Math.random()}`,
+                payload: {},
+                source_updated_at: latest,
+                source_id: '2',
+                ingested_at: new Date()
+            },
+            {
+                machine: 'icht2',
+                occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+                kind: 'chem',
+                external_key: `c-${Math.random()}`,
+                payload: {},
+                source_updated_at: new Date('2024-06-02T00:00:00.000Z'),
+                source_id: '3',
+                ingested_at: new Date()
+            }
+        );
+        const cursor = await port.latestSourceUpdatedAt('icht1', 'chem');
+        assert.strictEqual(cursor.getTime(), latest.getTime(), 'cursor must be max source_updated_at for machine and kind');
+    });
+});
