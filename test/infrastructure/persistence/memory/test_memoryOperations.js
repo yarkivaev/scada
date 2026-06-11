@@ -2,7 +2,7 @@ import assert from 'assert';
 import operationStateMemory from '../../../../src/infrastructure/persistence/memory/operations.js';
 
 describe('memoryOperations upsert', function() {
-    it('keeps single row when external_key repeats', async function() {
+    it('keeps single row when key repeats', async function() {
         const store = { operations: [] };
         const port = operationStateMemory(store);
         const key = `dup-${Math.random()}`;
@@ -10,20 +10,16 @@ describe('memoryOperations upsert', function() {
             machine: 'icht1',
             occurred_at: new Date('2024-06-01T10:00:00.000Z'),
             kind: 'chem',
-            external_key: key,
-            payload: { carbon: 0.1 },
-            source_updated_at: new Date('2024-06-01T09:00:00.000Z'),
-            source_id: '1',
-            ingested_at: new Date('2024-06-01T11:00:00.000Z')
+            key,
+            payload: { carbon: 0.1 }
         };
         const second = {
             ...first,
-            payload: { carbon: 0.2 },
-            source_id: '2'
+            payload: { carbon: 0.2 }
         };
         await port.upsert(first);
         await port.upsert(second);
-        assert.strictEqual(store.operations.length, 1, 'duplicate external_key must not create second row');
+        assert.strictEqual(store.operations.length, 1, 'duplicate key must not create second row');
     });
 });
 
@@ -35,16 +31,13 @@ describe('memoryOperations listForMachine', function() {
             machine: 'icht1',
             occurred_at: new Date('2024-06-01T12:00:00.000Z'),
             kind: 'chem',
-            external_key: `in-${Math.random()}`,
-            payload: {},
-            source_updated_at: new Date(),
-            source_id: '1',
-            ingested_at: new Date()
+            key: `in-${Math.random()}`,
+            payload: {}
         };
         const outside = {
             ...inside,
             machine: 'icht2',
-            external_key: `out-${Math.random()}`
+            key: `out-${Math.random()}`
         };
         store.operations.push(inside, outside);
         const rows = await port.listForMachine('icht1', 'chem', {
@@ -52,57 +45,5 @@ describe('memoryOperations listForMachine', function() {
             to: new Date('2024-06-02T00:00:00.000Z')
         });
         assert.strictEqual(rows.length, 1, 'list must exclude other machines');
-    });
-});
-
-describe('memoryOperations latestSourceUpdatedAt', function() {
-    it('returns null when no rows exist for machine and kind', async function() {
-        const store = { operations: [] };
-        const port = operationStateMemory(store);
-        const cursor = await port.latestSourceUpdatedAt('icht1', 'chem');
-        assert.strictEqual(cursor, null, 'empty store must yield null poll cursor');
-    });
-});
-
-describe('memoryOperations latestSourceUpdatedAt max', function() {
-    it('returns latest source_updated_at for matching machine and kind', async function() {
-        const store = { operations: [] };
-        const port = operationStateMemory(store);
-        const earlier = new Date('2024-06-01T09:00:00.000Z');
-        const latest = new Date('2024-06-01T11:00:00.000Z');
-        store.operations.push(
-            {
-                machine: 'icht1',
-                occurred_at: new Date('2024-06-01T10:00:00.000Z'),
-                kind: 'chem',
-                external_key: `a-${Math.random()}`,
-                payload: {},
-                source_updated_at: earlier,
-                source_id: '1',
-                ingested_at: new Date()
-            },
-            {
-                machine: 'icht1',
-                occurred_at: new Date('2024-06-01T12:00:00.000Z'),
-                kind: 'chem',
-                external_key: `b-${Math.random()}`,
-                payload: {},
-                source_updated_at: latest,
-                source_id: '2',
-                ingested_at: new Date()
-            },
-            {
-                machine: 'icht2',
-                occurred_at: new Date('2024-06-01T12:00:00.000Z'),
-                kind: 'chem',
-                external_key: `c-${Math.random()}`,
-                payload: {},
-                source_updated_at: new Date('2024-06-02T00:00:00.000Z'),
-                source_id: '3',
-                ingested_at: new Date()
-            }
-        );
-        const cursor = await port.latestSourceUpdatedAt('icht1', 'chem');
-        assert.strictEqual(cursor.getTime(), latest.getTime(), 'cursor must be max source_updated_at for machine and kind');
     });
 });

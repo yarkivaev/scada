@@ -9,10 +9,7 @@ describe('operation', function() {
             new Date(),
             'chem',
             `key-${Math.random()}`,
-            { value: 1 },
-            new Date(),
-            `src-${Math.random()}`,
-            new Date()
+            { value: 1 }
         );
         assert(created.machine === machine, 'machine mismatch');
     });

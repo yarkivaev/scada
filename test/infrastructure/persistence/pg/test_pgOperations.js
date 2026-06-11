@@ -2,7 +2,7 @@ import assert from 'assert';
 import operationStatePg from '../../../../src/infrastructure/persistence/pg/operations.js';
 
 describe('pgOperations upsert', function() {
-    it('uses external_key conflict target for idempotent write', async function() {
+    it('uses key conflict target for idempotent write', async function() {
         const queries = [];
         const pool = {
             async query(sql, params) {
@@ -10,21 +10,16 @@ describe('pgOperations upsert', function() {
             }
         };
         const store = operationStatePg(pool);
-        const key = `ext-${Math.random()}`;
+        const key = `id-${Math.random()}`;
         const occurred = new Date('2024-06-01T10:00:00.000Z');
-        const updated = new Date('2024-06-01T09:00:00.000Z');
-        const ingested = new Date('2024-06-01T11:00:00.000Z');
         await store.upsert({
             machine: 'icht1',
             occurred_at: occurred,
             kind: 'chem',
-            external_key: key,
-            payload: { carbon: 0.1 },
-            source_updated_at: updated,
-            source_id: '42',
-            ingested_at: ingested
+            key,
+            payload: { carbon: 0.1 }
         });
-        assert(queries[0].sql.includes('ON CONFLICT (external_key)'), 'upsert must target external_key');
+        assert(queries[0].sql.includes('ON CONFLICT (key)'), 'upsert must target key');
     });
 });
 
@@ -45,22 +40,5 @@ describe('pgOperations listForMachine', function() {
         assert(queries[0].sql.includes('kind = $2'), 'list must filter by kind');
         assert(queries[0].sql.includes('occurred_at >='), 'list must filter by range start');
         assert(queries[0].sql.includes('occurred_at <='), 'list must filter by range end');
-    });
-});
-
-describe('pgOperations latestSourceUpdatedAt', function() {
-    it('selects max source_updated_at for machine and kind', async function() {
-        const queries = [];
-        const pool = {
-            async query(sql, params) {
-                queries.push({ sql, params });
-                return { rows: [{ source_updated_at: null }] };
-            }
-        };
-        const store = operationStatePg(pool);
-        await store.latestSourceUpdatedAt('icht1', 'chem');
-        assert(queries[0].sql.includes('MAX(source_updated_at)'), 'cursor must use max source_updated_at');
-        assert(queries[0].sql.includes('machine = $1'), 'cursor must filter by machine');
-        assert(queries[0].sql.includes('kind = $2'), 'cursor must filter by kind');
     });
 });

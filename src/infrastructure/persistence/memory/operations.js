@@ -1,23 +1,11 @@
 function sameKey(left, right) {
-    return left.external_key === right.external_key;
+    return left.key === right.key;
 }
 
-function findRow(store, externalKey) {
+function findRow(store, key) {
     return store.operations.find((row) => {
-        return sameKey(row, { external_key: externalKey });
+        return sameKey(row, { key });
     });
-}
-
-function latestUpdatedAt(store, machineId, kind) {
-    return store.operations.filter((row) => {
-        return row.machine === machineId && row.kind === kind;
-    }).reduce((left, row) => {
-        const stamp = new Date(row.source_updated_at);
-        if (!left || stamp.getTime() > left.getTime()) {
-            return stamp;
-        }
-        return left;
-    }, null);
 }
 
 function filterList(store, machineId, kind, range) {
@@ -51,15 +39,12 @@ export default function operationStateMemory(store) {
     }
     return {
         upsert(item) {
-            const row = findRow(store, item.external_key);
+            const row = findRow(store, item.key);
             if (row) {
                 row.machine = item.machine;
                 row.occurred_at = item.occurred_at;
                 row.kind = item.kind;
                 row.payload = item.payload;
-                row.source_updated_at = item.source_updated_at;
-                row.source_id = item.source_id;
-                row.ingested_at = item.ingested_at;
                 return Promise.resolve();
             }
             store.operations.push({ ...item });
@@ -67,9 +52,6 @@ export default function operationStateMemory(store) {
         },
         listForMachine(machineId, kind, range) {
             return Promise.resolve(filterList(store, machineId, kind, range));
-        },
-        latestSourceUpdatedAt(machineId, kind) {
-            return Promise.resolve(latestUpdatedAt(store, machineId, kind));
         }
     };
 }

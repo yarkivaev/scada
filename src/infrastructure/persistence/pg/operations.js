@@ -1,33 +1,25 @@
 function upsertOperation(pool, item) {
     return pool.query(
         `INSERT INTO operations (
-            machine, occurred_at, kind, external_key, payload,
-            source_updated_at, source_id, ingested_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (external_key) DO UPDATE SET
+            machine, occurred_at, kind, key, payload
+        ) VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (key) DO UPDATE SET
             machine = EXCLUDED.machine,
             occurred_at = EXCLUDED.occurred_at,
             kind = EXCLUDED.kind,
-            payload = EXCLUDED.payload,
-            source_updated_at = EXCLUDED.source_updated_at,
-            source_id = EXCLUDED.source_id,
-            ingested_at = EXCLUDED.ingested_at`,
+            payload = EXCLUDED.payload`,
         [
             item.machine,
             item.occurred_at,
             item.kind,
-            item.external_key,
-            item.payload,
-            item.source_updated_at,
-            item.source_id,
-            item.ingested_at
+            item.key,
+            item.payload
         ]
     );
 }
 
 function listForMachine(pool, machineId, kind, range) {
-    let sql = `SELECT machine, occurred_at, kind, external_key, payload,
-        source_updated_at, source_id, ingested_at
+    let sql = `SELECT machine, occurred_at, kind, key, payload
         FROM operations WHERE machine = $1 AND kind = $2`;
     const prm = [machineId, kind];
     if (range.from) {
@@ -44,25 +36,15 @@ function listForMachine(pool, machineId, kind, range) {
     });
 }
 
-function latestSourceUpdatedAt(pool, machineId, kind) {
-    return pool.query(
-        `SELECT MAX(source_updated_at) AS source_updated_at
-         FROM operations WHERE machine = $1 AND kind = $2`,
-        [machineId, kind]
-    ).then((result) => {
-        return result.rows[0].source_updated_at ?? null;
-    });
-}
-
 /**
- * PostgreSQL operations persistence port for generic external machine results.
+ * PostgreSQL operations persistence port for generic machine operations.
  *
  * @param {object} pool - pg pool
- * @returns {object} operations port with upsert, listForMachine, latestSourceUpdatedAt
+ * @returns {object} operations port with upsert and listForMachine
  *
  * @example
  *   const store = operationStatePg(pool);
- *   await store.upsert({ machine: 'icht1', external_key: 'nb-1', kind: 'chem', ... });
+ *   await store.upsert({ machine: 'icht1', key: 'nb-1', kind: 'chem', ... });
  */
 export default function operationStatePg(pool) {
     return {
@@ -71,9 +53,6 @@ export default function operationStatePg(pool) {
         },
         listForMachine(machineId, kind, range) {
             return listForMachine(pool, machineId, kind, range);
-        },
-        latestSourceUpdatedAt(machineId, kind) {
-            return latestSourceUpdatedAt(pool, machineId, kind);
         }
     };
 }
