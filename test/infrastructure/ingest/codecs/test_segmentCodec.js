@@ -2,6 +2,10 @@ import assert from 'assert';
 import segmentCodec from '../../../../src/infrastructure/ingest/codecs/segmentCodec.js';
 import { segmentDispatch } from '../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js';
 
+function fakeCloser() {
+    return { close() { return Promise.resolve(); } };
+}
+
 describe('segmentCodec', function() {
     it('transforms valid segment payload to record', async function() {
         const received = [];
@@ -203,9 +207,10 @@ describe('segmentCodec propagates downstream write failure', function() {
             write() { return Promise.reject(new Error('database unreachable')); }
         };
         const retag = { accept() { return Promise.resolve(); } };
-        const router = segmentDispatch(sink, retag, sink);
+        const router = segmentDispatch(sink, retag, sink, fakeCloser());
         const codec = segmentCodec(router);
         const payload = JSON.stringify({
+            type: 'segment',
             machine: `icht${Math.random()}`,
             name: 'on',
             start: Date.now(),
@@ -224,9 +229,10 @@ describe('segmentCodec full chain with segmentDispatch', function() {
     it('rejects through codec and router when sink fails', async function() {
         const failing = { write() { return Promise.reject(new Error('disk full')); } };
         const retag = { accept() { return Promise.resolve(); } };
-        const router = segmentDispatch(failing, retag, failing);
+        const router = segmentDispatch(failing, retag, failing, fakeCloser());
         const codec = segmentCodec(router);
         const payload = JSON.stringify({
+            type: 'segment',
             machine: `icht${Math.random()}`,
             name: 'off',
             start: Date.now(),
@@ -244,9 +250,10 @@ describe('segmentCodec full chain with segmentDispatch', function() {
         const written = [];
         const sink = { write(recs) { written.push(...recs); return Promise.resolve(); } };
         const retag = { accept() { return Promise.resolve(); } };
-        const router = segmentDispatch(sink, retag, sink);
+        const router = segmentDispatch(sink, retag, sink, fakeCloser());
         const codec = segmentCodec(router);
         const payload = JSON.stringify({
+            type: 'segment',
             machine: `icht${Math.random()}`,
             name: 'on',
             start: Date.now(),

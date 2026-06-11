@@ -4,6 +4,7 @@ import {
 } from '@yarkivaev/source-to-sink';
 import segmentDispatch from '../../../domain/segment/dispatch.js';
 import segmentCodec from '../codecs/segmentCodec.js';
+import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import retagSink from '../sinks/retagSink.js';
 
 export const segmentColumns = ['machine', 'name', 'start_time', 'end_time', 'duration',
@@ -29,7 +30,8 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const splitSink = postgresSink(postgres, 'segments', segmentColumns,
         { conflict: segmentConflict, update: splitUpdateColumns });
     const retag = retagSink(pool);
-    const dispatch = segmentDispatch(segmentSink, retag, splitSink);
+    const closer = closeOrphanOpen(pool);
+    const dispatch = segmentDispatch(segmentSink, retag, splitSink, closer);
     const codec = segmentCodec(dispatch);
     const source = stompSource(stomp, '/exchange/scada.segments', codec,
         { login: config.login, passcode: config.passcode, host: config.host });
