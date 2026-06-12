@@ -5,7 +5,7 @@ import edgeApi from '../infrastructure/http/edge/edgeApi.js';
 import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
-import operationSyncConsumer from '../infrastructure/sync/operationSyncConsumer.js';
+import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
 
 function stompFromEnv(env) {
@@ -56,14 +56,14 @@ function startOperationSync(sink, env) {
     if (env.SINK_DB_PROFILE === 'edge' || !env.AMQP_URL) {
         return undefined;
     }
-    const consumer = operationSyncConsumer(
+    const ingest = operationSyncIngest(
         env.AMQP_URL,
         env.AMQP_OPERATIONS_QUEUE || 'scada.operations.ingest',
         sink.dataAccess.operations,
         { prefetch: parseInt(env.AMQP_PREFETCH || '32', 10) }
     );
-    consumer.start();
-    return consumer;
+    ingest.start();
+    return ingest;
 }
 
 function startTelemetryIngest(env) {

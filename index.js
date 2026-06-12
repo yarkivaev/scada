@@ -46,4 +46,4 @@ export { default as modbusMqtt } from './src/infrastructure/ingest/mqtt/modbusMq
 export { default as activityTracking } from './src/infrastructure/ingest/activity/activityTracking.js';
 export { default as amqpMetricsIngest } from './src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 export { default as amqpMqttRelay } from './src/infrastructure/ingest/telemetry/amqpMqttRelay.js';
-export { default as operationSyncConsumer } from './src/infrastructure/sync/operationSyncConsumer.js';
+export { default as operationSyncIngest } from './src/infrastructure/sync/operationSyncIngest.js';

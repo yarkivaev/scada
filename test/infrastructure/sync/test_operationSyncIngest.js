@@ -3,7 +3,7 @@ import operationStateMemory from '../../../src/infrastructure/persistence/memory
 import {
     acceptOperationDeliver,
     operationConsumer
-} from '../../../src/infrastructure/sync/operationSyncConsumer.js';
+} from '../../../src/infrastructure/sync/operationSyncIngest.js';
 import operationCodec from '../../../src/infrastructure/sync/operationCodec.js';
 import operationSyncSink from '../../../src/infrastructure/sync/operationSyncSink.js';
 

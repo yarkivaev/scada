@@ -40,10 +40,10 @@ export function operationConsumer(codec, channel) {
  * @returns {object} consumer with start and stop
  *
  * @example
- *   const consumer = operationSyncConsumer(amqpUrl, 'scada.operations.ingest', dataAccess.operations);
- *   await consumer.start();
+ *   const ingest = operationSyncIngest(amqpUrl, 'scada.operations.ingest', dataAccess.operations);
+ *   await ingest.start();
  */
-export default function operationSyncConsumer(amqpUrl, queue, operations, options = {}) {
+export default function operationSyncIngest(amqpUrl, queue, operations, options = {}) {
     const prefetch = options.prefetch || 32;
     const sink = operationSyncSink(operations);
     const codec = operationCodec(sink);
