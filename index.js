@@ -7,6 +7,7 @@ export { default as shop } from './src/domain/plant/shop.js';
 export { default as machine } from './src/domain/plant/machine.js';
 export { default as timeline } from './src/domain/timeline/timeline.js';
 export { alert, acknowledgedAlert } from './src/domain/alerting/alert.js';
+export { operation } from './src/domain/operation/operation.js';
 export { default as alerts } from './src/domain/alerting/alerts.js';
 export { default as initialized } from './src/domain/shared/initialized.js';
 export { default as pubsub } from './src/domain/shared/pubsub.js';
@@ -20,6 +21,7 @@ export { default as siteServer } from './src/application/siteServer.js';
 
 export { default as pgTimeline } from './src/infrastructure/persistence/pg/timeline.js';
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';
+export { default as pgOperations } from './src/infrastructure/persistence/pg/operations.js';
 export { default as clickhouseConnection } from './src/infrastructure/persistence/clickhouse/connection.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
 export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';
