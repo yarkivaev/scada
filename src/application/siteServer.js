@@ -97,7 +97,7 @@ export default async function siteServer(config) {
             return wrapped.upsert(item);
         },
         listForMachine: (machineId, kind, range) => {
-            return wrapped.port.listForMachine(machineId, kind, range);
+            return wrapped.listForMachine(machineId, kind, range);
         }
     };
     const http = edgeApi(sink.dataAccess, {
@@ -120,14 +120,14 @@ export default async function siteServer(config) {
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
         plantFactory: (ctx) => {
-            const built = config.plantFactory({ ...ctx, operations: wrapped.port }, sink);
+            const built = config.plantFactory({ ...ctx, operations: wrapped }, sink);
             return Promise.resolve(built).then((p) => {
                 if (p.operations) {
                     return p;
                 }
                 return {
                     ...p,
-                    operations: wrapped.port,
+                    operations: wrapped,
                     init() {
                         p.init();
                     }

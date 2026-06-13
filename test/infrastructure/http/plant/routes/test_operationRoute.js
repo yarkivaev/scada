@@ -42,7 +42,7 @@ function buildPlant(data, machineId) {
     });
     const area = shop('area', initialized({ [machineId]: item }, Object.values), history);
     return {
-        plant: plant(initialized({ area }, Object.values), { operations: wrapped.port }),
+        plant: plant(initialized({ area }, Object.values), { operations: wrapped }),
         wrapped
     };
 }

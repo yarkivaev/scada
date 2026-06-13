@@ -15,24 +15,18 @@ function stampRow(item, updatedAt) {
 /**
  * Wraps operations persistence with SSE pubsub and upsert hook.
  *
- * @param {object} persistence - operations port with upsert and listForMachine
- * @returns {object} port for plant read/stream and upsert with bus emit
+ * @param {object} persistence - operations store with upsert and listForMachine
+ * @returns {object} operations with listForMachine, stream, and upsert
  *
  * @example
- *   const wrapped = plantOperations(dataAccess.operations);
- *   plant(shops, { operations: wrapped.port });
+ *   const ops = plantOperations(dataAccess.operations);
+ *   plant(shops, { operations: ops });
  */
 export default function plantOperations(persistence) {
     const bus = pubsub();
-    const read = {
-        listForMachine(machineId, kind, range) {
-            return persistence.listForMachine(machineId, kind, range);
-        }
-    };
-    const port = operations(read, bus);
+    const ops = operations(persistence, bus);
     return {
-        port,
-        bus,
+        ...ops,
         upsert(item) {
             const updatedAt = new Date();
             const row = stampRow(item, updatedAt);

@@ -64,7 +64,7 @@ export default function operationStreamScene() {
         }
     });
     const area = shop('meltingShop', initialized({ [machineId]: item }, Object.values), history);
-    const p = plant(initialized({ meltingShop: area }, Object.values), { operations: wrapped.port });
+    const p = plant(initialized({ meltingShop: area }, Object.values), { operations: wrapped });
     const clock = virtualClock(function clockSource() {
         return new Date();
     });
