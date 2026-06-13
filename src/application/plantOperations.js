@@ -1,4 +1,4 @@
-import operationsRead from '../domain/operation/operationsRead.js';
+import operations from '../domain/operation/operations.js';
 import pubsub from '../domain/shared/pubsub.js';
 
 function stampRow(item, updatedAt) {
@@ -29,7 +29,7 @@ export default function plantOperations(persistence) {
             return persistence.listForMachine(machineId, kind, range);
         }
     };
-    const port = operationsRead(read, bus);
+    const port = operations(read, bus);
     return {
         port,
         bus,
