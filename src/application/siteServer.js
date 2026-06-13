@@ -8,6 +8,7 @@ import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIng
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
 import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
 import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
+import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 
 function stompFromEnv(env) {
     return {
@@ -70,6 +71,16 @@ function centralOperatorRoutes(basePath, sink) {
     return operatorRoute(basePath, operatorsFromPg(sink.pool));
 }
 
+function operatorRoutesForProfile(basePath, sink, env) {
+    if (sink.sinkDbProfile === 'central') {
+        return { routes: centralOperatorRoutes(basePath, sink), sync: undefined };
+    }
+    if (sink.sinkDbProfile === 'edge') {
+        return edgeOperatorCatalog(basePath, env);
+    }
+    return { routes: [], sync: undefined };
+}
+
 function startTelemetryIngest(env) {
     if (env.SINK_DB_PROFILE === 'edge' || !env.AMQP_URL) {
         return undefined;
@@ -122,19 +133,24 @@ export default async function siteServer(config) {
     await sink.run(http);
     const mqtt = startMqtt(sink, env);
     const telemetry = startTelemetryIngest(env);
+    const basePath = config.basePath || '/api/v1';
+    const catalog = operatorRoutesForProfile(basePath, sink, env);
+    if (catalog.sync) {
+        await catalog.sync.start();
+    }
     const plant = await plantServer({
         port: config.port || parseInt(env.PORT || '3000', 10),
-        basePath: config.basePath || '/api/v1',
+        basePath,
         translations: config.translations,
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
         plantFactory: (ctx) => {
             return config.plantFactory(ctx, sink);
         },
-        extraRoutes: (basePath, p, clock) => {
-            const userExtra = config.extraRoutes ? config.extraRoutes(basePath, p, clock) : [];
-            return [...centralOperatorRoutes(basePath, sink), ...userExtra];
+        extraRoutes: (path, p, clock) => {
+            const userExtra = config.extraRoutes ? config.extraRoutes(path, p, clock) : [];
+            return [...catalog.routes, ...userExtra];
         }
     });
-    return { sink, plant, mqtt, telemetry };
+    return { sink, plant, mqtt, telemetry, operatorsSync: catalog.sync };
 }
