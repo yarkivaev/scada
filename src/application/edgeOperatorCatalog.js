@@ -1,5 +1,5 @@
-import operatorsFromCache from '../infrastructure/operators/operatorsFromCache.js';
-import centralOperatorsFetch from '../infrastructure/operators/centralOperatorsFetch.js';
+import operators from '../infrastructure/operators/operators.js';
+import centralOperators from '../infrastructure/operators/centralOperators.js';
 import operatorsSync from '../infrastructure/operators/operatorsSync.js';
 import stateHttpClient from '../infrastructure/http/edge/stateHttpClient.js';
 import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
@@ -27,8 +27,8 @@ function syncIntervalMs(env) {
  *   edgeOperatorCatalog('/api/v1', process.env);
  */
 export default function edgeOperatorCatalog(basePath, env) {
-    const cache = operatorsFromCache();
-    const routes = operatorRoute(basePath, cache);
+    const provider = operators();
+    const routes = operatorRoute(basePath, provider);
     const centralUrl = env.CENTRAL_PLANT_URL;
     if (!centralUrl) {
         return { routes, sync: undefined };
@@ -37,7 +37,7 @@ export default function edgeOperatorCatalog(basePath, env) {
         baseUrl: centralUrl,
         token: env.CENTRAL_PLANT_TOKEN
     });
-    const fetch = centralOperatorsFetch(client, basePath);
-    const sync = operatorsSync(fetch, cache, { intervalMs: syncIntervalMs(env) });
+    const source = centralOperators(client, basePath);
+    const sync = operatorsSync(source, provider, { intervalMs: syncIntervalMs(env) });
     return { routes, sync };
 }

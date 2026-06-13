@@ -1,9 +1,9 @@
 import assert from 'assert';
 import http from 'http';
-import centralOperatorsFetch from '../../../src/infrastructure/operators/centralOperatorsFetch.js';
+import centralOperators from '../../../src/infrastructure/operators/centralOperators.js';
 import stateHttpClient from '../../../src/infrastructure/http/edge/stateHttpClient.js';
 
-describe('centralOperatorsFetch', function() {
+describe('centralOperators', function() {
     it('pull maps central operators json to domain records', async function() {
         const uid = `central-${Math.random()}`;
         const payload = {
@@ -24,10 +24,10 @@ describe('centralOperatorsFetch', function() {
         });
         const { port } = server.address();
         const client = stateHttpClient({ baseUrl: `http://127.0.0.1:${port}` });
-        const fetch = centralOperatorsFetch(client, '/api/v1');
-        const rows = await fetch.pull();
+        const source = centralOperators(client, '/api/v1');
+        const rows = await source.pull();
         server.close();
-        assert.strictEqual(rows[0].cardUid, uid, 'central fetch did not map operator card uid');
+        assert.strictEqual(rows[0].cardUid, uid, 'central operators did not map operator card uid');
     });
 
     it('pull rejects response without items array', async function() {
@@ -40,14 +40,14 @@ describe('centralOperatorsFetch', function() {
         });
         const { port } = server.address();
         const client = stateHttpClient({ baseUrl: `http://127.0.0.1:${port}` });
-        const fetch = centralOperatorsFetch(client, '/api/v1');
+        const source = centralOperators(client, '/api/v1');
         let threw = false;
         try {
-            await fetch.pull();
+            await source.pull();
         } catch {
             threw = true;
         }
         server.close();
-        assert.strictEqual(threw, true, 'central fetch did not reject malformed payload');
+        assert.strictEqual(threw, true, 'central operators did not reject malformed payload');
     });
 });

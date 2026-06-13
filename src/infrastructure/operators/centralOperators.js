@@ -20,17 +20,17 @@ function operatorFromJson(row) {
 }
 
 /**
- * Fetches operator catalog from central plant API GET /api/v1/operators.
+ * Central plant operator catalog via GET /api/v1/operators.
  *
  * @param {object} client - HTTP client with getJson(path, query)
  * @param {string} basePath - plant API base path
- * @returns {object} fetch with pull()
+ * @returns {object} source with pull()
  *
  * @example
- *   const fetch = centralOperatorsFetch(stateHttpClient({ baseUrl: 'http://central:3000' }), '/api/v1');
- *   const rows = await fetch.pull();
+ *   const source = centralOperators(stateHttpClient({ baseUrl: 'http://central:3000' }), '/api/v1');
+ *   const rows = await source.pull();
  */
-export default function centralOperatorsFetch(client, basePath) {
+export default function centralOperators(client, basePath) {
     return {
         async pull() {
             const payload = await client.getJson(`${basePath}/operators`, {});
