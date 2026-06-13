@@ -91,15 +91,8 @@ function startTelemetryIngest(env) {
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
-    const wrapped = plantOperations(sink.dataAccess.operations);
-    sink.dataAccess.operations = {
-        upsert: (item) => {
-            return wrapped.upsert(item);
-        },
-        listForMachine: (machineId, kind, range) => {
-            return wrapped.listForMachine(machineId, kind, range);
-        }
-    };
+    const ops = plantOperations(sink.dataAccess.operations);
+    sink.dataAccess.operations = ops;
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
         token: sink.apiToken,
@@ -120,14 +113,14 @@ export default async function siteServer(config) {
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
         plantFactory: (ctx) => {
-            const built = config.plantFactory({ ...ctx, operations: wrapped }, sink);
+            const built = config.plantFactory({ ...ctx, operations: ops }, sink);
             return Promise.resolve(built).then((p) => {
                 if (p.operations) {
                     return p;
                 }
                 return {
                     ...p,
-                    operations: wrapped,
+                    operations: ops,
                     init() {
                         p.init();
                     }
