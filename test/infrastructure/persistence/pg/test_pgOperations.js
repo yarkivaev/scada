@@ -7,6 +7,7 @@ describe('pgOperations upsert', function() {
         const pool = {
             async query(sql, params) {
                 queries.push({ sql, params });
+                return { rows: [] };
             }
         };
         const store = operationStatePg(pool);
@@ -19,7 +20,10 @@ describe('pgOperations upsert', function() {
             key,
             payload: { carbon: 0.1 }
         });
-        assert(queries[0].sql.includes('ON CONFLICT (key)'), 'upsert must target key');
+        const insert = queries.find((entry) => {
+            return entry.sql.includes('INSERT INTO operations');
+        });
+        assert(insert.sql.includes('ON CONFLICT (key)'), 'upsert must target key');
     });
 });
 

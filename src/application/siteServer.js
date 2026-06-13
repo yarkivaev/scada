@@ -1,6 +1,7 @@
 import { clickhouseSink } from '@yarkivaev/source-to-sink';
 import supervisorSink from './supervisorSink.js';
 import plantServer from './plantServer.js';
+import plantOperations from './plantOperations.js';
 import edgeApi from '../infrastructure/http/edge/edgeApi.js';
 import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
@@ -108,6 +109,31 @@ function startTelemetryIngest(env) {
     return ingest;
 }
 
+function plantFactoryWithOperations(plantFactory, ops, sink) {
+    return (ctx) => {
+        const built = plantFactory({ ...ctx, operations: ops }, sink);
+        return Promise.resolve(built).then((p) => {
+            if (p.operations) {
+                return p;
+            }
+            return {
+                ...p,
+                operations: ops,
+                init() {
+                    p.init();
+                }
+            };
+        });
+    };
+}
+
+function siteExtraRoutes(catalog, extraRoutes) {
+    return (path, plant, clock) => {
+        const userExtra = extraRoutes ? extraRoutes(path, plant, clock) : [];
+        return [...catalog.routes, ...userExtra];
+    };
+}
+
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
@@ -120,6 +146,8 @@ function startTelemetryIngest(env) {
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
+    const ops = plantOperations(sink.dataAccess.operations);
+    sink.dataAccess.operations = ops;
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
         token: sink.apiToken,
@@ -144,13 +172,8 @@ export default async function siteServer(config) {
         translations: config.translations,
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
-        plantFactory: (ctx) => {
-            return config.plantFactory(ctx, sink);
-        },
-        extraRoutes: (path, p, clock) => {
-            const userExtra = config.extraRoutes ? config.extraRoutes(path, p, clock) : [];
-            return [...catalog.routes, ...userExtra];
-        }
+        plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
+        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes)
     });
     return { sink, plant, mqtt, telemetry, operatorsSync: catalog.sync };
 }
