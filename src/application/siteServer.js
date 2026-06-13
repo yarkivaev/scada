@@ -7,6 +7,9 @@ import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
+import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
+import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
+import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 
 function stompFromEnv(env) {
     return {
@@ -50,6 +53,33 @@ function startMqtt(sink, env) {
     const pipeline = mqttMetrics(env.MQTT_URL, metricsSink, env.MQTT_TOPICS, mqttConfigFromEnv(env));
     pipeline.start();
     return pipeline;
+}
+
+/**
+ * Central-only operator routes backed by Postgres.
+ *
+ * @param {string} basePath - plant API base path
+ * @param {object} sink - supervisor sink with pool and profile
+ * @returns {array} route objects or empty array on edge profile
+ *
+ * @example
+ *   centralOperatorRoutes('/api/v1', sink);
+ */
+function centralOperatorRoutes(basePath, sink) {
+    if (sink.sinkDbProfile !== 'central') {
+        return [];
+    }
+    return operatorRoute(basePath, operatorsFromPg(sink.pool));
+}
+
+function operatorRoutesForProfile(basePath, sink, env) {
+    if (sink.sinkDbProfile === 'central') {
+        return { routes: centralOperatorRoutes(basePath, sink), sync: undefined };
+    }
+    if (sink.sinkDbProfile === 'edge') {
+        return edgeOperatorCatalog(basePath, env);
+    }
+    return { routes: [], sync: undefined };
 }
 
 function startTelemetryIngest(env) {
@@ -106,9 +136,14 @@ export default async function siteServer(config) {
     await sink.run(http);
     const mqtt = startMqtt(sink, env);
     const telemetry = startTelemetryIngest(env);
+    const basePath = config.basePath || '/api/v1';
+    const catalog = operatorRoutesForProfile(basePath, sink, env);
+    if (catalog.sync) {
+        await catalog.sync.start();
+    }
     const plant = await plantServer({
         port: config.port || parseInt(env.PORT || '3000', 10),
-        basePath: config.basePath || '/api/v1',
+        basePath,
         translations: config.translations,
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
@@ -127,7 +162,10 @@ export default async function siteServer(config) {
                 };
             });
         },
-        extraRoutes: config.extraRoutes
+        extraRoutes: (path, p, clock) => {
+            const userExtra = config.extraRoutes ? config.extraRoutes(path, p, clock) : [];
+            return [...catalog.routes, ...userExtra];
+        }
     });
-    return { sink, plant, mqtt, telemetry };
+    return { sink, plant, mqtt, telemetry, operatorsSync: catalog.sync };
 }
