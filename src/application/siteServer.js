@@ -109,6 +109,31 @@ function startTelemetryIngest(env) {
     return ingest;
 }
 
+function plantFactoryWithOperations(plantFactory, ops, sink) {
+    return (ctx) => {
+        const built = plantFactory({ ...ctx, operations: ops }, sink);
+        return Promise.resolve(built).then((p) => {
+            if (p.operations) {
+                return p;
+            }
+            return {
+                ...p,
+                operations: ops,
+                init() {
+                    p.init();
+                }
+            };
+        });
+    };
+}
+
+function siteExtraRoutes(catalog, extraRoutes) {
+    return (path, plant, clock) => {
+        const userExtra = extraRoutes ? extraRoutes(path, plant, clock) : [];
+        return [...catalog.routes, ...userExtra];
+    };
+}
+
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
@@ -147,25 +172,8 @@ export default async function siteServer(config) {
         translations: config.translations,
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
-        plantFactory: (ctx) => {
-            const built = config.plantFactory({ ...ctx, operations: ops }, sink);
-            return Promise.resolve(built).then((p) => {
-                if (p.operations) {
-                    return p;
-                }
-                return {
-                    ...p,
-                    operations: ops,
-                    init() {
-                        p.init();
-                    }
-                };
-            });
-        },
-        extraRoutes: (path, p, clock) => {
-            const userExtra = config.extraRoutes ? config.extraRoutes(path, p, clock) : [];
-            return [...catalog.routes, ...userExtra];
-        }
+        plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
+        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes)
     });
     return { sink, plant, mqtt, telemetry, operatorsSync: catalog.sync };
 }
