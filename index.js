@@ -48,3 +48,4 @@ export { default as activityTracking } from './src/infrastructure/ingest/activit
 export { default as amqpMetricsIngest } from './src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 export { default as amqpMqttRelay } from './src/infrastructure/ingest/telemetry/amqpMqttRelay.js';
 export { default as operationSyncIngest } from './src/infrastructure/sync/operationSyncIngest.js';
+export { default as ingestCheckpointMemory, ingestCheckpointPg } from './src/infrastructure/ingest/ingestCheckpoint.js';
