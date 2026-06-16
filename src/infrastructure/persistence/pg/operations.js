@@ -1,5 +1,6 @@
-function upsertOperation(pool, item) {
-    return pool.query(
+async function upsertOperation(pool, item) {
+    const existing = await pool.query('SELECT 1 FROM operations WHERE key = $1', [item.key]);
+    await pool.query(
         `INSERT INTO operations (
             machine, occurred_at, kind, key, payload
         ) VALUES ($1, $2, $3, $4, $5)
@@ -16,6 +17,7 @@ function upsertOperation(pool, item) {
             item.payload
         ]
     );
+    return { created: existing.rows.length === 0 };
 }
 
 function listForMachine(pool, machineId, kind, range) {

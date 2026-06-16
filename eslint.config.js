@@ -172,7 +172,9 @@ export default [
             'src/infrastructure/client/machineClient.js',
             'src/infrastructure/http/plant/routes/alertRoute.js',
             'src/infrastructure/http/plant/routes/timelineRoute.js',
+            'src/infrastructure/http/plant/routes/operationRoute.js',
             'src/infrastructure/http/plant/streams/alertStream.js',
+            'src/infrastructure/http/plant/streams/operationStream.js',
             'src/infrastructure/http/plant/streams/measurementStream.js',
             'src/infrastructure/http/plant/streams/timelineStream.js',
             'src/infrastructure/persistence/memory/timeline.js'

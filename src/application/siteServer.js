@@ -1,12 +1,16 @@
 import { clickhouseSink } from '@yarkivaev/source-to-sink';
 import supervisorSink from './supervisorSink.js';
 import plantServer from './plantServer.js';
+import plantOperations from './plantOperations.js';
 import edgeApi from '../infrastructure/http/edge/edgeApi.js';
 import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
+import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
+import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
+import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 
 function stompFromEnv(env) {
     return {
@@ -66,6 +70,33 @@ function startOperationSync(sink, env) {
     return ingest;
 }
 
+/**
+ * Central-only operator routes backed by Postgres.
+ *
+ * @param {string} basePath - plant API base path
+ * @param {object} sink - supervisor sink with pool and profile
+ * @returns {array} route objects or empty array on edge profile
+ *
+ * @example
+ *   centralOperatorRoutes('/api/v1', sink);
+ */
+function centralOperatorRoutes(basePath, sink) {
+    if (sink.sinkDbProfile !== 'central') {
+        return [];
+    }
+    return operatorRoute(basePath, operatorsFromPg(sink.pool));
+}
+
+function operatorRoutesForProfile(basePath, sink, env) {
+    if (sink.sinkDbProfile === 'central') {
+        return { routes: centralOperatorRoutes(basePath, sink), sync: undefined };
+    }
+    if (sink.sinkDbProfile === 'edge') {
+        return edgeOperatorCatalog(basePath, env);
+    }
+    return { routes: [], sync: undefined };
+}
+
 function startTelemetryIngest(env) {
     if (env.SINK_DB_PROFILE === 'edge' || !env.AMQP_URL) {
         return undefined;
@@ -93,6 +124,31 @@ function startTelemetryIngest(env) {
     return ingest;
 }
 
+function plantFactoryWithOperations(plantFactory, ops, sink) {
+    return (ctx) => {
+        const built = plantFactory({ ...ctx, operations: ops }, sink);
+        return Promise.resolve(built).then((p) => {
+            if (p.operations) {
+                return p;
+            }
+            return {
+                ...p,
+                operations: ops,
+                init() {
+                    p.init();
+                }
+            };
+        });
+    };
+}
+
+function siteExtraRoutes(catalog, extraRoutes) {
+    return (path, plant, clock) => {
+        const userExtra = extraRoutes ? extraRoutes(path, plant, clock) : [];
+        return [...catalog.routes, ...userExtra];
+    };
+}
+
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
@@ -105,6 +161,8 @@ function startTelemetryIngest(env) {
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
+    const ops = plantOperations(sink.dataAccess.operations);
+    sink.dataAccess.operations = ops;
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
         token: sink.apiToken,
@@ -119,16 +177,19 @@ export default async function siteServer(config) {
     const mqtt = startMqtt(sink, env);
     const telemetry = startTelemetryIngest(env);
     const operationSync = startOperationSync(sink, env);
+    const basePath = config.basePath || '/api/v1';
+    const catalog = operatorRoutesForProfile(basePath, sink, env);
+    if (catalog.sync) {
+        await catalog.sync.start();
+    }
     const plant = await plantServer({
         port: config.port || parseInt(env.PORT || '3000', 10),
-        basePath: config.basePath || '/api/v1',
+        basePath,
         translations: config.translations,
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
-        plantFactory: (ctx) => {
-            return config.plantFactory(ctx, sink);
-        },
-        extraRoutes: config.extraRoutes
+        plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
+        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes)
     });
-    return { sink, plant, mqtt, telemetry, operationSync };
+    return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }

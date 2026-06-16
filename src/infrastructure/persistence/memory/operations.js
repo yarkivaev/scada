@@ -45,10 +45,13 @@ export default function operationStateMemory(store) {
                 row.occurred_at = item.occurred_at;
                 row.kind = item.kind;
                 row.payload = item.payload;
-                return Promise.resolve();
+                if (item.source_updated_at) {
+                    row.source_updated_at = item.source_updated_at;
+                }
+                return Promise.resolve({ created: false });
             }
             store.operations.push({ ...item });
-            return Promise.resolve();
+            return Promise.resolve({ created: true });
         },
         listForMachine(machineId, kind, range) {
             return Promise.resolve(filterList(store, machineId, kind, range));
