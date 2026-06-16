@@ -6,6 +6,7 @@ import edgeApi from '../infrastructure/http/edge/edgeApi.js';
 import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
+import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
 import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
 import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
@@ -53,6 +54,20 @@ function startMqtt(sink, env) {
     const pipeline = mqttMetrics(env.MQTT_URL, metricsSink, env.MQTT_TOPICS, mqttConfigFromEnv(env));
     pipeline.start();
     return pipeline;
+}
+
+function startOperationSync(sink, env) {
+    if (env.SINK_DB_PROFILE === 'edge' || !env.AMQP_URL) {
+        return undefined;
+    }
+    const ingest = operationSyncIngest(
+        env.AMQP_URL,
+        env.AMQP_OPERATIONS_QUEUE || 'scada.operations.ingest',
+        sink.dataAccess.operations,
+        { prefetch: parseInt(env.AMQP_PREFETCH || '32', 10) }
+    );
+    ingest.start();
+    return ingest;
 }
 
 /**
@@ -161,6 +176,7 @@ export default async function siteServer(config) {
     await sink.run(http);
     const mqtt = startMqtt(sink, env);
     const telemetry = startTelemetryIngest(env);
+    const operationSync = startOperationSync(sink, env);
     const basePath = config.basePath || '/api/v1';
     const catalog = operatorRoutesForProfile(basePath, sink, env);
     if (catalog.sync) {
@@ -175,5 +191,5 @@ export default async function siteServer(config) {
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes)
     });
-    return { sink, plant, mqtt, telemetry, operatorsSync: catalog.sync };
+    return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }
