@@ -1,3 +1,5 @@
+import { ingestCursorAt, ingestCursorEmpty } from '../../domain/ingest/ingestCursor.js';
+
 function findRow(store, source, machine) {
     return store.checkpoints.find((row) => {
         return row.source === source && row.machine === machine;
@@ -18,9 +20,9 @@ export default function ingestCheckpointMemory(store) {
         read(source, machine) {
             const row = findRow(store, source, machine);
             if (!row) {
-                return Promise.resolve(null);
+                return Promise.resolve(ingestCursorEmpty());
             }
-            return Promise.resolve(new Date(row.cursor_at));
+            return Promise.resolve(ingestCursorAt(new Date(row.cursor_at)));
         },
         write(source, machine, cursorAt) {
             const row = findRow(store, source, machine);
@@ -52,9 +54,9 @@ export function ingestCheckpointPg(pool) {
                 [source, machine]
             ).then((result) => {
                 if (result.rows.length === 0) {
-                    return null;
+                    return ingestCursorEmpty();
                 }
-                return new Date(result.rows[0].cursor_at);
+                return ingestCursorAt(new Date(result.rows[0].cursor_at));
             });
         },
         write(source, machine, cursorAt) {
