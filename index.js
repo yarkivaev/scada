@@ -8,6 +8,7 @@ export { default as machine } from './src/domain/plant/machine.js';
 export { default as timeline } from './src/domain/timeline/timeline.js';
 export { alert, acknowledgedAlert } from './src/domain/alerting/alert.js';
 export { operation } from './src/domain/operation/operation.js';
+export { ingestCursorAt, ingestCursorEmpty } from './src/domain/ingest/ingestCursor.js';
 export { default as alerts } from './src/domain/alerting/alerts.js';
 export { default as initialized } from './src/domain/shared/initialized.js';
 export { default as pubsub } from './src/domain/shared/pubsub.js';
@@ -48,3 +49,4 @@ export { default as activityTracking } from './src/infrastructure/ingest/activit
 export { default as amqpMetricsIngest } from './src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 export { default as amqpMqttRelay } from './src/infrastructure/ingest/telemetry/amqpMqttRelay.js';
 export { default as operationSyncIngest } from './src/infrastructure/sync/operationSyncIngest.js';
+export { default as ingestCheckpointMemory, ingestCheckpointPg } from './src/infrastructure/ingest/ingestCheckpoint.js';
