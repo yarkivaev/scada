@@ -1,4 +1,5 @@
 import sseConnection from './sseConnection.js';
+import machineOperationsClient from './machineOperationsClient.js';
 
 /**
  * Builds a JSON request payload with method, headers, and body.
@@ -178,27 +179,6 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
         dispense(amount) {
             return request('/dispense', payload('POST', { amount }));
         },
-        operations(options) {
-            const params = new URLSearchParams();
-            if (options && options.kind) {
-                params.set('kind', options.kind);
-            }
-            if (options && options.from) {
-                params.set('from', options.from);
-            }
-            if (options && options.to) {
-                params.set('to', options.to);
-            }
-            const qs = params.toString();
-            return request(`/operations${qs ? `?${qs}` : ''}`).then((body) => {
-                return body.items;
-            });
-        },
-        operationsStream(callback) {
-            const conn = sseConnection(`${baseUrl}/operations/stream`, eventSource, logger);
-            conn.on('operation_created', callback);
-            conn.on('operation_updated', callback);
-            return conn;
-        }
+        ...machineOperationsClient(baseUrl, request, eventSource, logger)
     };
 }
