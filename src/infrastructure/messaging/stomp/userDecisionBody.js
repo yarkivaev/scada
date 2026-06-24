@@ -3,18 +3,23 @@
  *
  * @param {string} machine - machine id
  * @param {Date} start - segment start time
- * @param {string} user - operator id for audit
  * @param {string[]} tags - selected tags
  * @param {object} properties - segment properties
+ * @param {object} audit - displayName, id, decidedAt
  * @returns {object} JSON body for stompSend
  */
-export default function userDecisionBody(machine, start, user, tags, properties) {
+export default function userDecisionBody(machine, start, tags, properties, audit) {
     const epoch = start.getTime() / 1000;
-    return {
+    const body = {
         machine,
         start: epoch,
-        user,
+        user: audit.displayName,
         tags: tags || [],
-        properties: properties || {}
+        properties: properties || {},
+        decided_at: audit.decidedAt.getTime() / 1000
     };
+    if (audit.id !== undefined && audit.id !== null) {
+        body.operator_id = audit.id;
+    }
+    return body;
 }

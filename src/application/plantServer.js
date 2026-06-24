@@ -59,7 +59,6 @@ async function initStomp(stomp, translations, requirePool) {
     }
     const decisions = userDecisions({
         stompUrl: stomp.url,
-        user: stomp.operatorUser,
         login: stomp.login,
         passcode: stomp.passcode,
         host: stomp.host
@@ -90,7 +89,8 @@ export default async function plantServer(config) {
         clock,
         heartbeat: config.heartbeat || 1000,
         requestTimeoutMs,
-        extraRoutes: extra
+        extraRoutes: extra,
+        timelineOperator: config.timelineOperator
     });
     const server = http.createServer((req, res) => {
         return api.handle(req, res);

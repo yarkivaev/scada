@@ -8,12 +8,11 @@ const DEFAULT_DESTINATION = '/exchange/scada.user_decisions';
  *
  * @param {object} config - publisher configuration
  * @param {string} config.stompUrl - STOMP broker URL
- * @param {string} config.user - operator name for audit
  * @param {string} [config.destination] - STOMP destination
  * @param {string} [config.login] - STOMP login
  * @param {string} [config.passcode] - STOMP passcode
  * @param {string} [config.host] - STOMP vhost header
- * @returns {object} frozen publisher with publish(machine, start, tags, properties)
+ * @returns {object} publisher with publish(machine, start, tags, properties, audit)
  */
 export default function userDecisions(config) {
     if (!config.stompUrl) {
@@ -25,10 +24,18 @@ export default function userDecisions(config) {
         passcode: config.passcode,
         host: config.host
     };
-    const user = config.user || 'hmi-kiosk';
     return {
-        async publish(machine, start, tags, properties) {
-            const body = userDecisionBody(machine, start, user, tags, properties);
+        /**
+         * Publishes one operator decision to STOMP.
+         *
+         * @param {string} machine - machine id
+         * @param {Date} start - segment start
+         * @param {string[]} tags - selected tags
+         * @param {object} properties - segment properties
+         * @param {object} audit - id, displayName, decidedAt
+         */
+        async publish(machine, start, tags, properties, audit) {
+            const body = userDecisionBody(machine, start, tags, properties, audit);
             await stompSend(config.stompUrl, destination, body, stompOptions);
         }
     };

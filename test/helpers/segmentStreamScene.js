@@ -64,8 +64,8 @@ function machineTimeline(store, machineId, decisions) {
         pending: port.pending,
         stream: port.stream,
         bus,
-        async retag(start, tags, properties) {
-            await stomp.retag(start, tags, properties);
+        async retag(start, tags, properties, audit) {
+            await stomp.retag(start, tags, properties, audit);
             bus.emit({
                 type: 'resolved',
                 segment: {
@@ -75,14 +75,15 @@ function machineTimeline(store, machineId, decisions) {
                     duration: 0,
                     tags: JSON.stringify(tags),
                     properties: JSON.stringify(properties)
-                }
+                },
+                audit
             });
         },
-        async respond(requestId, body) {
+        async respond(requestId, body, audit) {
             const raw = decodeURIComponent(String(requestId));
             const start = new Date(raw);
-            await stomp.respond(start, body.tags, body.properties || {});
-            bus.emit({ type: 'resolved', request: { id: requestId, start } });
+            await stomp.respond(start, body.tags, body.properties || {}, audit);
+            bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
             return { id: requestId, ...body };
         }
     };

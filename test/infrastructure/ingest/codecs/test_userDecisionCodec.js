@@ -23,6 +23,22 @@ describe('userDecisionCodec', function() {
         assert.strictEqual(received[0].startTime, new Date(start).toISOString(), 'start was not converted to ISO');
     });
 
+    it('extracts operator_id when present in payload', async function() {
+        const received = [];
+        const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };
+        const codec = userDecisionCodec(collector);
+        const operatorId = 2 + Math.floor(Math.random() * 100);
+        const payload = JSON.stringify({
+            machine: 'icht2',
+            start: 1700000000000,
+            user: 'Елена Волкова',
+            operator_id: operatorId,
+            decided_at: 1700000060
+        });
+        await codec.accept({ destination: '/exchange/scada.user_decisions', payload });
+        assert.strictEqual(received[0].operatorId, operatorId, 'operator_id was not extracted');
+    });
+
     it('extracts username field', async function() {
         const received = [];
         const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };

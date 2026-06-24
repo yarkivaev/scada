@@ -31,7 +31,7 @@ export default function edgeOperatorCatalog(basePath, env) {
     const routes = operatorRoute(basePath, provider);
     const centralUrl = env.CENTRAL_PLANT_URL;
     if (!centralUrl) {
-        return { routes, sync: undefined };
+        return { routes, sync: undefined, provider };
     }
     const client = stateHttpClient({
         baseUrl: centralUrl,
@@ -39,5 +39,5 @@ export default function edgeOperatorCatalog(basePath, env) {
     });
     const source = centralOperators(client, basePath);
     const sync = operatorsSync(source, provider, { intervalMs: syncIntervalMs(env) });
-    return { routes, sync };
+    return { routes, sync, provider };
 }

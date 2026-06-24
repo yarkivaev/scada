@@ -82,19 +82,20 @@ function startOperationSync(sink, env) {
  */
 function centralOperatorRoutes(basePath, sink) {
     if (sink.sinkDbProfile !== 'central') {
-        return [];
+        return { routes: [], provider: undefined };
     }
-    return operatorRoute(basePath, operatorsFromPg(sink.pool));
+    const provider = operatorsFromPg(sink.pool);
+    return { routes: operatorRoute(basePath, provider), provider };
 }
 
 function operatorRoutesForProfile(basePath, sink, env) {
     if (sink.sinkDbProfile === 'central') {
-        return { routes: centralOperatorRoutes(basePath, sink), sync: undefined };
+        return { ...centralOperatorRoutes(basePath, sink), sync: undefined };
     }
     if (sink.sinkDbProfile === 'edge') {
         return edgeOperatorCatalog(basePath, env);
     }
-    return { routes: [], sync: undefined };
+    return { routes: [], sync: undefined, provider: undefined };
 }
 
 function startTelemetryIngest(env) {
@@ -149,6 +150,15 @@ function siteExtraRoutes(catalog, extraRoutes) {
     };
 }
 
+function timelineOperatorFromEnv(catalog, env) {
+    const defaultUser = env.HMI_OPERATOR_USER || 'hmi-kiosk';
+    return {
+        provider: catalog.provider,
+        requireOperator: env.REQUIRE_OPERATOR === 'true',
+        defaultUser
+    };
+}
+
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
@@ -189,7 +199,8 @@ export default async function siteServer(config) {
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
-        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes)
+        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
+        timelineOperator: timelineOperatorFromEnv(catalog, env)
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }

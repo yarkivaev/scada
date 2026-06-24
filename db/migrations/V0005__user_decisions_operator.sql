@@ -1,0 +1,2 @@
+ALTER TABLE user_decisions ADD COLUMN IF NOT EXISTS operator_id INTEGER;
+ALTER TABLE user_decisions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
