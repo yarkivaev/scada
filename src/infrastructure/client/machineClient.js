@@ -1,4 +1,5 @@
 import sseConnection from './sseConnection.js';
+import machineOperationsClient from './machineOperationsClient.js';
 
 /**
  * Builds a JSON request payload with method, headers, and body.
@@ -24,7 +25,7 @@ function payload(method, data) {
  * @param {function} fetcher - fetch function
  * @param {function} eventSource - EventSource constructor
  * @param {object} [logger] - optional logger with error(tag, detail)
- * @returns {object} client with info, measurements, alerts, meltings methods
+ * @returns {object} client with info, measurements, alerts, meltings, operations methods
  *
  * @example
  *   const machine = machineClient(baseUrl, 'icht1', fetch, EventSource, logger);
@@ -177,6 +178,7 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
         },
         dispense(amount) {
             return request('/dispense', payload('POST', { amount }));
-        }
+        },
+        ...machineOperationsClient(baseUrl, request, eventSource, logger)
     };
 }

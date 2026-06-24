@@ -225,4 +225,90 @@ describe('machineClient', function() {
         await client.meltings({ active: true });
         assert(fetchedUrl.includes('active=true'), 'should include active=true');
     });
+
+    it('fetches operations with kind and range query params', async function() {
+        let fetchedUrl;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        await client.operations({
+            kind: 'chem',
+            from: '2024-06-01T00:00:00.000Z',
+            to: '2024-06-02T00:00:00.000Z'
+        });
+        assert(
+            fetchedUrl.includes('/operations?')
+            && fetchedUrl.includes('kind=chem')
+            && fetchedUrl.includes('from=')
+            && fetchedUrl.includes('to='),
+            'operations GET must include kind and range query params'
+        );
+    });
+
+    it('returns operations items array from GET response', async function() {
+        const items = [{ key: `op-${Math.random()}`, kind: 'chem' }];
+        const fakeFetch = async () => {return { ok: true, json: async () => {return { items }} }};
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const result = await client.operations({ kind: 'chem' });
+        assert.strictEqual(result, items, 'operations must return items array not wrapper object');
+    });
+
+    it('fetches operations without options', async function() {
+        let fetchedUrl;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        await client.operations();
+        assert(fetchedUrl === 'http://localhost/api/machines/icht1/operations', 'operations without options must hit base path');
+    });
+
+    it('creates operations stream on plant SSE endpoint', function() {
+        let createdUrl;
+        const FakeEventSource = function(url) {
+            createdUrl = url;
+            this.addEventListener = () => {};
+            this.close = () => {};
+        };
+        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        client.operationsStream(() => {});
+        assert(createdUrl === 'http://localhost/api/v1/operations/stream', 'operations stream must use plant-wide SSE endpoint');
+    });
+
+    it('notifies callback on operation_created SSE event', function() {
+        const listeners = {};
+        const FakeEventSource = function() {
+            this.addEventListener = (event, fn) => {
+                listeners[event] = fn;
+            };
+            this.close = () => {};
+        };
+        let received;
+        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        client.operationsStream((payload) => {
+            received = payload;
+        });
+        listeners.operation_created({ data: '{"key":"α"}' });
+        assert(received.key === 'α', 'operation_created event must invoke stream callback');
+    });
+
+    it('notifies callback on operation_updated SSE event', function() {
+        const listeners = {};
+        const FakeEventSource = function() {
+            this.addEventListener = (event, fn) => {
+                listeners[event] = fn;
+            };
+            this.close = () => {};
+        };
+        let received;
+        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        client.operationsStream((payload) => {
+            received = payload;
+        });
+        listeners.operation_updated({ data: '{"key":"β"}' });
+        assert(received.key === 'β', 'operation_updated event must invoke stream callback');
+    });
 });
