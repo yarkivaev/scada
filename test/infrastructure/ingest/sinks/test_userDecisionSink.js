@@ -17,7 +17,7 @@ describe('userDecisionSink', function() {
         const pool = fakePool();
         const sink = userDecisionSink(pool);
         await sink.accept({ machine: 'ičt-ñ', startTime: '2024-01-01T00:00:00.000Z',
-            username: 'оп1', payload: '{}' });
+            username: 'оп1', decidedAt: '2024-01-01T00:00:00.000Z', payload: '{}' });
         assert.strictEqual(pool.queries.length, 1, 'should execute one query');
     });
 
@@ -25,8 +25,24 @@ describe('userDecisionSink', function() {
         const pool = fakePool();
         const sink = userDecisionSink(pool);
         await sink.accept({ machine: 'ičt-ñ', startTime: '2024-01-01T00:00:00.000Z',
-            username: 'оп1', payload: '{}' });
+            username: 'оп1', decidedAt: '2024-01-01T00:00:00.000Z', payload: '{}' });
         assert.ok(pool.queries[0].sql.includes('INSERT INTO user_decisions'), 'should use INSERT INTO user_decisions');
+    });
+
+    it('binds operator_id and decided_at in insert params', async function() {
+        const pool = fakePool();
+        const sink = userDecisionSink(pool);
+        const operatorId = 4 + Math.floor(Math.random() * 100);
+        const decidedAt = '2024-06-01T12:05:00.000Z';
+        await sink.accept({
+            machine: 'ičt-ñ',
+            startTime: '2024-01-01T00:00:00.000Z',
+            username: 'Елена Волкова',
+            operatorId,
+            decidedAt,
+            payload: '{}'
+        });
+        assert.strictEqual(pool.queries[0].params[3], operatorId, 'operator_id was not bound in insert');
     });
 
     it('binds machine, startTime, username, payload as params in order', async function() {
@@ -36,10 +52,10 @@ describe('userDecisionSink', function() {
         const startTime = `2024-0${Math.floor(Math.random() * 9) + 1}-01T00:00:00.000Z`;
         const username = `оператор_${Math.random()}`;
         const payload = JSON.stringify({ tags: [`нагрев_${Math.random()}`] });
-        await sink.accept({ machine, startTime, username, payload });
+        await sink.accept({ machine, startTime, username, operatorId: 1, decidedAt: startTime, payload });
         assert.deepStrictEqual(
             pool.queries[0].params,
-            [machine, startTime, username, payload],
+            [machine, startTime, username, 1, startTime, payload],
             'should bind params in correct order'
         );
     });
@@ -65,6 +81,7 @@ describe('userDecisionSink propagates query failure', function() {
                     machine: `icht${Math.random()}`,
                     startTime: new Date().toISOString(),
                     username: `оператор_${Math.random()}`,
+                    decidedAt: new Date().toISOString(),
                     payload: '{}'
                 });
             },

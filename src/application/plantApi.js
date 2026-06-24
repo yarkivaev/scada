@@ -35,7 +35,7 @@ export default function plantApi(basePath, plant, config) {
         ...measurementRoute(basePath, plant, time),
         ...alertStream(basePath, plant, time),
         ...alertRoute(basePath, plant),
-        ...timelineRoute(basePath, plant),
+        ...timelineRoute(basePath, plant, opts.timelineOperator),
         ...timelineStream(basePath, plant, time),
         ...operationRoute(basePath, plant),
         ...operationStream(basePath, plant, time),

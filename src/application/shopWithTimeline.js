@@ -32,7 +32,7 @@ function memoryTimelinePort(store, bus) {
         pending: port.pending,
         stream: port.stream,
         bus,
-        retag(start, tags, properties) {
+        retag(start, tags, properties, audit) {
             const found = store.items.find((item) => {
                 return item.start_time.getTime() === start.getTime();
             });
@@ -41,9 +41,9 @@ function memoryTimelinePort(store, bus) {
                 found.properties = properties;
                 delete found.options;
             }
-            bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties) });
+            bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties), audit });
         },
-        respond(requestId, body) {
+        respond(requestId, body, audit) {
             const start = parseStart(requestId);
             const found = store.pending.find((item) => {
                 return item.start_time.getTime() === start.getTime();
@@ -53,7 +53,7 @@ function memoryTimelinePort(store, bus) {
                 found.tags = body.tags;
                 found.properties = body.properties;
             }
-            bus.emit({ type: 'resolved', request: { id: requestId, start } });
+            bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
             return { id: requestId, ...body };
         }
     };
@@ -82,14 +82,14 @@ export default function shopWithTimeline(name, options) {
             pending: port.pending,
             stream: port.stream,
             bus,
-            async retag(start, tags, properties) {
-                await stomp.retag(start, tags, properties);
-                bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties) });
+            async retag(start, tags, properties, audit) {
+                await stomp.retag(start, tags, properties, audit);
+                bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties), audit });
             },
-            async respond(requestId, body) {
+            async respond(requestId, body, audit) {
                 const start = parseStart(requestId);
-                await stomp.respond(start, body.tags, body.properties || {});
-                bus.emit({ type: 'resolved', request: { id: requestId, start } });
+                await stomp.respond(start, body.tags, body.properties || {}, audit);
+                bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
                 return { id: requestId, ...body };
             }
         };

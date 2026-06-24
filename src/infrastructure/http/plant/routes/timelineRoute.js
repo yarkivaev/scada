@@ -1,18 +1,40 @@
 import machineInPlant from '../../../../application/machineInPlant.js';
 import segmentJson from '../json/segmentJson.js';
+import timelineOperator from '../timelineOperator.js';
 import { errorResponse, jsonResponse, readBody, route, sendRouteError } from '@yarkivaev/simple-server';
+
+async function handleOperatorWrite(gate, parsed, write) {
+    const audit = await gate.resolve(parsed);
+    await write(audit);
+}
+
+async function respondToRequest(gate, timeline, requestId, req, res) {
+    const raw = await readBody(req);
+    const parsed = JSON.parse(raw);
+    let response;
+    await handleOperatorWrite(gate, parsed, async (audit) => {
+        response = await timeline.respond(requestId, parsed, audit);
+    });
+    if (!response) {
+        errorResponse('NOT_FOUND', `Request '${requestId}' not found`, 404).send(res);
+        return;
+    }
+    jsonResponse({ id: requestId, status: 'resolved' }).send(res);
+}
 
 /**
  * Timeline REST routes for segments and label requests.
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
+ * @param {object} [operatorOptions] - provider, requireOperator, defaultUser
  * @returns {array} route objects
  *
  * @example
- *   timelineRoute('/api/v1', plant);
+ *   timelineRoute('/api/v1', plant, { provider, requireOperator: true, defaultUser: 'hmi-kiosk' });
  */
-export default function timelineRoute(basePath, plant) {
+export default function timelineRoute(basePath, plant, operatorOptions) {
+    const gate = timelineOperator(operatorOptions);
     return [
         route('GET', `${basePath}/machines/:machineId/segments`, async (req, res, params, query) => {
             const result = machineInPlant(plant, params.machineId);
@@ -39,9 +61,14 @@ export default function timelineRoute(basePath, plant) {
             try {
                 const raw = await readBody(req);
                 const parsed = JSON.parse(raw);
-                await result.machine.timeline.retag(new Date(parsed.start), parsed.tags, parsed.properties);
+                await handleOperatorWrite(gate, parsed, async (audit) => {
+                    await result.machine.timeline.retag(new Date(parsed.start), parsed.tags, parsed.properties, audit);
+                });
                 jsonResponse({ status: 'updated' }).send(res);
             } catch (err) {
+                if (gate.sendError(res, err)) {
+                    return;
+                }
                 sendRouteError(res, err);
             }
         }),
@@ -73,15 +100,11 @@ export default function timelineRoute(basePath, plant) {
                 return;
             }
             try {
-                const raw = await readBody(req);
-                const parsed = JSON.parse(raw);
-                const response = await result.machine.timeline.respond(params.requestId, parsed);
-                if (!response) {
-                    errorResponse('NOT_FOUND', `Request '${params.requestId}' not found`, 404).send(res);
+                await respondToRequest(gate, result.machine.timeline, params.requestId, req, res);
+            } catch (err) {
+                if (gate.sendError(res, err)) {
                     return;
                 }
-                jsonResponse({ id: params.requestId, status: 'resolved' }).send(res);
-            } catch (err) {
                 sendRouteError(res, err);
             }
         })
