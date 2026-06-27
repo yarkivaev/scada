@@ -50,18 +50,18 @@ describe('migratePrivileged', function() {
         assert.strictEqual(revoke, undefined, 'sink migrate must skip C0002');
     });
 
-    it('does not apply E0002 during supervisor_sink migrate', async function() {
+    it('does not apply E0003 during supervisor_sink migrate', async function() {
         const pool = fakePool();
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sink-mig-'));
-        const file = 'E0002__edge_retention_delete.sql';
+        const file = 'E0003__edge_operations_grants.sql';
         await fs.writeFile(
             path.join(dir, file),
-            'GRANT DELETE ON metrics TO supervisor_sink'
+            'GRANT SELECT ON operations TO supervisor_sink'
         );
         await migrate(pool, dir, 'edge');
         const grant = pool.calls.find((item) => {
-            return item.sql.includes('GRANT DELETE ON metrics');
+            return item.sql.includes('GRANT SELECT ON operations');
         });
-        assert.strictEqual(grant, undefined, 'sink migrate must skip E0002');
+        assert.strictEqual(grant, undefined, 'sink migrate must skip E0003');
     });
 });

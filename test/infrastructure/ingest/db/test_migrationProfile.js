@@ -20,8 +20,8 @@ describe('migrationApplies', function() {
         assert.strictEqual(migrationApplies(name, 'edge'), false, 'edge must skip C migrations');
     });
 
-    it('runs C0002 revoke migration only with postgres admin url', function() {
-        const name = 'C0002__central_revoke_delete.sql';
-        assert.strictEqual(migrationSinkRunnable(name), false, 'C0002 must not run as supervisor_sink');
+    it('runs C0004 grants migration only with postgres admin url', function() {
+        const name = 'C0004__central_operations_grants.sql';
+        assert.strictEqual(migrationSinkRunnable(name), false, 'C0004 must not run as supervisor_sink');
     });
 });
