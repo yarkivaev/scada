@@ -17,7 +17,9 @@ export function migrationApplies(fileName, profile) {
 
 const privilegedOnly = new Set([
     'C0002__central_revoke_delete.sql',
-    'E0002__edge_retention_delete.sql'
+    'C0004__central_operations_grants.sql',
+    'E0002__edge_retention_delete.sql',
+    'E0003__edge_operations_grants.sql'
 ]);
 
 /**
