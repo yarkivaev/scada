@@ -2,15 +2,51 @@ import {
     batch,
     circuit,
     clock,
+    modbusRtuSource,
     modbusSource,
     mqttSink
 } from '@yarkivaev/source-to-sink';
+import { parseModbusDeviceSpec } from './modbusDeviceSpec.js';
+
+/**
+ * Builds Modbus polling sources for one device spec.
+ *
+ * @param {string} spec - Device connection spec
+ * @param {object} config - Pipeline config with address, count, interval, transformerFactory
+ * @param {object} collector - Batch collector for transformed records
+ * @param {object} clk - Clock instance
+ * @returns {object} Modbus polling source
+ */
+function buildModbusSource(spec, config, collector, clk) {
+    const device = parseModbusDeviceSpec(spec);
+    const transformer = config.transformerFactory(device.name, collector);
+    if (device.kind === 'rtu') {
+        return modbusRtuSource(
+            device.path,
+            device.serial,
+            config.address,
+            config.count,
+            config.interval,
+            transformer,
+            clk
+        );
+    }
+    return modbusSource(
+        device.host,
+        device.port,
+        config.address,
+        config.count,
+        config.interval,
+        transformer,
+        clk
+    );
+}
 
 /**
  * Pipeline for polling Modbus devices and publishing to MQTT.
  *
  * @param {string} mqtt - MQTT broker URL
- * @param {string} devices - Comma-separated device specs as name:host:port
+ * @param {string} devices - Comma-separated device specs as name:host:port or name:rtu:path:baud[:line][:slaveId]
  * @param {object} config - interval, address, count, threshold, timeout, clientId, transformerFactory
  * @returns {object} Pipeline with start() and stop() methods
  */
@@ -35,17 +71,7 @@ export default function modbusMqtt(mqtt, devices, config) {
     });
     const collector = batch(sink, 5, breaker);
     const sources = devices.split(',').map((spec) => {
-        const [name, host, port] = spec.trim().split(':');
-        const transformer = config.transformerFactory(name, collector);
-        return modbusSource(
-            host,
-            parseInt(port, 10),
-            config.address,
-            config.count,
-            config.interval,
-            transformer,
-            clk
-        );
+        return buildModbusSource(spec, config, collector, clk);
     });
     return {
         /**

@@ -41,4 +41,22 @@ describe('modbusMqtt', () => {
       'Should reject missing transformerFactory'
     );
   });
+
+  it('accepts RTU device spec with transformerFactory', () => {
+    const pipeline = modbusMqtt(
+      `mqtt://broker-${Math.random().toString(36).slice(2)}`,
+      `cooling-${Math.random().toString(36).slice(2)}:rtu:/dev/ttyUSB0:9600:8N1:1`,
+      {
+        interval: 5,
+        address: 4000,
+        count: 44,
+        threshold: 5,
+        timeout: 60,
+        transformerFactory: () => {
+          return { accept: () => {} };
+        }
+      }
+    );
+    assert.strictEqual(typeof pipeline.start, 'function', 'RTU device spec should produce pipeline with start');
+  });
 });
