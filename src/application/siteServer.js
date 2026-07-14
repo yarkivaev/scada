@@ -9,7 +9,9 @@ import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIng
 import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
 import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
+import userDecisionsFromPg from '../infrastructure/persistence/pg/userDecisions.js';
 import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
+import decisionRoute from '../infrastructure/http/plant/routes/decisionRoute.js';
 import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 
 function stompFromEnv(env) {
@@ -71,11 +73,11 @@ function startOperationSync(sink, env) {
 }
 
 /**
- * Central-only operator routes backed by Postgres.
+ * Central-only operator and user_decisions routes backed by Postgres.
  *
  * @param {string} basePath - plant API base path
  * @param {object} sink - supervisor sink with pool and profile
- * @returns {array} route objects or empty array on edge profile
+ * @returns {object} routes and optional operators provider
  *
  * @example
  *   centralOperatorRoutes('/api/v1', sink);
@@ -85,7 +87,14 @@ function centralOperatorRoutes(basePath, sink) {
         return { routes: [], provider: undefined };
     }
     const provider = operatorsFromPg(sink.pool);
-    return { routes: operatorRoute(basePath, provider), provider };
+    const decisions = userDecisionsFromPg(sink.pool);
+    return {
+        routes: [
+            ...operatorRoute(basePath, provider),
+            ...decisionRoute(basePath, decisions)
+        ],
+        provider
+    };
 }
 
 function operatorRoutesForProfile(basePath, sink, env) {

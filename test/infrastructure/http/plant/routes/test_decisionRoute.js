@@ -1,0 +1,140 @@
+import assert from 'assert';
+import { routes } from '@yarkivaev/simple-server';
+import decisionRoute from '../../../../../src/infrastructure/http/plant/routes/decisionRoute.js';
+
+function mockRes() {
+    return {
+        headersSent: false,
+        statusCode: 200,
+        body: null,
+        writeHead(code) {
+            this.statusCode = code;
+        },
+        end(data) {
+            this.body = data;
+        },
+        destroy() {}
+    };
+}
+
+describe('decisionRoute', function() {
+    it('returns empty items when segment has no decisions', async function() {
+        const catalog = {
+            async list() {
+                return [];
+            }
+        };
+        const api = routes(decisionRoute('/api/v1', catalog));
+        const res = mockRes();
+        const start = encodeURIComponent('2024-06-01T12:00:00.000Z');
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/icht-${Math.random()}/segments/${start}/decisions`,
+            headers: {}
+        }, res);
+        const payload = JSON.parse(res.body);
+        assert.strictEqual(payload.items.length, 0, 'segment without decisions must return empty list');
+    });
+
+    it('returns chronology with operator id display decidedAt and tags', async function() {
+        const operatorId = 7 + Math.floor(Math.random() * 50);
+        const display = `Елена_${Math.random()}`;
+        const decidedAt = new Date('2024-06-01T12:05:00.000Z');
+        const tag = `загрузка_${Math.random()}`;
+        const catalog = {
+            async list() {
+                return [{
+                    username: display,
+                    operatorId,
+                    decidedAt,
+                    payload: JSON.stringify({
+                        machine: 'icht-α',
+                        tags: [tag],
+                        user: display
+                    })
+                }];
+            }
+        };
+        const api = routes(decisionRoute('/api/v1', catalog));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${encodeURIComponent('icht-α')}/segments/${encodeURIComponent('2024-06-01T12:00:00.000Z')}/decisions`,
+            headers: {}
+        }, res);
+        const payload = JSON.parse(res.body);
+        assert.deepStrictEqual(
+            payload.items[0],
+            {
+                operatorId,
+                operator: display,
+                decidedAt: decidedAt.toISOString(),
+                payload: { machine: 'icht-α', tags: [tag], user: display },
+                tags: [tag]
+            },
+            'decision route did not expose operator decidedAt and tags chronology'
+        );
+    });
+
+    it('passes machine id and segment start into the catalog list', async function() {
+        const machine = `icht-${Math.random()}`;
+        const startIso = '2024-03-15T09:30:00.000Z';
+        const seen = [];
+        const catalog = {
+            async list(id, start) {
+                seen.push({ id, start: start.toISOString() });
+                return [];
+            }
+        };
+        const api = routes(decisionRoute('/api/v1', catalog));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${encodeURIComponent(machine)}/segments/${encodeURIComponent(startIso)}/decisions`,
+            headers: {}
+        }, res);
+        assert.deepStrictEqual(
+            seen[0],
+            { id: machine, start: startIso },
+            'decision route did not forward machine and start to catalog'
+        );
+    });
+
+    it('sorts exposed items in the order returned by the catalog', async function() {
+        const first = new Date('2024-06-01T12:01:00.000Z');
+        const second = new Date('2024-06-01T12:03:00.000Z');
+        const catalog = {
+            async list() {
+                return [
+                    {
+                        username: 'а',
+                        operatorId: 1,
+                        decidedAt: first,
+                        payload: '{"tags":["a"]}'
+                    },
+                    {
+                        username: 'б',
+                        operatorId: 2,
+                        decidedAt: second,
+                        payload: '{"tags":["b"]}'
+                    }
+                ];
+            }
+        };
+        const api = routes(decisionRoute('/api/v1', catalog));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/icht1/segments/${encodeURIComponent('2024-06-01T12:00:00.000Z')}/decisions`,
+            headers: {}
+        }, res);
+        const payload = JSON.parse(res.body);
+        assert.deepStrictEqual(
+            payload.items.map((item) => {
+                return item.decidedAt;
+            }),
+            [first.toISOString(), second.toISOString()],
+            'decision items must keep catalog chronology order'
+        );
+    });
+});
