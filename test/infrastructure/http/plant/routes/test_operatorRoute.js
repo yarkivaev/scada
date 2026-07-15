@@ -32,4 +32,18 @@ describe('operatorRoute', function() {
         const payload = JSON.parse(res.body);
         assert.strictEqual(payload.items[0].cardUid, uid, 'operator route did not expose card uid');
     });
+
+    it('returns internal error when operators provider fails', async function() {
+        const detail = `permission denied for table operators-${Math.random()}`;
+        const provider = {
+            async list() {
+                throw new Error(detail);
+            }
+        };
+        const api = routes(operatorRoute('/api/v1', provider, { error() {} }));
+        const res = mockRes();
+        await api.handle({ method: 'GET', url: '/api/v1/operators', headers: {} }, res);
+        const payload = JSON.parse(res.body);
+        assert.strictEqual(payload.error.message, detail, 'operator route did not expose provider failure');
+    });
 });
