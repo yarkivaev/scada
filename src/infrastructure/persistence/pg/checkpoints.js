@@ -36,12 +36,12 @@ function replayCursor(pool, machineId) {
         `WITH closed AS (
             SELECT MAX(EXTRACT(EPOCH FROM end_time)) AS ts
             FROM segments
-            WHERE machine = $1 AND end_time > start_time
+            WHERE machine = $1 AND duration > 0
         ),
         pending AS (
             SELECT MAX(EXTRACT(EPOCH FROM start_time)) AS ts
             FROM segments
-            WHERE machine = $1 AND start_time = end_time
+            WHERE machine = $1 AND duration = 0
         )
         SELECT COALESCE(LEAST(closed.ts, pending.ts), pending.ts, closed.ts, 0.0) AS cursor
         FROM closed, pending`,
@@ -53,15 +53,18 @@ function replayCursor(pool, machineId) {
 
 function pendingSegments(pool) {
     return pool.query(
-        `SELECT machine, name, EXTRACT(EPOCH FROM start_time) AS start
+        `SELECT machine, name,
+                EXTRACT(EPOCH FROM start_time) AS start,
+                EXTRACT(EPOCH FROM end_time) AS end
          FROM segments
-         WHERE start_time = end_time`
+         WHERE duration = 0`
     ).then((result) => {
         return result.rows.map((row) => {
             return {
                 machine: row.machine,
                 name: row.name,
-                start: Number(row.start)
+                start: Number(row.start),
+                end: Number(row.end)
             };
         });
     });

@@ -1,7 +1,8 @@
 import processingErrorLog from '../processingErrorLog.js';
 
 /**
- * Closes open segment rows whose last known end is older than a wall-clock silence budget.
+ * Closes open segment rows whose advanced end boundary is older than a wall-clock silence budget.
+ * Requires end_time > start_time so a lone Started (end equals start) is never treated as silence.
  * Does not insert a replacement Started row.
  *
  * @param {object} pool - pg Pool with query() method
@@ -20,20 +21,12 @@ export default function closeSilentOpen(pool) {
             try {
                 await pool.query(
                     `UPDATE segments
-                     SET end_time = CASE
-                           WHEN end_time <= start_time THEN start_time + interval '1 second'
-                           ELSE end_time
-                         END,
-                         duration = GREATEST(
+                     SET duration = GREATEST(
                            1,
-                           EXTRACT(EPOCH FROM (
-                             CASE
-                               WHEN end_time <= start_time THEN start_time + interval '1 second'
-                               ELSE end_time
-                             END - start_time
-                           ))
+                           EXTRACT(EPOCH FROM (end_time - start_time))
                          )
                      WHERE duration = 0
+                       AND end_time > start_time
                        AND end_time < NOW() - make_interval(secs => $1)`,
                     [budgetSeconds]
                 );

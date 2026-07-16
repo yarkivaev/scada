@@ -31,6 +31,17 @@ describe('closeSilentOpen', function() {
         );
     });
 
+    it('does not treat Started rows with end equal to start as stale activity', async function() {
+        const pool = fakePool();
+        const closer = closeSilentOpen(pool);
+        await closer.close(30);
+        const sql = pool.queries[0].sql.replace(/\s+/gu, ' ');
+        assert.ok(
+            /end_time\s*>\s*start_time/u.test(sql),
+            'silence close closed a Started open without an advanced end boundary'
+        );
+    });
+
     it('does not insert a synthetic open segment', async function() {
         const pool = fakePool();
         const closer = closeSilentOpen(pool);

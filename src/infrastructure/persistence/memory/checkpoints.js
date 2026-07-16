@@ -1,7 +1,3 @@
-function sameInstant(a, b) {
-    return new Date(a).getTime() === new Date(b).getTime();
-}
-
 function parseJsonField(raw) {
     if (!raw) {
         return null;
@@ -35,12 +31,12 @@ function segmentAt(store, machineId, startEpoch) {
 
 function replayCursorFor(store, machineId) {
     const closed = store.segments.filter((row) => {
-        return row.machine === machineId && new Date(row.end_time) > new Date(row.start_time);
+        return row.machine === machineId && Number(row.duration) > 0;
     }).map((row) => {
         return new Date(row.end_time).getTime() / 1000;
     });
     const pending = store.segments.filter((row) => {
-        return row.machine === machineId && sameInstant(row.start_time, row.end_time);
+        return row.machine === machineId && Number(row.duration) === 0;
     }).map((row) => {
         return new Date(row.start_time).getTime() / 1000;
     });
@@ -70,12 +66,13 @@ export default function checkpointStateMemory(store) {
         },
         pendingSegments() {
             return store.segments.filter((row) => {
-                return sameInstant(row.start_time, row.end_time);
+                return Number(row.duration) === 0;
             }).map((row) => {
                 return {
                     machine: row.machine,
                     name: row.name,
-                    start: new Date(row.start_time).getTime() / 1000
+                    start: new Date(row.start_time).getTime() / 1000,
+                    end: new Date(row.end_time).getTime() / 1000
                 };
             });
         },
