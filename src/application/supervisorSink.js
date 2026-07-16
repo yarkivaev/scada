@@ -38,6 +38,7 @@ export function readDeploymentConfig(env) {
             threshold: parseInt(env.CIRCUIT_THRESHOLD || '5', 10),
             timeout: parseInt(env.CIRCUIT_TIMEOUT || '60', 10),
             poll: parseInt(env.POLL_INTERVAL || '5', 10),
+            segmentWindow: parseInt(env.SEGMENT_WINDOW_SECONDS || '15', 10),
             login: env.STOMP_LOGIN || 'guest',
             passcode: env.STOMP_PASSCODE || 'guest',
             host: env.STOMP_HOST || '/'

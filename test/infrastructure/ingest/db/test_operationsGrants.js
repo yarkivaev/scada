@@ -2,7 +2,7 @@ import assert from 'assert';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
-import { GenericContainer } from 'testcontainers';
+import { GenericContainer, Wait } from 'testcontainers';
 import ciContainerImage from '../../../helpers/ciContainerImage.js';
 import migrate, { migratePrivileged } from '../../../../src/infrastructure/ingest/db/migrate.js';
 import operationStatePg from '../../../../src/infrastructure/persistence/pg/operations.js';
@@ -52,6 +52,7 @@ describe('operations table grants for supervisor_sink', function() {
                 POSTGRES_PASSWORD: 'bootstrap',
                 POSTGRES_DB: 'scada'
             })
+            .withWaitStrategy(Wait.forLogMessage('database system is ready to accept connections', 2))
             .withStartupTimeout(90000)
             .start();
         const host = container.getHost();
