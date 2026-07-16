@@ -3,8 +3,11 @@ import {
     stompSource
 } from '@yarkivaev/source-to-sink';
 import segmentDispatch from '../../../domain/segment/dispatch.js';
+import silenceBudget from '../../../domain/segment/silenceBudget.js';
 import segmentCodec from '../codecs/segmentCodec.js';
+import silentOpenWatch from '../silentOpenWatch.js';
 import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
+import closeSilentOpen from '../sinks/closeSilentOpen.js';
 import retagSink from '../sinks/retagSink.js';
 
 export const segmentColumns = ['machine', 'name', 'start_time', 'end_time', 'duration',
@@ -35,11 +38,17 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const codec = segmentCodec(dispatch);
     const source = stompSource(stomp, '/exchange/scada.segments', codec,
         { login: config.login, passcode: config.passcode, host: config.host });
+    const window = config.segmentWindow || 15;
+    const budget = silenceBudget(window);
+    const pollMs = (config.poll || 5) * 1000;
+    const silence = silentOpenWatch(closeSilentOpen(pool), budget, { intervalMs: pollMs });
     return {
         start() {
             source.start();
+            void silence.start();
         },
         stop() {
+            silence.stop();
             source.stop();
             pool.end();
         }

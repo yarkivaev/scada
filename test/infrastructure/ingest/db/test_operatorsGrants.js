@@ -5,7 +5,7 @@ import pg from 'pg';
 import { GenericContainer, Wait } from 'testcontainers';
 import ciContainerImage from '../../../helpers/ciContainerImage.js';
 import migrate, { migratePrivileged } from '../../../../src/infrastructure/ingest/db/migrate.js';
-import operationStatePg from '../../../../src/infrastructure/persistence/pg/operations.js';
+import operatorsFromPg from '../../../../src/infrastructure/persistence/pg/operators.js';
 
 const migrationsDir = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -38,7 +38,7 @@ async function bootstrapRoles(adminPool) {
     `);
 }
 
-describe('operations table grants for supervisor_sink', function() {
+describe('operators table grants for supervisor_sink', function() {
     let container;
     let adminPool;
     let sinkPool;
@@ -82,17 +82,19 @@ describe('operations table grants for supervisor_sink', function() {
         }
     });
 
-    it('allows supervisor_sink to upsert chem operations after privileged grants', async function() {
-        const store = operationStatePg(sinkPool);
-        const key = `grant-${Math.random().toString(36).slice(2)}`;
-        await store.upsert({
-            machine: 'icht1',
-            occurred_at: new Date('2024-06-01T10:00:00.000Z'),
-            kind: 'chem',
-            key,
-            payload: { status: 'ok', elements: { Fe: 0.1 } }
-        });
-        const rows = await store.listForMachine('icht1', 'chem', {});
-        assert.strictEqual(rows.length, 1, 'supervisor_sink must read and write operations after grant migration');
+    it('allows supervisor_sink to list operators after privileged grants', async function() {
+        const uid = `grant-op-${Math.random().toString(36).slice(2)}`;
+        await adminPool.query(
+            'INSERT INTO operators (card_uid, first_name, last_name, display_name) VALUES ($1, $2, $3, $4)',
+            [uid, 'Ирина', 'Ковалёва', 'Ирина Ковалёва']
+        );
+        const rows = await operatorsFromPg(sinkPool).list();
+        assert.strictEqual(
+            rows.some((row) => {
+                return row.cardUid === uid;
+            }),
+            true,
+            'supervisor_sink cannot select operators after central revoke without operators grant'
+        );
     });
 });

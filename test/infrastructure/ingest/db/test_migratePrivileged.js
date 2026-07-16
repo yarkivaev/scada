@@ -64,4 +64,19 @@ describe('migratePrivileged', function() {
         });
         assert.strictEqual(grant, undefined, 'sink migrate must skip E0003');
     });
+
+    it('does not apply C0005 during supervisor_sink migrate', async function() {
+        const pool = fakePool();
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sink-mig-'));
+        const file = 'C0005__central_operators_grants.sql';
+        await fs.writeFile(
+            path.join(dir, file),
+            'GRANT SELECT ON operators TO supervisor_sink'
+        );
+        await migrate(pool, dir, 'central');
+        const grant = pool.calls.find((item) => {
+            return item.sql.includes('GRANT SELECT ON operators');
+        });
+        assert.strictEqual(grant, undefined, 'sink migrate must skip C0005');
+    });
 });
