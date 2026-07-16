@@ -38,6 +38,30 @@ async function bootstrapRoles(adminPool) {
     `);
 }
 
+/**
+ * Retries role bootstrap until Postgres accepts connections after container start.
+ *
+ * @param {object} adminPool - pool connected as bootstrap superuser
+ * @returns {Promise<void>}
+ */
+async function awaitBootstrap(adminPool) {
+    let attempts = 60;
+    while (attempts > 0) {
+        try {
+            await bootstrapRoles(adminPool);
+            return;
+        } catch (error) {
+            attempts -= 1;
+            if (attempts === 0 || !String(error.message).includes('starting up')) {
+                throw error;
+            }
+            await new Promise((resolve) => {
+                setTimeout(resolve, 500);
+            });
+        }
+    }
+}
+
 describe('operations table grants for supervisor_sink', function() {
     let container;
     let adminPool;
@@ -59,7 +83,7 @@ describe('operations table grants for supervisor_sink', function() {
         const port = container.getMappedPort(5432);
         const bootstrapUrl = `postgresql://bootstrap:bootstrap@${host}:${port}/scada`;
         const bootstrapPool = new pg.Pool({ connectionString: bootstrapUrl });
-        await bootstrapRoles(bootstrapPool);
+        await awaitBootstrap(bootstrapPool);
         await bootstrapPool.end();
         const adminUrl = `postgresql://scada:scada@${host}:${port}/scada`;
         adminPool = new pg.Pool({ connectionString: adminUrl });
