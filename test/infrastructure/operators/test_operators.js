@@ -16,4 +16,11 @@ describe('operators', function() {
         const rows = await provider.list();
         assert.strictEqual(rows[0].cardUid, uid, 'operators did not expose replaced operator');
     });
+
+    it('returns registration flag after permit', async function() {
+        const provider = operators();
+        await provider.permit(true);
+        const flag = await provider.enabled();
+        assert.strictEqual(flag, true, 'operators did not store registration flag');
+    });
 });
