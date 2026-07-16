@@ -20,15 +20,17 @@ function operatorFromJson(row) {
 }
 
 /**
- * Central plant operator catalog via GET /api/v1/operators.
+ * Central plant operator catalog via HTTP (/api/v1/operators).
+ * Supports pull for sync, create for edge proxy writes, and enabled for registration flag.
  *
- * @param {object} client - HTTP client with getJson(path, query)
+ * @param {object} client - HTTP client with getJson(path, query) and postJson(path, body)
  * @param {string} basePath - plant API base path
- * @returns {object} source with pull()
+ * @returns {object} source with pull(), create(fields), enabled()
  *
  * @example
  *   const source = centralOperators(stateHttpClient({ baseUrl: 'http://central:3000' }), '/api/v1');
  *   const rows = await source.pull();
+ *   const flag = await source.enabled();
  */
 export default function centralOperators(client, basePath) {
     return {
@@ -40,6 +42,19 @@ export default function centralOperators(client, basePath) {
             return payload.items.map((row) => {
                 return operatorFromJson(row);
             });
+        },
+        async create(fields) {
+            const row = await client.postJson(`${basePath}/operators`, fields);
+            return operatorFromJson(row);
+        },
+        async enabled() {
+            const payload = await client.getJson(`${basePath}/operators/registration-enabled`, {});
+            if (!payload || typeof payload.enabled !== 'boolean') {
+                throw new Error(
+                    `central registration-enabled response missing enabled boolean from ${basePath}/operators/registration-enabled`
+                );
+            }
+            return payload.enabled;
         }
     };
 }

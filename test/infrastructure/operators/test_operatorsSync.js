@@ -34,4 +34,21 @@ describe('operatorsSync', function() {
         const rows = await provider.list();
         assert.strictEqual(rows[0].cardUid, uid, 'operators sync did not keep stale operators on central failure');
     });
+
+    it('start stores registration flag from central enabled', async function() {
+        const provider = operators();
+        const source = {
+            async pull() {
+                return [];
+            },
+            async enabled() {
+                return true;
+            }
+        };
+        const sync = operatorsSync(source, provider, { intervalMs: 60000 });
+        await sync.start();
+        sync.stop();
+        const flag = await provider.enabled();
+        assert.strictEqual(flag, true, 'operators sync did not store registration flag from central');
+    });
 });

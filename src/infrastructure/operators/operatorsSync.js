@@ -1,11 +1,21 @@
 const DEFAULT_INTERVAL_MS = 30000;
 
+async function refresh(source, provider) {
+    const items = await source.pull();
+    provider.replace(items);
+    if (typeof source.enabled !== 'function' || typeof provider.permit !== 'function') {
+        return;
+    }
+    await provider.permit(await source.enabled());
+}
+
 /**
  * Periodic sync of edge operators cache from central plant API.
  * Default interval is 30s; keeps the last successful snapshot when central is unreachable.
+ * Also copies the registration enabled flag when source.enabled and provider.permit exist.
  *
- * @param {object} source - centralOperators with pull()
- * @param {object} provider - operators with replace(items)
+ * @param {object} source - centralOperators with pull() and optional enabled()
+ * @param {object} provider - operators with replace(items) and optional permit(flag)
  * @param {object} [options] - intervalMs for sync period
  * @returns {object} sync with start() and stop()
  *
@@ -19,8 +29,7 @@ export default function operatorsSync(source, provider, options) {
     let active = false;
     async function tick() {
         try {
-            const items = await source.pull();
-            provider.replace(items);
+            await refresh(source, provider);
         } catch {
             /* next tick retries; stale snapshot remains */
         }
