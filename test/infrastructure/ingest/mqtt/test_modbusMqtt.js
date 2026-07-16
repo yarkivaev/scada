@@ -42,14 +42,15 @@ describe('modbusMqtt', () => {
     );
   });
 
-  it('accepts RTU device spec with transformerFactory', () => {
+  it('accepts multiple RTU slaves on one serial path', () => {
+    const path = `/dev/ttyUSB${Math.floor(Math.random() * 9)}`;
     const pipeline = modbusMqtt(
       `mqtt://broker-${Math.random().toString(36).slice(2)}`,
-      `cooling-${Math.random().toString(36).slice(2)}:rtu:/dev/ttyUSB0:9600:8N1:1`,
+      `icht-1:rtu:${path}:9600:8N2:1,icht-2:rtu:${path}:9600:8N2:2`,
       {
         interval: 5,
-        address: 4000,
-        count: 44,
+        address: 1280,
+        count: 30,
         threshold: 5,
         timeout: 60,
         transformerFactory: () => {
@@ -57,6 +58,6 @@ describe('modbusMqtt', () => {
         }
       }
     );
-    assert.strictEqual(typeof pipeline.start, 'function', 'RTU device spec should produce pipeline with start');
+    assert.strictEqual(typeof pipeline.start, 'function', 'Shared RTU bus should produce pipeline with start');
   });
 });
