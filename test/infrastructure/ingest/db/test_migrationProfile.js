@@ -29,4 +29,9 @@ describe('migrationApplies', function() {
         const name = 'C0005__central_operators_grants.sql';
         assert.strictEqual(migrationSinkRunnable(name), false, 'C0005 must not run as supervisor_sink');
     });
+
+    it('runs C0006 operators registration migration only with postgres admin url', function() {
+        const name = 'C0006__central_operators_registration.sql';
+        assert.strictEqual(migrationSinkRunnable(name), false, 'C0006 must not run as supervisor_sink');
+    });
 });

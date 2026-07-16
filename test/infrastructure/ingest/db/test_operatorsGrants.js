@@ -97,4 +97,22 @@ describe('operators table grants for supervisor_sink', function() {
             'supervisor_sink cannot select operators after central revoke without operators grant'
         );
     });
+
+    it('allows supervisor_sink to create operator and flip registration flag', async function() {
+        const uid = `grant-crt-${Math.random().toString(36).slice(2)}`.toUpperCase();
+        const provider = operatorsFromPg(sinkPool);
+        const created = await provider.create({
+            cardUid: uid,
+            firstName: 'Глеб',
+            lastName: 'Фёдоров',
+            displayName: 'Глеб Фёдоров'
+        });
+        await provider.permit(true);
+        const enabled = await provider.enabled();
+        assert.deepStrictEqual(
+            { cardUid: created.cardUid, enabled },
+            { cardUid: uid, enabled: true },
+            'supervisor_sink cannot insert operators or update registration flag'
+        );
+    });
 });
