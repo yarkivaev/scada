@@ -1,7 +1,7 @@
 import processingErrorLog from '../processingErrorLog.js';
 
 function parseStartTime(parsed) {
-    const startTime = new Date(parsed.start);
+    const startTime = new Date(parsed.start * 1000);
     if (isNaN(startTime.getTime())) {
         throw new RangeError(`Invalid epoch timestamp: ${parsed.start}`);
     }
