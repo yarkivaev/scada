@@ -41,4 +41,34 @@ describe('amqpMetricsIngest', function() {
         });
         assert.strictEqual(acked.length, 1, 'should ack message via bound channel');
     });
+
+    it('acceptTelemetryDeliver reports stream name to onSeen', function() {
+        const device = `icht-${Math.random().toString(36).slice(2)}`;
+        const seen = [];
+        const codec = { accept() {} };
+        acceptTelemetryDeliver(
+            codec,
+            { routingKey: `MX210.${device}.GET.AI1.VALUE` },
+            Buffer.from(JSON.stringify({ value: Math.random() * 10 })),
+            (name) => {
+                seen.push(name);
+            }
+        );
+        assert.deepStrictEqual(seen, [device], 'onSeen did not receive the telemetry stream name');
+    });
+
+    it('acceptTelemetryDeliver skips onSeen when the callback is omitted', function() {
+        const accepted = [];
+        const codec = {
+            accept(raw) {
+                accepted.push(raw);
+            }
+        };
+        acceptTelemetryDeliver(
+            codec,
+            { routingKey: `MX210.icht-${Math.random().toString(36).slice(2)}.GET.AI2.VALUE` },
+            Buffer.from(JSON.stringify({ value: 3 }))
+        );
+        assert.strictEqual(accepted.length, 1, 'telemetry was not accepted without onSeen');
+    });
 });

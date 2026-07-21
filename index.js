@@ -45,8 +45,11 @@ export { default as stompAlerts } from './src/infrastructure/messaging/stomp/ale
 export { default as stompAlertsInit } from './src/infrastructure/messaging/stomp/alerts/stompAlertsInit.js';
 export { default as mqttMetrics } from './src/infrastructure/ingest/mqtt/mqttMetrics.js';
 export { default as modbusMqtt } from './src/infrastructure/ingest/mqtt/modbusMqtt.js';
+export { default as mx210Tcp } from './src/infrastructure/ingest/modbus/mx210Tcp.js';
+export { default as silentStreams } from './src/infrastructure/ingest/modbus/silentStreams.js';
 export { default as activityTracking } from './src/infrastructure/ingest/activity/activityTracking.js';
 export { default as amqpMetricsIngest } from './src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 export { default as amqpMqttRelay } from './src/infrastructure/ingest/telemetry/amqpMqttRelay.js';
 export { default as operationSyncIngest } from './src/infrastructure/sync/operationSyncIngest.js';
 export { default as ingestCheckpointMemory, ingestCheckpointPg } from './src/infrastructure/ingest/ingestCheckpoint.js';
+export { default as bindSilentStreams } from './src/application/bindSilentStreams.js';

@@ -2,6 +2,7 @@ import amqp from 'amqplib';
 import { batch, circuit, clock, timedBatch } from '@yarkivaev/source-to-sink';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 import metricsCodec from '../mqtt/metricsTransformer.js';
+import streamNameFromTopic from './streamNameFromTopic.js';
 
 /**
  * Maps AMQP deliver to raw metrics message for metricsCodec.
@@ -9,9 +10,16 @@ import metricsCodec from '../mqtt/metricsTransformer.js';
  * @param {object} codec - metricsCodec instance
  * @param {object} fields - AMQP deliver fields
  * @param {Buffer} content - message body
+ * @param {Function} [onSeen] - optional callback(streamName) for edge freshness
  */
-export function acceptTelemetryDeliver(codec, fields, content) {
+export function acceptTelemetryDeliver(codec, fields, content, onSeen) {
     const record = deliverToMqttRecord(fields, content);
+    if (typeof onSeen === 'function') {
+        const name = streamNameFromTopic(record.topic);
+        if (name) {
+            onSeen(name);
+        }
+    }
     codec.accept({ topic: record.topic, payload: record.payload.toString() });
 }
 
@@ -20,14 +28,15 @@ export function acceptTelemetryDeliver(codec, fields, content) {
  *
  * @param {object} codec - metricsCodec instance
  * @param {object} channel - amqplib channel with ack(msg)
+ * @param {Function} [onSeen] - optional edge freshness callback
  * @returns {Function} consume callback for ch.consume
  */
-export function telemetryConsumer(codec, channel) {
+export function telemetryConsumer(codec, channel, onSeen) {
     return (msg) => {
         if (!msg) {
             return;
         }
-        acceptTelemetryDeliver(codec, msg.fields, msg.content);
+        acceptTelemetryDeliver(codec, msg.fields, msg.content, onSeen);
         channel.ack(msg);
     };
 }
@@ -66,7 +75,7 @@ export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
             }
             await ch.assertQueue(queue, { durable: true });
             ch.prefetch(prefetch);
-            const onMessage = telemetryConsumer(codec, ch);
+            const onMessage = telemetryConsumer(codec, ch, options.onSeen);
             const tag = await ch.consume(queue, onMessage, { noAck: false });
             session = { conn, channel: ch, tag: tag.consumerTag };
         },

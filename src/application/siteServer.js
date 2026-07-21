@@ -13,6 +13,7 @@ import userDecisionsFromPg from '../infrastructure/persistence/pg/userDecisions.
 import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
 import decisionRoute from '../infrastructure/http/plant/routes/decisionRoute.js';
 import edgeOperatorCatalog from './edgeOperatorCatalog.js';
+import bindSilentStreams from './bindSilentStreams.js';
 
 function stompFromEnv(env) {
     return {
@@ -107,16 +108,15 @@ function operatorRoutesForProfile(basePath, sink, env) {
     return { routes: [], sync: undefined, provider: undefined };
 }
 
-function startTelemetryIngest(env) {
-    if (env.SINK_DB_PROFILE === 'edge' || !env.AMQP_URL) {
+function clickhouseMetricsUrl(env) {
+    return env.CLICKHOUSE_URL
+        || (env.CLICKHOUSE_HOST ? `http://${env.CLICKHOUSE_HOST}:8123` : undefined);
+}
+
+function startAmqpMetrics(env, sink, onSeen) {
+    if (!env.AMQP_URL) {
         return undefined;
     }
-    const url = env.CLICKHOUSE_URL
-        || (env.CLICKHOUSE_HOST ? `http://${env.CLICKHOUSE_HOST}:8123` : undefined);
-    if (!url) {
-        throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for AMQP telemetry ingest');
-    }
-    const sink = clickhouseSink(url, 'scada.metrics');
     const batchConfig = mqttConfigFromEnv(env);
     const ingest = amqpMetricsIngest(
         env.AMQP_URL,
@@ -127,11 +127,29 @@ function startTelemetryIngest(env) {
             interval: batchConfig.interval,
             threshold: batchConfig.threshold,
             timeout: batchConfig.timeout,
-            prefetch: parseInt(env.AMQP_PREFETCH || '32', 10)
+            prefetch: parseInt(env.AMQP_PREFETCH || '32', 10),
+            onSeen
         }
     );
     ingest.start();
     return ingest;
+}
+
+function startTelemetryIngest(env, streams) {
+    if (env.SINK_DB_PROFILE === 'edge' || (!env.AMQP_URL && !streams)) {
+        return undefined;
+    }
+    const url = clickhouseMetricsUrl(env);
+    if (!url) {
+        throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for AMQP telemetry ingest');
+    }
+    const sink = clickhouseSink(url, 'scada.metrics');
+    const onSeen = bindSilentStreams(streams, sink);
+    const ingest = startAmqpMetrics(env, sink, onSeen);
+    if (streams) {
+        streams.start();
+    }
+    return { ingest, streams };
 }
 
 function plantFactoryWithOperations(plantFactory, ops, sink) {
@@ -171,7 +189,7 @@ function timelineOperatorFromEnv(catalog, env) {
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
- * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, env
+ * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, streams, env
  * @returns {Promise<object>} sink, plant, mqtt pipeline
  *
  * @example
@@ -194,7 +212,7 @@ export default async function siteServer(config) {
     });
     await sink.run(http);
     const mqtt = startMqtt(sink, env);
-    const telemetry = startTelemetryIngest(env);
+    const telemetry = startTelemetryIngest(env, config.streams);
     const operationSync = startOperationSync(sink, env);
     const basePath = config.basePath || '/api/v1';
     const catalog = operatorRoutesForProfile(basePath, sink, env);
