@@ -45,6 +45,9 @@ export default function scadaClient(baseUrl, fetcher, eventSource, logger) {
         machines() {
             return requestJson('/machines');
         },
+        tagCatalog() {
+            return requestJson('/tag-catalog');
+        },
         machine(machineId) {
             return machineClient(baseUrl, machineId, fetcher, eventSource, logger);
         },
