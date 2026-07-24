@@ -52,11 +52,7 @@ export default function scadaClient(baseUrl, fetcher, eventSource, logger) {
             return machineClient(baseUrl, machineId, fetcher, eventSource, logger);
         },
         jump(timestamp) {
-            return requestJson('/simulation/jump', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ timestamp })
-            });
+            return requestJson('/simulation/jump', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timestamp }) });
         },
         reset() {
             return requestJson('/simulation', { method: 'DELETE' });

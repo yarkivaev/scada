@@ -23,7 +23,9 @@ export default function tagCatalog(env) {
     if (!Array.isArray(raw)) {
         throw new Error('tag catalog must be a JSON array');
     }
-    const byId = Object.fromEntries(raw.map((row) => [row.id, row]));
+    const byId = Object.fromEntries(raw.map((row) => {
+        return [row.id, row];
+    }));
     return Object.freeze({
         /**
          * @returns {Array<object>} catalog rows
@@ -46,7 +48,11 @@ export default function tagCatalog(env) {
          * @returns {Array<string>} child ids
          */
         children(parent) {
-            return raw.filter((row) => row.parent === parent).map((row) => row.id);
+            return raw.filter((row) => {
+                return row.parent === parent;
+            }).map((row) => {
+                return row.id;
+            });
         },
         /**
          * @param {string} id - tag id

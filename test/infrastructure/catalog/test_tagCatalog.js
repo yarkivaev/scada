@@ -46,6 +46,19 @@ describe('catalogRoute', function () {
         };
         await endpoint.handle({ method: 'GET', url: '/api/v1/tag-catalog', headers: {} }, res, {});
         assert.ok(Array.isArray(body.items), 'tag-catalog response had no items array');
-        assert.ok(body.items.some((row) => row.id === 'heating'), 'heating missing from API catalog');
+    });
+    it('includes heating among tag-catalog items', async function () {
+        const [endpoint] = catalogRoute('/api/v1', tagCatalog({}));
+        let body;
+        const res = {
+            writeHead() {},
+            end(payload) {
+                body = JSON.parse(payload);
+            }
+        };
+        await endpoint.handle({ method: 'GET', url: '/api/v1/tag-catalog', headers: {} }, res, {});
+        assert.ok(body.items.some((row) => {
+            return row.id === 'heating';
+        }), 'heating missing from API catalog');
     });
 });
