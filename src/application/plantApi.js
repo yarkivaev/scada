@@ -9,6 +9,7 @@ import operationRoute from '../infrastructure/http/plant/routes/operationRoute.j
 import operationStream from '../infrastructure/http/plant/streams/operationStream.js';
 import heartbeatStream from '../infrastructure/http/plant/streams/heartbeatStream.js';
 import simulationRoute from '../infrastructure/http/plant/routes/simulationRoute.js';
+import catalogRoute from '../infrastructure/http/plant/routes/catalogRoute.js';
 import { routes } from '@yarkivaev/simple-server';
 
 /**
@@ -30,6 +31,7 @@ export default function plantApi(basePath, plant, config) {
     });
     const extra = opts.extraRoutes || [];
     const routeList = [
+        ...catalogRoute(basePath, opts.tagCatalog),
         ...machineRoute(basePath, plant),
         ...measurementStream(basePath, plant, time),
         ...measurementRoute(basePath, plant, time),
