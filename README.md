@@ -120,7 +120,7 @@ All sensor implementations expose the same interface:
 { name(), current(), measurements(range, step), stream(since, step, callback, clock?) }
 ```
 
-Implementations: `clickhouseSensor` (central), `pgMetricsSensor` / `metricsSensor` (edge HTTP or PG).
+Implementations: `clickhouseSensor` (central; live `stream()` batches many topics into one ClickHouse query per tick), `pgMetricsSensor` / `metricsSensor` (edge HTTP or PG).
 
 ## Database migrations
 

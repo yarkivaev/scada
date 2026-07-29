@@ -4,7 +4,8 @@
  * Reads sensor measurements from scada.metrics table
  * and provides real-time streaming via polling.
  * Supports time-based downsampling using ClickHouse aggregation.
- * Returns value of 0 for missing data to comply with no-null-return principle.
+ * Live streams share a connection-level batch hub so many sensors
+ * cost one ClickHouse query per tick instead of one query per sensor.
  *
  * @param {object} connection - ClickHouse connection with query method
  * @param {string} topic - Metric topic in format '{machine}/{sensor}'
@@ -19,11 +20,12 @@
  *   await sensor.measurements({ start, end }, 60000); // downsampled to 1-minute intervals
  *   sensor.stream(since, 1000, callback); // live stream
  */
+import clickhouseStreamHub from './streamHub.js';
+
 function formatDateTime(date) {
     return date.toISOString().replace('Z', '').replace('T', ' ');
 }
 
-// eslint-disable-next-line max-lines-per-function
 export default function clickhouseSensor(connection, topic, displayName, unit) {
     return {
         name() {
@@ -64,30 +66,10 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
             });
         },
         stream(since, step, callback, clock) {
-            const time = clock || (() => { return new Date(); });
-            let lastTs = since;
-            const timer = setInterval(async () => {
-                try {
-                    const rows = await connection.query(
-                        `SELECT ts, value FROM scada.metrics
-                         WHERE topic = {topic:String} AND ts > {since:DateTime64(3)} AND ts <= {until:DateTime64(3)}
-                         ORDER BY ts LIMIT 100`,
-                        { topic, since: formatDateTime(lastTs), until: formatDateTime(time()) }
-                    );
-                    rows.forEach((row) => {
-                        const timestamp = new Date(`${row.ts}Z`);
-                        callback({ timestamp, value: row.value, unit });
-                        lastTs = timestamp;
-                    });
-                } catch (err) {
-                    console.error(`Stream query failed for ${topic} on ${connection.url()}:`, err.message); // eslint-disable-line no-console
-                }
-            }, step);
-            return {
-                cancel() {
-                    clearInterval(timer);
-                }
-            };
+            return clickhouseStreamHub(connection).watch(topic, since, step, callback, {
+                unit,
+                clock
+            });
         }
     };
 }
