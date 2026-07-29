@@ -54,3 +54,7 @@ export { default as amqpMqttRelay } from './src/infrastructure/ingest/telemetry/
 export { default as operationSyncIngest } from './src/infrastructure/sync/operationSyncIngest.js';
 export { default as ingestCheckpointMemory, ingestCheckpointPg } from './src/infrastructure/ingest/ingestCheckpoint.js';
 export { default as bindSilentStreams } from './src/application/bindSilentStreams.js';
+export { default as exportQuery } from './src/application/export/exportQuery.js';
+export { default as exportStream } from './src/application/export/exportStream.js';
+export { default as exportSink } from './src/application/export/exportSink.js';
+export { default as exportJob } from './src/application/export/exportJob.js';
