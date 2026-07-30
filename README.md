@@ -90,6 +90,7 @@ Main entry (`import { … } from 'scada'`):
 | `plant`, `shop`, `machine` | Domain hierarchy |
 | `timeline`, `alerts`, `alert`, `acknowledgedAlert` | Timeline and alerting |
 | `plantApi`, `plantServer`, `siteServer` | HTTP composition |
+| `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `scada/client` |
 | `metricsPlant`, `shopWithTimeline`, `machineInPlant` | Plant wiring helpers |
 | `supervisorSink`, `readDeploymentConfig` | STOMP ingest + PG persistence |
 | `edgeApi`, `stateHttpClient`, `metricsSensor` | Edge HTTP read/write |
@@ -100,9 +101,30 @@ Main entry (`import { … } from 'scada'`):
 
 Subpath exports:
 
-- `scada/client` — browser/Node HTTP+SSE client (`scadaClient`, `machineClient`)
+- `scada/client` — browser/Node HTTP+SSE client (`scadaClient`, `machineClient`) plus re-exported export ports
 - `scada/stateDataFake` — in-memory state backends for tests
 - `scada/startTestEdgeApi` — ephemeral edge API for integration tests
+
+## Export ports
+
+Generic read/stream/write contract for outbound jobs. Read side uses existing `plantApi` / `scada/client` only (no direct DB). Destination adapters and plant maps live in plant packages (e.g. `sokol-scada`), not here. Do not put export into `edgeApi`.
+
+```javascript
+import { exportQuery, exportStream, exportSink, exportJob } from 'scada';
+import { scadaClient } from 'scada/client';
+
+const client = scadaClient(baseUrl, fetch, EventSource);
+const query = exportQuery(client);
+const stream = exportStream(client);
+const sink = exportSink({
+  write(records) { return destination.write(records); },
+  send(artifact) { return destination.send(artifact); }
+});
+const job = exportJob({ query, transform: (rows) => rows, sink });
+await job.run({ kind: 'segments', machine: 'furnace-α', from, to });
+```
+
+Downstream (`sokol-scada`) should pin the released tag after this version (e.g. `#v2.3.32`).
 
 ## Binaries
 
@@ -179,9 +201,10 @@ import stateDataFake from 'scada/stateDataFake';
 |------------------------|----------------------------|
 | Generic plant, timeline, alerts, ingest | Melting domain, MX210 sensors, Russian HMI strings |
 | `plantApi`, `siteServer`, `supervisorSink` | `central-site.js`, `edge-site.js` bins |
+| Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
 | ClickHouse + PG adapters | `sokolPlant`, `edgePlant` wiring |
 
-Depend on a pinned version (`"scada": "2.3.3"`), not a local path, in downstream packages.
+Depend on a pinned version (`"scada": "git+ssh://…#v2.3.32"`), not a local path, in downstream packages.
 
 ## CI/CD
 

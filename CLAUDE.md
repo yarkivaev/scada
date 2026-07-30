@@ -36,8 +36,12 @@ scada/
 | Layer | Contents |
 |-------|----------|
 | **domain/** | `plant`, `shop`, `machine`, `timeline`, `alerts`, `segment/dispatch`, `segment/normalize`, `alerting/ingest` |
-| **application/** | `plantApi`, `machineInPlant`, `supervisorSink`, `shopWithTimeline`, `metricsPlant`, `plantServer` |
+| **application/** | `plantApi`, `machineInPlant`, `supervisorSink`, `shopWithTimeline`, `metricsPlant`, `plantServer`, `export/*` |
 | **infrastructure/** | `http/plant`, `http/edge`, `persistence/pg`, `ingest`, `messaging/stomp`, `client` |
+
+### Export ports
+
+Generic `exportQuery` / `exportStream` / `exportSink` / `exportJob` compose on `plantApi` + `scada/client`. No plant destination names in this package; plant packages own sinks and jobs. Not part of `edgeApi`.
 
 ### Ingest sandwich
 
