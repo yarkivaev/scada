@@ -2,6 +2,7 @@ import pubsub from '../domain/shared/pubsub.js';
 import timeline from '../domain/timeline/timeline.js';
 import pgTimeline from '../infrastructure/persistence/pg/timeline.js';
 import memoryTimelineStore, { memoryTimelineRead } from '../infrastructure/persistence/memory/timeline.js';
+import ownerTimeline from '../infrastructure/messaging/ownership/ownerTimeline.js';
 import stompTimeline from '../infrastructure/messaging/stomp/timeline.js';
 
 function parseStart(requestId) {
@@ -59,22 +60,33 @@ function memoryTimelinePort(store, bus) {
     };
 }
 
+function writePort(name, decisions, owners) {
+    if (!owners) {
+        return stompTimeline(decisions, name);
+    }
+    return ownerTimeline((id) => {
+        return stompTimeline(decisions, id);
+    }, owners)(name);
+}
+
 /**
  * Builds a machine timeline from PostgreSQL persistence and STOMP user decisions.
  *
+ * Optional owners registry routes retag/respond to an edge HTTP plant API.
+ *
  * @param {string} name - machine id
- * @param {object} options - pool and userDecisions ports
+ * @param {object} options - pool, userDecisions, optional owners
  * @returns {object} timeline port with list, rowAt, pending, stream, retag, respond, bus
  *
  * @example
- *   const tl = shopWithTimeline('machine1', { pool, userDecisions });
+ *   const tl = shopWithTimeline('machine1', { pool, userDecisions, owners });
  */
 export default function shopWithTimeline(name, options) {
-    const { pool, userDecisions: decisions } = options;
+    const { pool, userDecisions: decisions, owners } = options;
     if (pool && decisions) {
         const bus = pubsub();
         const read = pgTimeline(pool, name);
-        const stomp = stompTimeline(decisions, name);
+        const write = writePort(name, decisions, owners);
         const port = timeline(read, bus);
         return {
             list: port.list,
@@ -83,12 +95,12 @@ export default function shopWithTimeline(name, options) {
             stream: port.stream,
             bus,
             async retag(start, tags, properties, audit) {
-                await stomp.retag(start, tags, properties, audit);
+                await write.retag(start, tags, properties, audit);
                 bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties), audit });
             },
             async respond(requestId, body, audit) {
                 const start = parseStart(requestId);
-                await stomp.respond(start, body.tags, body.properties || {}, audit);
+                await write.respond(start, body.tags, body.properties || {}, audit);
                 bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
                 return { id: requestId, ...body };
             }
