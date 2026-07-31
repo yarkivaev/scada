@@ -25,12 +25,30 @@ function payload(method, data) {
  * @param {function} fetcher - fetch function
  * @param {function} eventSource - EventSource constructor
  * @param {object} [logger] - optional logger with error(tag, detail)
- * @returns {object} client with info, measurements, alerts, meltings, operations methods
+ * @returns {object} client with info, measurements, alerts, meltings, segments, cycles, operations methods
  *
  * @example
  *   const machine = machineClient(baseUrl, 'icht1', fetch, EventSource, logger);
  *   const info = await machine.info();
  */
+/**
+ * Builds a from/to query suffix for range GETs.
+ *
+ * @param {object} [options] - optional from/to timestamps
+ * @returns {string} empty string or ?from=&to= suffix
+ */
+function rangeQuery(options) {
+    const params = new URLSearchParams();
+    if (options && options.from) {
+        params.set('from', options.from);
+    }
+    if (options && options.to) {
+        params.set('to', options.to);
+    }
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+}
+
 export default function machineClient(baseUrl, machineId, fetcher, eventSource, logger) {
     const url = `${baseUrl}/machines/${machineId}`;
     async function request(path, options) {
@@ -136,15 +154,10 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
             return sseConnection(`${url}/meltings/stream`, eventSource, logger);
         },
         segments(options) {
-            const params = new URLSearchParams();
-            if (options && options.from) {
-                params.set('from', options.from);
-            }
-            if (options && options.to) {
-                params.set('to', options.to);
-            }
-            const qs = params.toString();
-            return request(`/segments${qs ? `?${qs}` : ''}`);
+            return request(`/segments${rangeQuery(options)}`);
+        },
+        cycles(options) {
+            return request(`/cycles${rangeQuery(options)}`);
         },
         retag(data) {
             return request('/segments', payload('PATCH', data));
