@@ -226,6 +226,44 @@ describe('machineClient', function() {
         assert(fetchedUrl.includes('active=true'), 'should include active=true');
     });
 
+
+    it('fetches cycles with from and to query params', async function() {
+        let fetchedUrl;
+        const from = `2024-0${1 + Math.floor(Math.random() * 9)}-15T12:34:56.789Z`;
+        const to = `2024-1${Math.floor(Math.random() * 2)}-28T23:45:01.234Z`;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        await client.cycles({ from, to });
+        assert(
+            fetchedUrl.includes('/cycles?')
+            && fetchedUrl.includes(`from=${encodeURIComponent(from)}`)
+            && fetchedUrl.includes(`to=${encodeURIComponent(to)}`),
+            'cycles GET must include from and to query params'
+        );
+    });
+
+    it('returns cycles payload from GET response', async function() {
+        const payload = { items: [{ id: `цикл-${Math.random()}`, startedAt: '2024-03-01T00:00:00.000Z' }] };
+        const fakeFetch = async () => {return { ok: true, json: async () => {return payload} }};
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const result = await client.cycles({ from: 'now-1d', to: 'now' });
+        assert.strictEqual(result, payload, 'cycles must return response body');
+    });
+
+    it('fetches cycles without options', async function() {
+        let fetchedUrl;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        await client.cycles();
+        assert(fetchedUrl === 'http://localhost/api/machines/icht1/cycles', 'cycles without options must hit base path');
+    });
+
     it('fetches operations with kind and range query params', async function() {
         let fetchedUrl;
         const fakeFetch = async (url) => {
