@@ -97,6 +97,7 @@ Main entry (`import { … } from 'scada'`):
 | `clickhouseConnection`, `clickhouseSensor`, `pgMetricsSensor` | Metric storage |
 | `pgTimeline`, `pgAlerts`, `stateDataFromPool`, `stateDataFromMemory` | State ports |
 | `stompTimeline`, `stompAlerts`, `userDecisions` | STOMP messaging |
+| `machineOwners`, `ownerTimeline`, `httpTimeline` | Owner-routed timeline write (local STOMP or edge HTTP) |
 | `mqttMetrics`, `modbusMqtt`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
 
 Subpath exports:

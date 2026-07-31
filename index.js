@@ -32,6 +32,9 @@ export { metricsSinkFromPool as pgMetricsSink } from './src/infrastructure/persi
 export { pgMetricsSensor } from './src/infrastructure/persistence/metricsSensor.js';
 export { default as stompTimeline } from './src/infrastructure/messaging/stomp/timeline.js';
 export { default as stompTimelineSegments } from './src/infrastructure/messaging/stomp/stompTimelineSegments.js';
+export { default as machineOwners } from './src/infrastructure/messaging/ownership/machineOwners.js';
+export { default as httpTimeline } from './src/infrastructure/messaging/ownership/httpTimeline.js';
+export { default as ownerTimeline } from './src/infrastructure/messaging/ownership/ownerTimeline.js';
 export { default as stateDataFromPool } from './src/infrastructure/persistence/stateDataFromPool.js';
 export { default as stateDataFromMemory } from './src/infrastructure/persistence/stateDataFromMemory.js';
 export { default as stateDataFake } from './src/infrastructure/persistence/stateDataFromMemory.js';
