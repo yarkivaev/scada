@@ -3,7 +3,7 @@ import timelineOperator from '../../../../src/infrastructure/http/plant/timeline
 
 describe('timelineOperator anonymous clients', function () {
     it('uses the configured anonymousUsers map for a known client', async function () {
-        const label = 'Аноним_' + Math.floor(Math.random() * 9000 + 1000);
+        const label = `Аноним_${Math.floor(Math.random() * 9000 + 1000)}`;
         const gate = timelineOperator({
             defaultUser: 'hmi-kiosk',
             anonymousUsers: { monitoring: label }
@@ -13,17 +13,17 @@ describe('timelineOperator anonymous clients', function () {
     });
 
     it('keeps the configured default when client is unknown', async function () {
-        const fallback = 'legacy-' + Math.floor(Math.random() * 9000 + 1000);
+        const fallback = `legacy-${Math.floor(Math.random() * 9000 + 1000)}`;
         const gate = timelineOperator({
             defaultUser: fallback,
             anonymousUsers: { hmi: 'Анонимный пользователь HMI' }
         });
-        const audit = await gate.resolve({ client: 'tablet-' + Math.floor(Math.random() * 90 + 10) });
+        const audit = await gate.resolve({ client: `tablet-${Math.floor(Math.random() * 90 + 10)}` });
         assert.strictEqual(audit.displayName, fallback, 'unknown client overrode the configured default user');
     });
 
     it('falls back to defaultUser when anonymousUsers is omitted', async function () {
-        const fallback = 'default-' + Math.floor(Math.random() * 9000 + 1000);
+        const fallback = `default-${Math.floor(Math.random() * 9000 + 1000)}`;
         const gate = timelineOperator({ defaultUser: fallback });
         const audit = await gate.resolve({ client: 'hmi' });
         assert.strictEqual(audit.displayName, fallback, 'missing anonymousUsers did not use defaultUser');

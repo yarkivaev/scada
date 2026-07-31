@@ -14,6 +14,7 @@ import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js'
 import decisionRoute from '../infrastructure/http/plant/routes/decisionRoute.js';
 import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 import bindSilentStreams from './bindSilentStreams.js';
+import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
 
 function stompFromEnv(env) {
     return {
@@ -175,19 +176,6 @@ function siteExtraRoutes(catalog, extraRoutes) {
         const userExtra = extraRoutes ? extraRoutes(path, plant, clock) : [];
         return [...catalog.routes, ...userExtra];
     };
-}
-
-function timelineOperatorFromEnv(catalog, env, config) {
-    const defaultUser = env.HMI_OPERATOR_USER || 'hmi-kiosk';
-    const options = {
-        provider: catalog.provider,
-        requireOperator: env.REQUIRE_OPERATOR === 'true',
-        defaultUser
-    };
-    if (config && config.anonymousUsers) {
-        options.anonymousUsers = config.anonymousUsers;
-    }
-    return options;
 }
 
 /**

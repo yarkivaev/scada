@@ -18,7 +18,7 @@ function routeError(code, message, status) {
 function anonymousName(body, cfg) {
     const key = body && body.client;
     const map = cfg.anonymousUsers || {};
-    if (typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key)) {
+    if (typeof key === 'string' && Object.hasOwn(map, key)) {
         return map[key];
     }
     return cfg.defaultUser || 'hmi-kiosk';
