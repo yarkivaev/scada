@@ -177,13 +177,17 @@ function siteExtraRoutes(catalog, extraRoutes) {
     };
 }
 
-function timelineOperatorFromEnv(catalog, env) {
+function timelineOperatorFromEnv(catalog, env, config) {
     const defaultUser = env.HMI_OPERATOR_USER || 'hmi-kiosk';
-    return {
+    const options = {
         provider: catalog.provider,
         requireOperator: env.REQUIRE_OPERATOR === 'true',
         defaultUser
     };
+    if (config && config.anonymousUsers) {
+        options.anonymousUsers = config.anonymousUsers;
+    }
+    return options;
 }
 
 /**
@@ -227,7 +231,7 @@ export default async function siteServer(config) {
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
-        timelineOperator: timelineOperatorFromEnv(catalog, env)
+        timelineOperator: timelineOperatorFromEnv(catalog, env, config)
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }
