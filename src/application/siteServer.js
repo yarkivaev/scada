@@ -14,6 +14,7 @@ import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js'
 import decisionRoute from '../infrastructure/http/plant/routes/decisionRoute.js';
 import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 import bindSilentStreams from './bindSilentStreams.js';
+import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
 
 function stompFromEnv(env) {
     return {
@@ -177,15 +178,6 @@ function siteExtraRoutes(catalog, extraRoutes) {
     };
 }
 
-function timelineOperatorFromEnv(catalog, env) {
-    const defaultUser = env.HMI_OPERATOR_USER || 'hmi-kiosk';
-    return {
-        provider: catalog.provider,
-        requireOperator: env.REQUIRE_OPERATOR === 'true',
-        defaultUser
-    };
-}
-
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
@@ -227,7 +219,7 @@ export default async function siteServer(config) {
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
-        timelineOperator: timelineOperatorFromEnv(catalog, env)
+        timelineOperator: timelineOperatorFromEnv(catalog, env, config)
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }

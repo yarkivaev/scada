@@ -9,13 +9,32 @@ function routeError(code, message, status) {
 }
 
 /**
+ * Resolves anonymous display name from an optional client marker.
+ *
+ * @param {object} body - parsed JSON body with optional client
+ * @param {object} cfg - timelineOperator options with anonymousUsers and defaultUser
+ * @returns {string} display name for the decision audit row
+ */
+function anonymousName(body, cfg) {
+    const key = body && body.client;
+    const map = cfg.anonymousUsers || {};
+    if (typeof key === 'string' && Object.hasOwn(map, key)) {
+        return map[key];
+    }
+    return cfg.defaultUser || 'hmi-kiosk';
+}
+
+/**
  * Resolves operator audit context for timeline write routes.
  *
- * @param {object} options - provider, requireOperator, defaultUser
+ * @param {object} options - provider, requireOperator, defaultUser, anonymousUsers
  * @returns {object} gate with resolve(body) returning audit context
  *
  * @example
- *   const gate = timelineOperator({ provider, requireOperator: true, defaultUser: 'hmi-kiosk' });
+ *   const gate = timelineOperator({
+ *     provider, requireOperator: true, defaultUser: 'hmi-kiosk',
+ *     anonymousUsers: { hmi: 'Анонимный пользователь HMI' }
+ *   });
  *   const audit = await gate.resolve({ operatorId: 2 });
  */
 export default function timelineOperator(options) {
@@ -46,7 +65,7 @@ export default function timelineOperator(options) {
             }
             return {
                 id: undefined,
-                displayName: cfg.defaultUser || 'hmi-kiosk',
+                displayName: anonymousName(body, cfg),
                 decidedAt
             };
         },
