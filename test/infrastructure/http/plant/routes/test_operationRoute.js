@@ -47,15 +47,20 @@ function buildPlant(data, machineId) {
     };
 }
 
+function apiFor(p, kindSources) {
+    return plantApi('/api/v1', p, {
+        clock: virtualClock(() => {
+            return new Date();
+        }),
+        kindSources
+    });
+}
+
 describe('operationRoute', function() {
     it('returns empty items when machine is absent', async function() {
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, `missing-${Math.random()}`);
-        const api = plantApi('/api/v1', p, {
-            clock: virtualClock(() => {
-                return new Date();
-            })
-        });
+        const api = apiFor(p);
         const res = mockRes();
         await api.handle({
             method: 'GET',
@@ -85,11 +90,7 @@ describe('operationRoute', function() {
             key: `qc-${Math.random()}`,
             payload: {}
         });
-        const api = plantApi('/api/v1', p, {
-            clock: virtualClock(() => {
-                return new Date();
-            })
-        });
+        const api = apiFor(p);
         const res = mockRes();
         await api.handle({
             method: 'GET',
@@ -98,5 +99,87 @@ describe('operationRoute', function() {
         }, res);
         const body = JSON.parse(res.body);
         assert.strictEqual(body.items.length, 1, 'kind filter must exclude other kinds');
+    });
+
+    it('merges kinds from postgres and injectable source sorted by occurred_at', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p, wrapped } = buildPlant(data, machineId);
+        await wrapped.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'chem',
+            key: `chem-${Math.random()}`,
+            payload: { lot: 'β' }
+        });
+        const stamp = `temp-${Math.random()}`;
+        const kindSources = {
+            temp: {
+                list(id) {
+                    return Promise.resolve([
+                        {
+                            machine: id,
+                            occurred_at: new Date('2024-06-01T11:00:00.000Z'),
+                            kind: 'temp',
+                            key: `${stamp}-early`,
+                            payload: { temperature: 1483.5 }
+                        },
+                        {
+                            machine: id,
+                            occurred_at: new Date('2024-06-01T13:00:00.000Z'),
+                            kind: 'temp',
+                            key: `${stamp}-late`,
+                            payload: { temperature: 1550.25 }
+                        }
+                    ]);
+                }
+            }
+        };
+        const api = apiFor(p, kindSources);
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${machineId}/operations?kinds=chem,temp&from=2024-06-01T00:00:00.000Z&to=2024-06-02T00:00:00.000Z`,
+            headers: {}
+        }, res);
+        const body = JSON.parse(res.body);
+        assert.deepStrictEqual(
+            body.items.map((row) => {
+                return row.kind;
+            }),
+            ['temp', 'chem', 'temp'],
+            'merged kinds must sort by occurred_at ascending'
+        );
+    });
+
+    it('defaults requested kinds to injectable source keys when query omits kind filters', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const key = `temp-only-${Math.random()}`;
+        const kindSources = {
+            temp: {
+                list(id) {
+                    return Promise.resolve([
+                        {
+                            machine: id,
+                            occurred_at: new Date('2024-06-01T09:30:00.000Z'),
+                            kind: 'temp',
+                            key,
+                            payload: { temperature: 1510 }
+                        }
+                    ]);
+                }
+            }
+        };
+        const api = apiFor(p, kindSources);
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${machineId}/operations`,
+            headers: {}
+        }, res);
+        const body = JSON.parse(res.body);
+        assert.strictEqual(body.items[0].external_key, key, 'default kinds must use injectable source keys');
     });
 });

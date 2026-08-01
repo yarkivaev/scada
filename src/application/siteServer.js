@@ -181,11 +181,11 @@ function siteExtraRoutes(catalog, extraRoutes) {
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
- * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, streams, env
+ * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, kindSources, streams, env
  * @returns {Promise<object>} sink, plant, mqtt pipeline
  *
  * @example
- *   await siteServer({ plantFactory: ({ alerts, userDecisions }, sink) => edgePlant(machines, { metrics: sink.dataAccess.metrics, alerts, userDecisions }) });
+ *   await siteServer({ plantFactory: ({ alerts, userDecisions }, sink) => edgePlant(machines, { metrics: sink.dataAccess.metrics, alerts, userDecisions }), kindSources: { temp } });
  */
 export default async function siteServer(config) {
     const env = config.env || process.env;
@@ -219,7 +219,8 @@ export default async function siteServer(config) {
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
-        timelineOperator: timelineOperatorFromEnv(catalog, env, config)
+        timelineOperator: timelineOperatorFromEnv(catalog, env, config),
+        kindSources: config.kindSources || config.operationSources
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }
