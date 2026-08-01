@@ -13,8 +13,25 @@ function parseRange(query) {
     return range;
 }
 
+function resolveKinds(query) {
+    if (query.kinds) {
+        return query.kinds.split(',').map((token) => {
+            return token.trim();
+        }).filter((token) => {
+            return token.length > 0;
+        });
+    }
+    if (query.kind) {
+        return [query.kind];
+    }
+    return undefined;
+}
+
 /**
  * Operations REST routes for machine-scoped reads.
+ *
+ * Parses singular `kind` or CSV `kinds` and delegates merge to
+ * plant.operations.listForMachine (PG + injectable kindSources).
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
@@ -31,8 +48,11 @@ export default function operationRoute(basePath, plant) {
                 jsonResponse({ items: [] }).send(res);
                 return;
             }
-            const kind = query.kind || '';
-            const rows = await plant.operations.listForMachine(params.machineId, kind, parseRange(query));
+            const rows = await plant.operations.listForMachine(
+                params.machineId,
+                resolveKinds(query),
+                parseRange(query)
+            );
             jsonResponse({ items: rows.map(operationJson) }).send(res);
         })
     ];

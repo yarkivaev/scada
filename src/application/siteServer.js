@@ -181,16 +181,19 @@ function siteExtraRoutes(catalog, extraRoutes) {
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
- * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, streams, env
+ * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, kindSources, streams, env
  * @returns {Promise<object>} sink, plant, mqtt pipeline
  *
  * @example
- *   await siteServer({ plantFactory: ({ alerts, userDecisions }, sink) => edgePlant(machines, { metrics: sink.dataAccess.metrics, alerts, userDecisions }) });
+ *   await siteServer({ plantFactory: ({ alerts, userDecisions }, sink) => edgePlant(machines, { metrics: sink.dataAccess.metrics, alerts, userDecisions }), kindSources: { temp } });
  */
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
-    const ops = plantOperations(sink.dataAccess.operations);
+    const ops = plantOperations(
+        sink.dataAccess.operations,
+        config.kindSources || config.operationSources
+    );
     sink.dataAccess.operations = ops;
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,

@@ -69,6 +69,9 @@ async function initStomp(stomp, translations, requirePool) {
 /**
  * Generic HTTP plant server with optional STOMP alerts and user decisions.
  *
+ * Multi-kind operations come from plant.operations built with kindSources
+ * (e.g. plantOperations(persistence, { temp })).
+ *
  * @param {object} config - port, basePath, plantFactory, extraRoutes, translations, stomp, requirePool
  * @returns {Promise<object>} server, plant, api, segments
  *

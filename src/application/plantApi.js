@@ -16,7 +16,7 @@ import { routes } from '@yarkivaev/simple-server';
  * Composable plant HTTP API factory.
  *
  * @param {string} basePath - base URL path
- * @param {object} plant - plant domain object
+ * @param {object} plant - plant domain object with operations (optional kindSources at construction)
  * @param {object} [config] - clock, extraRoutes, requestTimeoutMs, heartbeat
  * @returns {object} routes with list() and handle()
  *
