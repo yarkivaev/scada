@@ -16,12 +16,12 @@ import { routes } from '@yarkivaev/simple-server';
  * Composable plant HTTP API factory.
  *
  * @param {string} basePath - base URL path
- * @param {object} plant - plant domain object
- * @param {object} [config] - clock, extraRoutes, requestTimeoutMs, heartbeat, kindSources
+ * @param {object} plant - plant domain object with operations (optional kindSources at construction)
+ * @param {object} [config] - clock, extraRoutes, requestTimeoutMs, heartbeat
  * @returns {object} routes with list() and handle()
  *
  * @example
- *   const api = plantApi('/api/v1', plant, { kindSources: { temp: temperaturePort } });
+ *   const api = plantApi('/api/v1', plant, { extraRoutes: meltingRoute('/api/v1', plant) });
  */
 export default function plantApi(basePath, plant, config) {
     const opts = config || {};
@@ -30,7 +30,6 @@ export default function plantApi(basePath, plant, config) {
         return new Date();
     });
     const extra = opts.extraRoutes || [];
-    const kindSources = opts.kindSources || opts.operationSources;
     const routeList = [
         ...catalogRoute(basePath, opts.tagCatalog),
         ...machineRoute(basePath, plant),
@@ -40,7 +39,7 @@ export default function plantApi(basePath, plant, config) {
         ...alertRoute(basePath, plant),
         ...timelineRoute(basePath, plant, opts.timelineOperator),
         ...timelineStream(basePath, plant, time),
-        ...operationRoute(basePath, plant, kindSources),
+        ...operationRoute(basePath, plant),
         ...operationStream(basePath, plant, time),
         ...heartbeatStream(basePath, time, opts.heartbeat),
         ...(time.jump ? simulationRoute(basePath, time) : []),

@@ -69,11 +69,14 @@ async function initStomp(stomp, translations, requirePool) {
 /**
  * Generic HTTP plant server with optional STOMP alerts and user decisions.
  *
- * @param {object} config - port, basePath, plantFactory, extraRoutes, kindSources, translations, stomp, requirePool
+ * Multi-kind operations come from plant.operations built with kindSources
+ * (e.g. plantOperations(persistence, { temp })).
+ *
+ * @param {object} config - port, basePath, plantFactory, extraRoutes, translations, stomp, requirePool
  * @returns {Promise<object>} server, plant, api, segments
  *
  * @example
- *   await plantServer({ port: 3000, basePath: '/api/v1', plantFactory, kindSources: { temp } });
+ *   await plantServer({ port: 3000, basePath: '/api/v1', plantFactory, extraRoutes });
  */
 export default async function plantServer(config) {
     const { alerts, userDecisions: decisions } = await initStomp(config.stomp, config.translations, config.requirePool);
@@ -90,8 +93,7 @@ export default async function plantServer(config) {
         heartbeat: config.heartbeat || 1000,
         requestTimeoutMs,
         extraRoutes: extra,
-        timelineOperator: config.timelineOperator,
-        kindSources: config.kindSources || config.operationSources
+        timelineOperator: config.timelineOperator
     });
     const server = http.createServer((req, res) => {
         return api.handle(req, res);

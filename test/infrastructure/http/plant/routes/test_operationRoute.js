@@ -22,8 +22,8 @@ function mockRes() {
     };
 }
 
-function buildPlant(data, machineId) {
-    const wrapped = plantOperations(data.operations);
+function buildPlant(data, machineId, kindSources) {
+    const wrapped = plantOperations(data.operations, kindSources);
     const history = alerts(alert, acknowledgedAlert);
     const item = machine(machineId, {
         sensors: {},
@@ -47,12 +47,11 @@ function buildPlant(data, machineId) {
     };
 }
 
-function apiFor(p, kindSources) {
+function apiFor(p) {
     return plantApi('/api/v1', p, {
         clock: virtualClock(() => {
             return new Date();
-        }),
-        kindSources
+        })
     });
 }
 
@@ -104,14 +103,6 @@ describe('operationRoute', function() {
     it('merges kinds from postgres and injectable source sorted by occurred_at', async function() {
         const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
-        const { plant: p, wrapped } = buildPlant(data, machineId);
-        await wrapped.upsert({
-            machine: machineId,
-            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
-            kind: 'chem',
-            key: `chem-${Math.random()}`,
-            payload: { lot: 'β' }
-        });
         const stamp = `temp-${Math.random()}`;
         const kindSources = {
             temp: {
@@ -135,7 +126,15 @@ describe('operationRoute', function() {
                 }
             }
         };
-        const api = apiFor(p, kindSources);
+        const { plant: p, wrapped } = buildPlant(data, machineId, kindSources);
+        await wrapped.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'chem',
+            key: `chem-${Math.random()}`,
+            payload: { lot: 'β' }
+        });
+        const api = apiFor(p);
         const res = mockRes();
         await api.handle({
             method: 'GET',
@@ -155,7 +154,6 @@ describe('operationRoute', function() {
     it('defaults requested kinds to injectable source keys when query omits kind filters', async function() {
         const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
-        const { plant: p } = buildPlant(data, machineId);
         const key = `temp-only-${Math.random()}`;
         const kindSources = {
             temp: {
@@ -172,7 +170,8 @@ describe('operationRoute', function() {
                 }
             }
         };
-        const api = apiFor(p, kindSources);
+        const { plant: p } = buildPlant(data, machineId, kindSources);
+        const api = apiFor(p);
         const res = mockRes();
         await api.handle({
             method: 'GET',

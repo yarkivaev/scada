@@ -190,7 +190,10 @@ function siteExtraRoutes(catalog, extraRoutes) {
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
-    const ops = plantOperations(sink.dataAccess.operations);
+    const ops = plantOperations(
+        sink.dataAccess.operations,
+        config.kindSources || config.operationSources
+    );
     sink.dataAccess.operations = ops;
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
@@ -219,8 +222,7 @@ export default async function siteServer(config) {
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
-        timelineOperator: timelineOperatorFromEnv(catalog, env, config),
-        kindSources: config.kindSources || config.operationSources
+        timelineOperator: timelineOperatorFromEnv(catalog, env, config)
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }
