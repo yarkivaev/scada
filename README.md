@@ -74,7 +74,7 @@ plantApi → REST + SSE → frontend / scada/client
 **Supervisor-sink** (write path):
 
 ```
-STOMP (/exchange/scada.segments|alerts|user_decisions)
+STOMP (`/queue/scada.segments.ingest`, `/exchange/scada.alerts`, `/exchange/scada.user_decisions`)
   → ingest/codecs → domain/segment → ingest/sinks → PostgreSQL
 edgeApi (:8081) ← metrics batch, checkpoints, retention (edge profile)
 ```
