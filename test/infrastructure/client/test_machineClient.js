@@ -90,40 +90,6 @@ describe('machineClient', function() {
         assert(method === 'PATCH' && JSON.parse(body).acknowledged === true);
     });
 
-    it('fetches meltings with cursor params', async function() {
-        let fetchedUrl;
-        const fakeFetch = async (url) => {
-            fetchedUrl = url;
-            return { ok: true, json: async () => {return { items: [] }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.meltings({ after: '2024-01-01', before: '2024-02-01', limit: 5 });
-        assert(fetchedUrl.includes('after=') && fetchedUrl.includes('limit=5'));
-    });
-
-    it('fetches single melting by id', async function() {
-        let fetchedUrl;
-        const fakeFetch = async (url) => {
-            fetchedUrl = url;
-            return { ok: true, json: async () => {return { id: 5 }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.melting(5);
-        assert(fetchedUrl.includes('/meltings/5'));
-    });
-
-    it('creates melting stream connection', function() {
-        let createdUrl;
-        const FakeEventSource = function(url) {
-            createdUrl = url;
-            this.addEventListener = () => {};
-            this.close = () => {};
-        };
-        const client = machineClient('http://localhost/api', 'icht1', () => {}, FakeEventSource);
-        client.meltingStream();
-        assert(createdUrl.includes('/meltings/stream'));
-    });
-
     it('throws error on failed request', async function() {
         const fakeFetch = async () => {return {
             ok: false,
@@ -138,94 +104,6 @@ describe('machineClient', function() {
         }
         assert(thrown.error.code === 'NOT_FOUND');
     });
-
-    it('starts melting with POST', async function() {
-        let method;
-        let fetchedUrl;
-        const fakeFetch = async (url, options) => {
-            fetchedUrl = url;
-            method = options.method;
-            return { ok: true, json: async () => {return { id: 'm1' }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.startMelting();
-        assert(method === 'POST' && fetchedUrl.includes('/meltings/start'));
-    });
-
-    it('stops melting with POST', async function() {
-        let method;
-        let fetchedUrl;
-        const fakeFetch = async (url, options) => {
-            fetchedUrl = url;
-            method = options.method;
-            return { ok: true, json: async () => {return { id: 'm1' }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.stopMelting('m1');
-        assert(method === 'POST' && fetchedUrl.includes('/meltings/m1/stop'));
-    });
-
-    it('fetches machine weight', async function() {
-        let fetchedUrl;
-        const fakeFetch = async (url) => {
-            fetchedUrl = url;
-            return { ok: true, json: async () => {return { amount: 150 }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        const result = await client.weight();
-        assert(fetchedUrl.includes('/weight') && result.amount === 150);
-    });
-
-    it('sets machine weight with PUT', async function() {
-        let method;
-        let body;
-        const fakeFetch = async (url, options) => {
-            method = options.method;
-            body = options.body;
-            return { ok: true, json: async () => {return { amount: 200 }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.setWeight(200);
-        assert(method === 'PUT' && JSON.parse(body).amount === 200);
-    });
-
-    it('loads material with POST', async function() {
-        let method;
-        let body;
-        const fakeFetch = async (url, options) => {
-            method = options.method;
-            body = options.body;
-            return { ok: true, json: async () => {return { amount: 50 }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.load(50);
-        assert(method === 'POST' && JSON.parse(body).amount === 50);
-    });
-
-    it('dispenses material with POST', async function() {
-        let method;
-        let body;
-        const fakeFetch = async (url, options) => {
-            method = options.method;
-            body = options.body;
-            return { ok: true, json: async () => {return { amount: 30 }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.dispense(30);
-        assert(method === 'POST' && JSON.parse(body).amount === 30);
-    });
-
-    it('fetches meltings with active filter', async function() {
-        let fetchedUrl;
-        const fakeFetch = async (url) => {
-            fetchedUrl = url;
-            return { ok: true, json: async () => {return { items: [] }} };
-        };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
-        await client.meltings({ active: true });
-        assert(fetchedUrl.includes('active=true'), 'should include active=true');
-    });
-
 
     it('fetches cycles with from and to query params', async function() {
         let fetchedUrl;
@@ -348,5 +226,134 @@ describe('machineClient', function() {
         });
         listeners.operation_updated({ data: '{"key":"β"}' });
         assert(received.key === 'β', 'operation_updated event must invoke stream callback');
+    });
+
+    it('posts createOperation with kind and payload', async function() {
+        let method;
+        let fetchedUrl;
+        let body;
+        const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
+        const payload = { action: 'load', unit: 'кг', amount: 3 + Math.random() };
+        const fakeFetch = async (url, options) => {
+            fetchedUrl = url;
+            method = options.method;
+            body = options.body;
+            return { ok: true, json: async () => {return { external_key: `${kind}:x` }} };
+        };
+        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        await client.createOperation({ kind, payload });
+        const parsed = JSON.parse(body);
+        assert(
+            method === 'POST'
+            && fetchedUrl.includes('/operations')
+            && parsed.kind === kind
+            && parsed.payload.unit === payload.unit,
+            'createOperation cannot skip POST body fields'
+        );
+    });
+
+    it('posts createOperation with occurred_at and key when provided', async function() {
+        let body;
+        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const occurredAt = `2024-0${1 + Math.floor(Math.random() * 9)}-15T12:34:56.789Z`;
+        const fakeFetch = async (url, options) => {
+            body = options.body;
+            return { ok: true, json: async () => {return { external_key: key }} };
+        };
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        await client.createOperation({
+            kind: 'chem',
+            payload: { lot: 'η' },
+            occurredAt,
+            key
+        });
+        const parsed = JSON.parse(body);
+        assert.deepStrictEqual(
+            { occurred_at: parsed.occurred_at, key: parsed.key },
+            { occurred_at: occurredAt, key },
+            'createOperation cannot drop optional occurredAt or key'
+        );
+    });
+
+    it('puts updateOperation with payload and optional fields', async function() {
+        let method;
+        let fetchedUrl;
+        let body;
+        const key = `прав-${Math.random().toString(36).slice(2)}`;
+        const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
+        const occurredAt = `2024-0${1 + Math.floor(Math.random() * 9)}-20T08:15:00.000Z`;
+        const payload = { action: 'load', unit: 'кг', amount: 7 + Math.random() };
+        const fakeFetch = async (url, options) => {
+            fetchedUrl = url;
+            method = options.method;
+            body = options.body;
+            return { ok: true, json: async () => {return { external_key: key }} };
+        };
+        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        await client.updateOperation(key, { kind, payload, occurredAt });
+        const parsed = JSON.parse(body);
+        assert(
+            method === 'PUT'
+            && fetchedUrl.includes(`/operations/${encodeURIComponent(key)}`)
+            && parsed.kind === kind
+            && parsed.occurred_at === occurredAt
+            && parsed.payload.unit === payload.unit,
+            'updateOperation cannot skip PUT body fields'
+        );
+    });
+
+    it('deletes via deleteOperation by key', async function() {
+        let method;
+        let fetchedUrl;
+        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const fakeFetch = async (url, options) => {
+            fetchedUrl = url;
+            method = options.method;
+            return { ok: true, json: async () => {return {}} };
+        };
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        await client.deleteOperation(key);
+        assert(
+            method === 'DELETE' && fetchedUrl.includes(`/operations/${encodeURIComponent(key)}`),
+            'deleteOperation cannot skip DELETE by key'
+        );
+    });
+
+    it('notifies callback on operation_deleted SSE event', function() {
+        const listeners = {};
+        const FakeEventSource = function() {
+            this.addEventListener = (event, fn) => {
+                listeners[event] = fn;
+            };
+            this.close = () => {};
+        };
+        let received;
+        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        client.operationsStream((payload) => {
+            received = payload;
+        });
+        listeners.operation_deleted({ data: '{"key":"γ"}' });
+        assert(received.key === 'γ', 'operation_deleted event must invoke stream callback');
+    });
+
+    it('does not expose removed weight and meltings methods', function() {
+        const client = machineClient('http://localhost/api', 'icht1', () => {}, function() {});
+        assert.strictEqual(
+            [
+                client.weight,
+                client.setWeight,
+                client.load,
+                client.dispense,
+                client.meltings,
+                client.melting,
+                client.meltingStream,
+                client.startMelting,
+                client.stopMelting
+            ].every((value) => {
+                return value === undefined;
+            }),
+            true,
+            'machineClient cannot keep removed weight or meltings methods'
+        );
     });
 });

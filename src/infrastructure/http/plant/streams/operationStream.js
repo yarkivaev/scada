@@ -2,7 +2,7 @@ import operationJson from '../json/operationJson.js';
 import { route, sseResponse } from '@yarkivaev/simple-server';
 
 /**
- * Operations SSE route for plant-wide create and update events.
+ * Operations SSE route for plant-wide create, update, and delete events.
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
@@ -26,6 +26,8 @@ export default function operationStream(basePath, plant, clock) {
                     sse.emit('operation_created', operationJson(event.operation));
                 } else if (event.type === 'updated' && event.operation) {
                     sse.emit('operation_updated', operationJson(event.operation));
+                } else if (event.type === 'deleted' && event.operation) {
+                    sse.emit('operation_deleted', operationJson(event.operation));
                 }
             });
             const heartbeat = setInterval(() => {

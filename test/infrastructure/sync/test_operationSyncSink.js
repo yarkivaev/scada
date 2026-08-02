@@ -21,4 +21,35 @@ describe('operationSyncSink', function() {
         });
         assert.strictEqual(upserts[0].key, key, 'sink must pass storage key to upsert');
     });
+
+    it('forwards deleted record to operations remove', async function() {
+        const removals = [];
+        const operations = {
+            upsert() {
+                return Promise.resolve();
+            },
+            remove(machineId, key) {
+                removals.push({ machineId, key });
+                return Promise.resolve({
+                    machine: machineId,
+                    key,
+                    kind: 'bath',
+                    occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+                    payload: {}
+                });
+            }
+        };
+        const sink = operationSyncSink(operations);
+        const key = `rm-${Math.random().toString(36).slice(2)}`;
+        await sink.remove({
+            machine: 'icht3',
+            occurred_at: new Date('2024-06-01T11:00:00.000Z'),
+            kind: 'bath',
+            key
+        });
+        assert.deepStrictEqual(removals[0], {
+            machineId: 'icht3',
+            key
+        }, 'sink remove must call operations.remove with machine and key');
+    });
 });

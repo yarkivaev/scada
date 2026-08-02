@@ -67,3 +67,34 @@ describe('operationCodec occurred_at', function() {
         );
     });
 });
+
+describe('operationCodec deleted', function() {
+    it('routes type deleted to collector remove with storage key', async function() {
+        const removed = [];
+        const collector = {
+            accept() {
+                return Promise.resolve();
+            },
+            remove(record) {
+                removed.push(record);
+                return Promise.resolve();
+            }
+        };
+        const codec = operationCodec(collector);
+        const key = `gone-${Math.random().toString(36).slice(2)}`;
+        const body = JSON.stringify({
+            type: 'deleted',
+            machine: 'icht2',
+            occurred_at: '2024-06-01T14:00:00.000Z',
+            kind: 'bath',
+            external_key: key
+        });
+        await codec.accept(Buffer.from(body));
+        assert.deepStrictEqual(removed[0], {
+            machine: 'icht2',
+            occurred_at: new Date('2024-06-01T14:00:00.000Z'),
+            kind: 'bath',
+            key
+        }, 'deleted event must call remove with mapped key');
+    });
+});
