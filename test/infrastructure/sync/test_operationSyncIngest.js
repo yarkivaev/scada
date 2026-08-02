@@ -75,3 +75,39 @@ describe('operationSyncConsumer idempotency', function() {
         assert.strictEqual(store.operations.length, 1, 'duplicate event must not create second row');
     });
 });
+
+describe('operationSyncConsumer delete', function() {
+    it('acceptOperationDeliver removes row for type deleted', async function() {
+        const removals = [];
+        const operations = {
+            upsert() {
+                return Promise.resolve();
+            },
+            remove(machineId, key) {
+                removals.push({ machineId, key });
+                return Promise.resolve({
+                    machine: machineId,
+                    key,
+                    kind: 'bath',
+                    occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+                    payload: {}
+                });
+            }
+        };
+        const sink = operationSyncSink(operations);
+        const codec = operationCodec(sink);
+        const key = `del-${Math.random().toString(36).slice(2)}`;
+        const body = JSON.stringify({
+            type: 'deleted',
+            machine: 'icht1',
+            occurred_at: '2024-06-01T10:00:00.000Z',
+            kind: 'bath',
+            external_key: key
+        });
+        await acceptOperationDeliver(codec, Buffer.from(body));
+        assert.deepStrictEqual(removals[0], {
+            machineId: 'icht1',
+            key
+        }, 'deleted deliver must call operations.remove');
+    });
+});
