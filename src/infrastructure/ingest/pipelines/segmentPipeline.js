@@ -15,11 +15,13 @@ export const segmentColumns = ['machine', 'name', 'start_time', 'end_time', 'dur
 export const segmentConflict = ['machine', 'start_time'];
 export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'resolved'];
+export const segmentsIngestDestination = '/queue/scada.segments.ingest';
 
 export { default as segmentDispatch } from '../../../domain/segment/dispatch.js';
 
 /**
  * Pipeline for streaming STOMP segment data to PostgreSQL segments table.
+ * Subscribes to the durable ingest queue so shovel traffic survives consumer gaps.
  *
  * @param {string} stomp - STOMP broker URL
  * @param {string} postgres - PostgreSQL connection URL
@@ -36,13 +38,15 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const closer = closeOrphanOpen(pool);
     const dispatch = segmentDispatch(segmentSink, retag, splitSink, closer);
     const codec = segmentCodec(dispatch);
-    const source = stompSource(stomp, '/exchange/scada.segments', codec,
+    const destination = config.segmentsDestination || segmentsIngestDestination;
+    const source = stompSource(stomp, destination, codec,
         { login: config.login, passcode: config.passcode, host: config.host });
     const window = config.segmentWindow || 15;
     const budget = silenceBudget(window);
     const pollMs = (config.poll || 5) * 1000;
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, { intervalMs: pollMs });
     return {
+        destination,
         start() {
             source.start();
             void silence.start();

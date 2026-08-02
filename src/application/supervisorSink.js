@@ -1,4 +1,6 @@
-import segmentPipeline from '../infrastructure/ingest/pipelines/segmentPipeline.js';
+import segmentPipeline, {
+    segmentsIngestDestination
+} from '../infrastructure/ingest/pipelines/segmentPipeline.js';
 import decisionPipeline from '../infrastructure/ingest/pipelines/decisionPipeline.js';
 import alertPipeline from '../infrastructure/ingest/pipelines/alertPipeline.js';
 import migrate, { migratePrivileged } from '../infrastructure/ingest/db/migrate.js';
@@ -39,6 +41,8 @@ export function readDeploymentConfig(env) {
             timeout: parseInt(env.CIRCUIT_TIMEOUT || '60', 10),
             poll: parseInt(env.POLL_INTERVAL || '5', 10),
             segmentWindow: parseInt(env.SEGMENT_WINDOW_SECONDS || '15', 10),
+            segmentsDestination: env.SEGMENTS_STOMP_DESTINATION ||
+                segmentsIngestDestination,
             login: env.STOMP_LOGIN || 'guest',
             passcode: env.STOMP_PASSCODE || 'guest',
             host: env.STOMP_HOST || '/'

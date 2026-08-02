@@ -2,6 +2,7 @@ import assert from 'assert';
 import {
     segmentConflict,
     segmentUpdateColumns,
+    segmentsIngestDestination,
     splitUpdateColumns
 } from '../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js';
 
@@ -72,6 +73,14 @@ describe('segmentPipeline upsert configuration', function() {
         assert.ok(
             splitUpdateColumns.includes('tags'),
             'split UPSERT must write operator-supplied sub-segment tags'
+        );
+    });
+
+    it('subscribes to the durable segments ingest queue by default', function() {
+        assert.strictEqual(
+            segmentsIngestDestination,
+            '/queue/scada.segments.ingest',
+            'segment ingest must not use an ephemeral exchange subscription'
         );
     });
 });
