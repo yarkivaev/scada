@@ -35,6 +35,22 @@ function reject(code, message, status) {
     return err;
 }
 
+function isMissing(err) {
+    return typeof err.message === 'string' && err.message.includes('not found for machine');
+}
+
+function sendFailure(res, err) {
+    if (err.routeCode && err.routeStatus) {
+        errorResponse(err.routeCode, err.message, err.routeStatus).send(res);
+        return;
+    }
+    if (isMissing(err)) {
+        errorResponse('NOT_FOUND', err.message, 404).send(res);
+        return;
+    }
+    sendRouteError(res, err);
+}
+
 function draftFromBody(machineId, parsed) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw reject('BAD_REQUEST', 'operation body must be a JSON object', 400);
@@ -64,10 +80,43 @@ function draftFromBody(machineId, parsed) {
     };
 }
 
-async function createOperation(plant, machineId, req, res) {
+function draftFromUpdate(machineId, key, existing, parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw reject('BAD_REQUEST', 'operation body must be a JSON object', 400);
+    }
+    if (parsed.payload === undefined) {
+        throw reject('BAD_REQUEST', 'payload is required', 400);
+    }
+    const kind = parsed.kind === undefined ? existing.kind : parsed.kind;
+    if (typeof kind !== 'string' || kind.length === 0) {
+        throw reject('BAD_REQUEST', 'kind must be a non-empty string', 400);
+    }
+    const occurred = parsed.occurred_at === undefined
+        ? new Date(existing.occurred_at)
+        : new Date(parsed.occurred_at);
+    if (Number.isNaN(occurred.getTime())) {
+        throw reject('BAD_REQUEST', 'occurred_at must be a valid timestamp', 400);
+    }
+    return {
+        machine: machineId,
+        kind,
+        key,
+        occurred_at: occurred,
+        payload: parsed.payload
+    };
+}
+
+function machineMissing(plant, machineId, res) {
     const result = machineInPlant(plant, machineId);
     if (!result || !plant.operations) {
         errorResponse('NOT_FOUND', `Machine '${machineId}' not found`, 404).send(res);
+        return true;
+    }
+    return false;
+}
+
+async function createOperation(plant, machineId, req, res) {
+    if (machineMissing(plant, machineId, res)) {
         return;
     }
     try {
@@ -75,11 +124,33 @@ async function createOperation(plant, machineId, req, res) {
         await plant.operations.upsert(item);
         jsonResponse(operationJson(item)).send(res);
     } catch (err) {
-        if (err.routeCode && err.routeStatus) {
-            errorResponse(err.routeCode, err.message, err.routeStatus).send(res);
-            return;
-        }
-        sendRouteError(res, err);
+        sendFailure(res, err);
+    }
+}
+
+async function updateOperation(plant, machineId, key, req, res) {
+    if (machineMissing(plant, machineId, res)) {
+        return;
+    }
+    try {
+        const existing = await plant.operations.get(machineId, key);
+        const item = draftFromUpdate(machineId, key, existing, JSON.parse(await readBody(req)));
+        await plant.operations.upsert(item);
+        jsonResponse(operationJson(item)).send(res);
+    } catch (err) {
+        sendFailure(res, err);
+    }
+}
+
+async function deleteOperation(plant, machineId, key, res) {
+    if (machineMissing(plant, machineId, res)) {
+        return;
+    }
+    try {
+        const item = await plant.operations.remove(machineId, key);
+        jsonResponse(operationJson(item)).send(res);
+    } catch (err) {
+        sendFailure(res, err);
     }
 }
 
@@ -89,6 +160,7 @@ async function createOperation(plant, machineId, req, res) {
  * Parses singular `kind` or CSV `kinds` and delegates merge to
  * plant.operations.listForMachine (PG + injectable kindSources).
  * POST upserts via plant.operations.upsert with generated key when omitted.
+ * PUT updates an existing key; DELETE removes by machine-scoped key.
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
@@ -114,6 +186,12 @@ export default function operationRoute(basePath, plant) {
         }),
         route('POST', `${basePath}/machines/:machineId/operations`, async (req, res, params) => {
             await createOperation(plant, params.machineId, req, res);
+        }),
+        route('PUT', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
+            await updateOperation(plant, params.machineId, decodeURIComponent(params.key), req, res);
+        }),
+        route('DELETE', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
+            await deleteOperation(plant, params.machineId, decodeURIComponent(params.key), res);
         })
     ];
 }

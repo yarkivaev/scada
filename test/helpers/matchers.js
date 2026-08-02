@@ -69,3 +69,31 @@ export function hasOperationCreatedOnOpenStream() {
         };
     };
 }
+
+/**
+ * Matcher for SSE text after operations remove on an open stream.
+ *
+ * @returns {function} matcher expecting heartbeat and operation_deleted events
+ *
+ * @example
+ *   assertThat(text, hasOperationDeletedOnOpenStream());
+ */
+export function hasOperationDeletedOnOpenStream() {
+    return (sseText) => {
+        const open = sseText.includes('event: heartbeat\n');
+        const deleted = sseText.includes('event: operation_deleted\n');
+        if (open && deleted) {
+            return { pass: true };
+        }
+        if (!open) {
+            return {
+                pass: false,
+                message: 'operation stream did not emit heartbeat before remove'
+            };
+        }
+        return {
+            pass: false,
+            message: 'open operation stream did not emit operation_deleted after remove'
+        };
+    };
+}

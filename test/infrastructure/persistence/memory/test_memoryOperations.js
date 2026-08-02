@@ -47,3 +47,81 @@ describe('memoryOperations listForMachine', function() {
         assert.strictEqual(rows.length, 1, 'list must exclude other machines');
     });
 });
+
+describe('memoryOperations get', function() {
+    it('returns row scoped to machine and key', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const row = {
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'chem',
+            key,
+            payload: { lot: 'α' }
+        };
+        store.operations.push(row, {
+            ...row,
+            machine: `other-${Math.random()}`,
+            key: `alien-${Math.random()}`
+        });
+        const found = await port.get(machineId, key);
+        assert.strictEqual(found.key, key, 'get cannot miss existing machine-scoped key');
+    });
+
+    it('rejects when key is absent for machine', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        await assert.rejects(
+            () => {
+                return port.get(machineId, `missing-${Math.random()}`);
+            },
+            (err) => {
+                return err instanceof Error;
+            },
+            'get cannot succeed for unknown key'
+        );
+    });
+});
+
+describe('memoryOperations remove', function() {
+    it('deletes row scoped to machine and key', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        store.operations.push({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'bath',
+            key,
+            payload: { action: 'load' }
+        });
+        await port.remove(machineId, key);
+        assert.strictEqual(store.operations.length, 0, 'remove cannot leave deleted row');
+    });
+
+    it('rejects when key belongs to another machine', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const key = `чужой-${Math.random().toString(36).slice(2)}`;
+        store.operations.push({
+            machine: `owner-${Math.random()}`,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'chem',
+            key,
+            payload: {}
+        });
+        await assert.rejects(
+            () => {
+                return port.remove(`other-${Math.random()}`, key);
+            },
+            (err) => {
+                return err instanceof Error;
+            },
+            'remove cannot delete key for wrong machine'
+        );
+    });
+});

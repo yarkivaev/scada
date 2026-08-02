@@ -25,6 +25,30 @@ describe('operations upsert', function() {
     });
 });
 
+describe('operations remove', function() {
+    it('emits deleted with removed operation', async function() {
+        const store = { operations: [] };
+        const persistence = operationStateMemory(store);
+        const bus = pubsub();
+        const events = [];
+        bus.stream((event) => {
+            events.push(event);
+        });
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        await persistence.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'bath',
+            key,
+            payload: { action: 'load', unit: 'кг' }
+        });
+        const ops = operations(persistence, bus);
+        await ops.remove(machineId, key);
+        assert.strictEqual(events[0].type, 'deleted', 'remove cannot skip deleted bus event');
+    });
+});
+
 describe('operations listForMachine', function() {
     it('merges persistence and injectable kind sources sorted by occurred_at', async function() {
         const store = { operations: [] };
