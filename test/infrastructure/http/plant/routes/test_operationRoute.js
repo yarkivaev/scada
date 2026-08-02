@@ -22,6 +22,28 @@ function mockRes() {
     };
 }
 
+function mockReq(bodyText, meta) {
+    const listeners = {};
+    const req = {
+        method: meta.method,
+        url: meta.url,
+        headers: meta.headers || {},
+        on(event, fn) {
+            listeners[event] = fn;
+            if (listeners.end) {
+                queueMicrotask(() => {
+                    if (listeners.data) {
+                        listeners.data(Buffer.from(bodyText));
+                    }
+                    listeners.end();
+                });
+            }
+            return req;
+        }
+    };
+    return req;
+}
+
 function buildPlant(data, machineId, kindSources) {
     const wrapped = plantOperations(data.operations, kindSources);
     const history = alerts(alert, acknowledgedAlert);
@@ -180,5 +202,177 @@ describe('operationRoute', function() {
         }, res);
         const body = JSON.parse(res.body);
         assert.strictEqual(body.items[0].external_key, key, 'default kinds must use injectable source keys');
+    });
+
+    it('creates operation via POST and returns external_key from body key', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const kind = `chem-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind,
+                key,
+                payload: { lot: 'αβγ', amount: 12.5 + Math.random() }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        const body = JSON.parse(res.body);
+        assert.strictEqual(body.external_key, key, 'POST must not drop caller-supplied operation key');
+    });
+
+    it('lists POST-created operation on subsequent GET', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `list-${Math.random().toString(36).slice(2)}`;
+        const kind = `qc-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const write = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind,
+                key,
+                occurred_at: '2024-06-01T12:00:00.000Z',
+                payload: { note: 'загрузка' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            write
+        );
+        const read = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${machineId}/operations?kind=${kind}&from=2024-06-01T00:00:00.000Z&to=2024-06-02T00:00:00.000Z`,
+            headers: {}
+        }, read);
+        const body = JSON.parse(read.body);
+        assert.strictEqual(body.items[0].external_key, key, 'GET list cannot miss operation created by POST');
+    });
+
+    it('generates key when POST omits key', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind,
+                payload: { action: 'load', unit: 'кг' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        const body = JSON.parse(res.body);
+        assert(
+            typeof body.external_key === 'string'
+            && body.external_key.includes(kind)
+            && body.external_key.includes(machineId),
+            'generated key cannot omit kind or machine id'
+        );
+    });
+
+    it('returns 404 when POST targets unknown machine', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const missing = `missing-${Math.random().toString(36).slice(2)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'chem',
+                payload: { lot: 'δ' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${missing}/operations`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 404, 'unknown machine POST cannot succeed');
+    });
+
+    it('returns 404 when plant has no operations port', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const history = alerts(alert, acknowledgedAlert);
+        const item = machine(machineId, {
+            sensors: {},
+            alerts: history,
+            timeline: {
+                list: async () => {
+                    return [];
+                },
+                pending: async () => {
+                    return [];
+                },
+                stream: () => {
+                    return { cancel() {} };
+                }
+            }
+        });
+        const area = shop('area', initialized({ [machineId]: item }, Object.values), history);
+        const p = plant(initialized({ area }, Object.values));
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'chem',
+                payload: { lot: 'ε' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 404, 'POST without operations port cannot succeed');
+    });
+
+    it('returns 400 when POST omits kind', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                payload: { lot: 'ζ' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        const body = JSON.parse(res.body);
+        assert.strictEqual(body.error.code, 'BAD_REQUEST', 'POST without kind cannot be accepted');
+    });
+
+    it('returns 400 when POST omits payload', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: `chem-${Math.random()}`
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        const body = JSON.parse(res.body);
+        assert.strictEqual(body.error.code, 'BAD_REQUEST', 'POST without payload cannot be accepted');
     });
 });

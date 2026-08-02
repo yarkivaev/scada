@@ -17,21 +17,6 @@ function payload(method, data) {
 }
 
 /**
- * Client for single machine endpoints.
- * Returns object with methods for machine operations.
- *
- * @param {string} baseUrl - API base URL
- * @param {string} machineId - machine identifier
- * @param {function} fetcher - fetch function
- * @param {function} eventSource - EventSource constructor
- * @param {object} [logger] - optional logger with error(tag, detail)
- * @returns {object} client with info, measurements, alerts, meltings, segments, cycles, operations methods
- *
- * @example
- *   const machine = machineClient(baseUrl, 'icht1', fetch, EventSource, logger);
- *   const info = await machine.info();
- */
-/**
  * Builds a from/to query suffix for range GETs.
  *
  * @param {object} [options] - optional from/to timestamps
@@ -49,6 +34,22 @@ function rangeQuery(options) {
     return qs ? `?${qs}` : '';
 }
 
+/**
+ * Client for single machine endpoints.
+ * Returns object with methods for machine operations.
+ *
+ * @param {string} baseUrl - API base URL
+ * @param {string} machineId - machine identifier
+ * @param {function} fetcher - fetch function
+ * @param {function} eventSource - EventSource constructor
+ * @param {object} [logger] - optional logger with error(tag, detail)
+ * @returns {object} client with info, measurements, alerts, segments, cycles, operations methods
+ *
+ * @example
+ *   const machine = machineClient(baseUrl, 'icht1', fetch, EventSource, logger);
+ *   const info = await machine.info();
+ *   await machine.createOperation({ kind: 'bath', payload: { action: 'load' } });
+ */
 export default function machineClient(baseUrl, machineId, fetcher, eventSource, logger) {
     const url = `${baseUrl}/machines/${machineId}`;
     async function request(path, options) {
@@ -130,29 +131,6 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
         acknowledge(alertId) {
             return request(`/alerts/${alertId}`, payload('PATCH', { acknowledged: true }));
         },
-        meltings(options) {
-            const params = new URLSearchParams();
-            if (options && options.after) {
-                params.set('after', options.after);
-            }
-            if (options && options.before) {
-                params.set('before', options.before);
-            }
-            if (options && options.limit) {
-                params.set('limit', String(options.limit));
-            }
-            if (options && options.active) {
-                params.set('active', 'true');
-            }
-            const qs = params.toString();
-            return request(`/meltings${qs ? `?${qs}` : ''}`);
-        },
-        melting(meltingId) {
-            return request(`/meltings/${meltingId}`);
-        },
-        meltingStream() {
-            return sseConnection(`${url}/meltings/stream`, eventSource, logger);
-        },
         segments(options) {
             return request(`/segments${rangeQuery(options)}`);
         },
@@ -173,24 +151,6 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
         },
         respond(requestId, data) {
             return request(`/requests/${requestId}/respond`, payload('POST', data));
-        },
-        startMelting() {
-            return request('/meltings/start', { method: 'POST' });
-        },
-        stopMelting(meltingId) {
-            return request(`/meltings/${meltingId}/stop`, { method: 'POST' });
-        },
-        weight() {
-            return request('/weight');
-        },
-        setWeight(amount) {
-            return request('/weight', payload('PUT', { amount }));
-        },
-        load(amount) {
-            return request('/load', payload('POST', { amount }));
-        },
-        dispense(amount) {
-            return request('/dispense', payload('POST', { amount }));
         },
         ...machineOperationsClient(baseUrl, request, eventSource, logger)
     };

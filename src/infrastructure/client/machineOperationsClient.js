@@ -1,17 +1,53 @@
 import sseConnection from './sseConnection.js';
 
 /**
- * Machine operations list and plant-wide SSE subscription methods.
+ * Builds a JSON request payload with method, headers, and body.
+ *
+ * @param {string} method - HTTP method
+ * @param {object} data - request body data
+ * @returns {object} fetch options with method, headers, and stringified body
+ */
+function payload(method, data) {
+    return {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    };
+}
+
+/**
+ * Maps camelCase createOperation fields to snake_case API body.
+ *
+ * @param {object} fields - kind, payload, optional occurredAt and key
+ * @returns {object} POST body for /operations
+ */
+function createBody(fields) {
+    const data = {
+        kind: fields.kind,
+        payload: fields.payload
+    };
+    if (fields.occurredAt !== undefined) {
+        data.occurred_at = fields.occurredAt;
+    }
+    if (fields.key !== undefined) {
+        data.key = fields.key;
+    }
+    return data;
+}
+
+/**
+ * Machine operations list, create, and plant-wide SSE subscription methods.
  *
  * @param {string} baseUrl - API base URL
  * @param {function} request - authenticated JSON request helper
  * @param {function} eventSource - EventSource constructor
  * @param {object} [logger] - optional logger with error(tag, detail)
- * @returns {object} operations and operationsStream methods
+ * @returns {object} operations, createOperation, and operationsStream methods
  *
  * @example
  *   const ops = machineOperationsClient(baseUrl, request, EventSource, logger);
  *   const items = await ops.operations({ kind: 'chem' });
+ *   await ops.createOperation({ kind: 'bath', payload: { action: 'load' } });
  */
 export default function machineOperationsClient(baseUrl, request, eventSource, logger) {
     return {
@@ -30,6 +66,9 @@ export default function machineOperationsClient(baseUrl, request, eventSource, l
             return request(`/operations${qs ? `?${qs}` : ''}`).then((body) => {
                 return body.items;
             });
+        },
+        createOperation(fields) {
+            return request('/operations', payload('POST', createBody(fields)));
         },
         operationsStream(callback) {
             const conn = sseConnection(`${baseUrl}/operations/stream`, eventSource, logger);
