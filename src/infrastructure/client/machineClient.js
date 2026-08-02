@@ -49,6 +49,8 @@ function rangeQuery(options) {
  *   const machine = machineClient(baseUrl, 'icht1', fetch, EventSource, logger);
  *   const info = await machine.info();
  *   await machine.createOperation({ kind: 'bath', payload: { action: 'load' } });
+ *   await machine.updateOperation(key, { payload: { action: 'load' } });
+ *   await machine.deleteOperation(key);
  */
 export default function machineClient(baseUrl, machineId, fetcher, eventSource, logger) {
     const url = `${baseUrl}/machines/${machineId}`;

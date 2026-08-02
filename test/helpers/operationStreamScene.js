@@ -36,9 +36,9 @@ function sseCapture() {
 }
 
 /**
- * Composes plant API wiring with operations upsert after SSE stream opens.
+ * Composes plant API wiring with operations upsert or remove after SSE opens.
  *
- * @returns {object} scene with afterUpsert method
+ * @returns {object} scene with afterUpsert and afterRemove methods
  *
  * @example
  *   const text = await operationStreamScene().afterUpsert();
@@ -69,14 +69,18 @@ export default function operationStreamScene() {
         return new Date();
     });
     const api = plantApi('/api/v1', p, { clock, heartbeat: 1000 });
+    async function openStream() {
+        const capture = sseCapture();
+        await api.handle({
+            method: 'GET',
+            url: '/api/v1/operations/stream',
+            headers: {}
+        }, capture.res);
+        return capture;
+    }
     return {
         async afterUpsert() {
-            const capture = sseCapture();
-            await api.handle({
-                method: 'GET',
-                url: '/api/v1/operations/stream',
-                headers: {}
-            }, capture.res);
+            const capture = await openStream();
             await wrapped.upsert({
                 machine: machineId,
                 occurred_at: new Date(Date.now() + Math.floor(Math.random() * 1e6)),
@@ -84,6 +88,22 @@ export default function operationStreamScene() {
                 key: `stream-${Math.random()}`,
                 payload: { note: 'ж' }
             });
+            await new Promise((resolve) => {
+                setImmediate(resolve);
+            });
+            return capture.text();
+        },
+        async afterRemove() {
+            const key = `удал-${Math.random().toString(36).slice(2)}`;
+            await wrapped.upsert({
+                machine: machineId,
+                occurred_at: new Date(Date.now() + Math.floor(Math.random() * 1e6)),
+                kind: 'bath',
+                key,
+                payload: { action: 'load', unit: 'кг' }
+            });
+            const capture = await openStream();
+            await wrapped.remove(machineId, key);
             await new Promise((resolve) => {
                 setImmediate(resolve);
             });

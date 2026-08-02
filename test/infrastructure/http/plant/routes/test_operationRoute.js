@@ -375,4 +375,157 @@ describe('operationRoute', function() {
         const body = JSON.parse(res.body);
         assert.strictEqual(body.error.code, 'BAD_REQUEST', 'POST without payload cannot be accepted');
     });
+
+    it('updates existing operation via PUT and returns new payload', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `прав-${Math.random().toString(36).slice(2)}`;
+        const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p, wrapped } = buildPlant(data, machineId);
+        await wrapped.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind,
+            key,
+            payload: { action: 'load', amount: 1 }
+        });
+        const api = apiFor(p);
+        const amount = 10 + Math.random();
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                payload: { action: 'load', amount, unit: 'кг' }
+            }), {
+                method: 'PUT',
+                url: `/api/v1/machines/${machineId}/operations/${encodeURIComponent(key)}`
+            }),
+            res
+        );
+        const body = JSON.parse(res.body);
+        assert.strictEqual(body.payload.amount, amount, 'PUT cannot leave stale payload');
+    });
+
+    it('lists PUT-updated occurred_at on subsequent GET', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `время-${Math.random().toString(36).slice(2)}`;
+        const kind = `chem-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p, wrapped } = buildPlant(data, machineId);
+        await wrapped.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind,
+            key,
+            payload: { lot: 'α' }
+        });
+        const api = apiFor(p);
+        const occurred = '2024-06-01T15:30:00.000Z';
+        await api.handle(
+            mockReq(JSON.stringify({
+                occurred_at: occurred,
+                payload: { lot: 'β' }
+            }), {
+                method: 'PUT',
+                url: `/api/v1/machines/${machineId}/operations/${encodeURIComponent(key)}`
+            }),
+            mockRes()
+        );
+        const read = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${machineId}/operations?kind=${kind}&from=2024-06-01T00:00:00.000Z&to=2024-06-02T00:00:00.000Z`,
+            headers: {}
+        }, read);
+        const body = JSON.parse(read.body);
+        assert.strictEqual(body.items[0].occurred_at, occurred, 'GET cannot miss PUT occurred_at change');
+    });
+
+    it('returns 404 when PUT targets unknown key', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                payload: { lot: 'γ' }
+            }), {
+                method: 'PUT',
+                url: `/api/v1/machines/${machineId}/operations/missing-${Math.random().toString(36).slice(2)}`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 404, 'PUT unknown key cannot succeed');
+    });
+
+    it('returns 404 when PUT targets key owned by another machine', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const otherId = `other-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `чужой-${Math.random().toString(36).slice(2)}`;
+        const data = stateDataFake({});
+        const { plant: p, wrapped } = buildPlant(data, machineId);
+        await wrapped.upsert({
+            machine: otherId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'chem',
+            key,
+            payload: { lot: 'δ' }
+        });
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                payload: { lot: 'ε' }
+            }), {
+                method: 'PUT',
+                url: `/api/v1/machines/${machineId}/operations/${encodeURIComponent(key)}`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 404, 'PUT cannot mutate key for wrong machine');
+    });
+
+    it('deletes existing operation via DELETE', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p, wrapped } = buildPlant(data, machineId);
+        await wrapped.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind,
+            key,
+            payload: { action: 'load' }
+        });
+        const api = apiFor(p);
+        const del = mockRes();
+        await api.handle({
+            method: 'DELETE',
+            url: `/api/v1/machines/${machineId}/operations/${encodeURIComponent(key)}`,
+            headers: {}
+        }, del);
+        const read = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${machineId}/operations?kind=${kind}&from=2024-06-01T00:00:00.000Z&to=2024-06-02T00:00:00.000Z`,
+            headers: {}
+        }, read);
+        const body = JSON.parse(read.body);
+        assert.strictEqual(body.items.length, 0, 'GET cannot still list deleted operation');
+    });
+
+    it('returns 404 when DELETE targets unknown key', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle({
+            method: 'DELETE',
+            url: `/api/v1/machines/${machineId}/operations/missing-${Math.random().toString(36).slice(2)}`,
+            headers: {}
+        }, res);
+        assert.strictEqual(res.statusCode, 404, 'DELETE unknown key cannot succeed');
+    });
 });

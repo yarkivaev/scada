@@ -33,14 +33,15 @@ function resolveKinds(kinds, sources) {
  * listForMachine merges requested kinds from injectable sources and Postgres,
  * sorted by occurred_at. Omitted kinds default to injectable source keys.
  *
- * @param {object} persistence - store with upsert and listForMachine
+ * @param {object} persistence - store with upsert, get, remove, listForMachine
  * @param {object} bus - pubsub instance with stream and emit methods
  * @param {object} [kindSources] - map of kind to { list(machineId, range) }
- * @returns {object} operations with listForMachine, upsert, and stream
+ * @returns {object} operations with listForMachine, upsert, get, remove, stream
  *
  * @example
  *   const ops = operations(store, bus, { temp: temperaturePort });
  *   await ops.listForMachine('icht1', ['chem', 'temp'], { from: new Date() });
+ *   await ops.remove('icht1', 'nb-1');
  */
 export default function operations(persistence, bus, kindSources) {
     const sources = kindSources || {};
@@ -64,6 +65,15 @@ export default function operations(persistence, bus, kindSources) {
             return persistence.upsert(row).then((result) => {
                 const type = result.created ? 'created' : 'updated';
                 bus.emit({ type, operation: row });
+            });
+        },
+        get(machineId, key) {
+            return persistence.get(machineId, key);
+        },
+        remove(machineId, key) {
+            return persistence.remove(machineId, key).then((operation) => {
+                bus.emit({ type: 'deleted', operation });
+                return operation;
             });
         },
         stream: bus.stream

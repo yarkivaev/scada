@@ -275,6 +275,67 @@ describe('machineClient', function() {
         );
     });
 
+    it('puts updateOperation with payload and optional fields', async function() {
+        let method;
+        let fetchedUrl;
+        let body;
+        const key = `прав-${Math.random().toString(36).slice(2)}`;
+        const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
+        const occurredAt = `2024-0${1 + Math.floor(Math.random() * 9)}-20T08:15:00.000Z`;
+        const payload = { action: 'load', unit: 'кг', amount: 7 + Math.random() };
+        const fakeFetch = async (url, options) => {
+            fetchedUrl = url;
+            method = options.method;
+            body = options.body;
+            return { ok: true, json: async () => {return { external_key: key }} };
+        };
+        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        await client.updateOperation(key, { kind, payload, occurredAt });
+        const parsed = JSON.parse(body);
+        assert(
+            method === 'PUT'
+            && fetchedUrl.includes(`/operations/${encodeURIComponent(key)}`)
+            && parsed.kind === kind
+            && parsed.occurred_at === occurredAt
+            && parsed.payload.unit === payload.unit,
+            'updateOperation cannot skip PUT body fields'
+        );
+    });
+
+    it('deletes via deleteOperation by key', async function() {
+        let method;
+        let fetchedUrl;
+        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const fakeFetch = async (url, options) => {
+            fetchedUrl = url;
+            method = options.method;
+            return { ok: true, json: async () => {return {}} };
+        };
+        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        await client.deleteOperation(key);
+        assert(
+            method === 'DELETE' && fetchedUrl.includes(`/operations/${encodeURIComponent(key)}`),
+            'deleteOperation cannot skip DELETE by key'
+        );
+    });
+
+    it('notifies callback on operation_deleted SSE event', function() {
+        const listeners = {};
+        const FakeEventSource = function() {
+            this.addEventListener = (event, fn) => {
+                listeners[event] = fn;
+            };
+            this.close = () => {};
+        };
+        let received;
+        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        client.operationsStream((payload) => {
+            received = payload;
+        });
+        listeners.operation_deleted({ data: '{"key":"γ"}' });
+        assert(received.key === 'γ', 'operation_deleted event must invoke stream callback');
+    });
+
     it('does not expose removed weight and meltings methods', function() {
         const client = machineClient('http://localhost/api', 'icht1', () => {}, function() {});
         assert.strictEqual(

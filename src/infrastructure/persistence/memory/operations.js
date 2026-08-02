@@ -8,6 +8,16 @@ function findRow(store, key) {
     });
 }
 
+function findScoped(store, machineId, key) {
+    return store.operations.find((row) => {
+        return row.machine === machineId && row.key === key;
+    });
+}
+
+function missing(machineId, key) {
+    return new Error(`operation '${key}' not found for machine '${machineId}'`);
+}
+
 function filterList(store, machineId, kind, range) {
     const from = range.from ?? null;
     const to = range.to ?? null;
@@ -52,6 +62,23 @@ export default function operationStateMemory(store) {
             }
             store.operations.push({ ...item });
             return Promise.resolve({ created: true });
+        },
+        get(machineId, key) {
+            const row = findScoped(store, machineId, key);
+            if (!row) {
+                return Promise.reject(missing(machineId, key));
+            }
+            return Promise.resolve(row);
+        },
+        remove(machineId, key) {
+            const index = store.operations.findIndex((row) => {
+                return row.machine === machineId && row.key === key;
+            });
+            if (index < 0) {
+                return Promise.reject(missing(machineId, key));
+            }
+            const [row] = store.operations.splice(index, 1);
+            return Promise.resolve(row);
         },
         listForMachine(machineId, kind, range) {
             return Promise.resolve(filterList(store, machineId, kind, range));
