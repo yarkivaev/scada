@@ -77,9 +77,9 @@ describe('userDecisionsFromPg', function() {
             }
         };
         await userDecisionsFromPg(pool).insert({
-            machine: machine,
+            machine,
             startTime: new Date('2024-07-01T08:00:00.000Z'),
-            username: username,
+            username,
             operatorId: 5,
             decidedAt: new Date('2024-07-01T08:01:00.000Z'),
             payload: { kind: 'bath_op', verb: 'create', key: `bath:${machine}:1` }

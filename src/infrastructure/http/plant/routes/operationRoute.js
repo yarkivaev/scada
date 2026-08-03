@@ -76,53 +76,53 @@ async function readJson(req) {
     return JSON.parse(raw);
 }
 
-async function writeCreate(plant, gate, decisions, machineId, req, res) {
-    if (machineMissing(plant, machineId, res)) {
+async function writeCreate(ctx, machineId, req, res) {
+    if (machineMissing(ctx.plant, machineId, res)) {
         return;
     }
     try {
         const parsed = await readJson(req);
-        const audit = await gate.resolve(parsed);
+        const audit = await ctx.gate.resolve(parsed);
         const item = draftFromBody(machineId, parsed);
         item.payload = stampPayload(item.payload, audit);
-        await plant.operations.upsert(item);
-        await record(decisions, machineId, item, audit, 'create');
+        await ctx.plant.operations.upsert(item);
+        await record(ctx.decisions, machineId, item, audit, 'create');
         jsonResponse(operationJson(item)).send(res);
     } catch (err) {
-        sendFailure(gate, res, err);
+        sendFailure(ctx.gate, res, err);
     }
 }
 
-async function writeUpdate(plant, gate, decisions, machineId, key, req, res) {
-    if (machineMissing(plant, machineId, res)) {
+async function writeUpdate(ctx, machineId, key, req, res) {
+    if (machineMissing(ctx.plant, machineId, res)) {
         return;
     }
     try {
         const parsed = await readJson(req);
-        const audit = await gate.resolve(parsed);
-        const existing = await plant.operations.get(machineId, key);
+        const audit = await ctx.gate.resolve(parsed);
+        const existing = await ctx.plant.operations.get(machineId, key);
         const item = draftFromUpdate(machineId, key, existing, parsed);
         item.payload = stampPayload(item.payload, audit);
-        await plant.operations.upsert(item);
-        await record(decisions, machineId, item, audit, 'update');
+        await ctx.plant.operations.upsert(item);
+        await record(ctx.decisions, machineId, item, audit, 'update');
         jsonResponse(operationJson(item)).send(res);
     } catch (err) {
-        sendFailure(gate, res, err);
+        sendFailure(ctx.gate, res, err);
     }
 }
 
-async function writeDelete(plant, gate, decisions, machineId, key, req, res) {
-    if (machineMissing(plant, machineId, res)) {
+async function writeDelete(ctx, machineId, key, req, res) {
+    if (machineMissing(ctx.plant, machineId, res)) {
         return;
     }
     try {
         const parsed = await readJson(req);
-        const audit = await gate.resolve(parsed);
-        const item = await plant.operations.remove(machineId, key);
-        await record(decisions, machineId, item, audit, 'delete');
+        const audit = await ctx.gate.resolve(parsed);
+        const item = await ctx.plant.operations.remove(machineId, key);
+        await record(ctx.decisions, machineId, item, audit, 'delete');
         jsonResponse(operationJson(item)).send(res);
     } catch (err) {
-        sendFailure(gate, res, err);
+        sendFailure(ctx.gate, res, err);
     }
 }
 
@@ -142,7 +142,11 @@ async function writeDelete(plant, gate, decisions, machineId, key, req, res) {
  *   operationRoute('/api/v1', plant, timelineOperatorOpts, decisions);
  */
 export default function operationRoute(basePath, plant, operatorOptions, decisions) {
-    const gate = timelineOperator(operatorOptions);
+    const ctx = {
+        plant,
+        gate: timelineOperator(operatorOptions),
+        decisions
+    };
     return [
         route('GET', `${basePath}/machines/:machineId/operations`, async (req, res, params, query) => {
             const result = machineInPlant(plant, params.machineId);
@@ -158,19 +162,13 @@ export default function operationRoute(basePath, plant, operatorOptions, decisio
             jsonResponse({ items: rows.map(operationJson) }).send(res);
         }),
         route('POST', `${basePath}/machines/:machineId/operations`, async (req, res, params) => {
-            await writeCreate(plant, gate, decisions, params.machineId, req, res);
+            await writeCreate(ctx, params.machineId, req, res);
         }),
         route('PUT', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
-            await writeUpdate(
-                plant, gate, decisions, params.machineId,
-                decodeURIComponent(params.key), req, res
-            );
+            await writeUpdate(ctx, params.machineId, decodeURIComponent(params.key), req, res);
         }),
         route('DELETE', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
-            await writeDelete(
-                plant, gate, decisions, params.machineId,
-                decodeURIComponent(params.key), req, res
-            );
+            await writeDelete(ctx, params.machineId, decodeURIComponent(params.key), req, res);
         })
     ];
 }

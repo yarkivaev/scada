@@ -72,6 +72,45 @@ function updateBody(fields) {
 }
 
 /**
+ * Builds the query string for operations list filters.
+ *
+ * @param {object} [options] - optional kind, from, to
+ * @returns {string} query string including leading ? or empty
+ */
+function listQuery(options) {
+    const params = new URLSearchParams();
+    if (options && options.kind) {
+        params.set('kind', options.kind);
+    }
+    if (options && options.from) {
+        params.set('from', options.from);
+    }
+    if (options && options.to) {
+        params.set('to', options.to);
+    }
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+}
+
+/**
+ * Sends DELETE /operations/:key with optional audit JSON body.
+ *
+ * @param {function} request - authenticated JSON request helper
+ * @param {string} key - operation external key
+ * @param {object} [fields] - optional operatorId and client
+ * @returns {Promise<*>} delete response
+ */
+function deleteRequest(request, key, fields) {
+    const data = {};
+    attachAudit(data, fields || {});
+    const path = `/operations/${encodeURIComponent(key)}`;
+    if (Object.keys(data).length === 0) {
+        return request(path, { method: 'DELETE' });
+    }
+    return request(path, payload('DELETE', data));
+}
+
+/**
  * Machine operations list, create, update, delete, decisions, and SSE methods.
  *
  * @param {string} baseUrl - API base URL
@@ -88,18 +127,7 @@ function updateBody(fields) {
 export default function machineOperationsClient(baseUrl, request, eventSource, logger) {
     return {
         operations(options) {
-            const params = new URLSearchParams();
-            if (options && options.kind) {
-                params.set('kind', options.kind);
-            }
-            if (options && options.from) {
-                params.set('from', options.from);
-            }
-            if (options && options.to) {
-                params.set('to', options.to);
-            }
-            const qs = params.toString();
-            return request(`/operations${qs ? `?${qs}` : ''}`).then((body) => {
+            return request(`/operations${listQuery(options)}`).then((body) => {
                 return body.items;
             });
         },
@@ -113,16 +141,7 @@ export default function machineOperationsClient(baseUrl, request, eventSource, l
             );
         },
         deleteOperation(key, fields) {
-            const audit = fields || {};
-            const data = {};
-            attachAudit(data, audit);
-            if (Object.keys(data).length === 0) {
-                return request(`/operations/${encodeURIComponent(key)}`, { method: 'DELETE' });
-            }
-            return request(
-                `/operations/${encodeURIComponent(key)}`,
-                payload('DELETE', data)
-            );
+            return deleteRequest(request, key, fields);
         },
         operationDecisions(key) {
             return request(`/operations/${encodeURIComponent(key)}/decisions`).then((body) => {

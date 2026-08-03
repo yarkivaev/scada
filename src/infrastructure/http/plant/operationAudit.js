@@ -37,7 +37,7 @@ export function stampPayload(payload, audit) {
 export function decisionRow(machine, item, audit, verb) {
     const kind = item.kind === 'bath' ? 'bath_op' : 'operation_op';
     return {
-        machine: machine,
+        machine,
         startTime: item.occurred_at instanceof Date
             ? item.occurred_at
             : new Date(item.occurred_at),
@@ -45,8 +45,8 @@ export function decisionRow(machine, item, audit, verb) {
         operatorId: audit.id,
         decidedAt: audit.decidedAt,
         payload: {
-            kind: kind,
-            verb: verb,
+            kind,
+            verb,
             key: item.key,
             operation_kind: item.kind,
             occurred_at: item.occurred_at instanceof Date
