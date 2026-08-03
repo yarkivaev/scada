@@ -8,13 +8,9 @@ import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
-import operatorsFromPg from '../infrastructure/persistence/pg/operators.js';
-import userDecisionsFromPg from '../infrastructure/persistence/pg/userDecisions.js';
-import operatorRoute from '../infrastructure/http/plant/routes/operatorRoute.js';
-import decisionRoute from '../infrastructure/http/plant/routes/decisionRoute.js';
-import edgeOperatorCatalog from './edgeOperatorCatalog.js';
 import bindSilentStreams from './bindSilentStreams.js';
 import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
+import siteOperatorCatalog from './siteOperatorCatalog.js';
 
 function stompFromEnv(env) {
     return {
@@ -72,51 +68,6 @@ function startOperationSync(sink, env) {
     );
     ingest.start();
     return ingest;
-}
-
-/**
- * Central-only operator and user_decisions routes backed by Postgres.
- *
- * @param {string} basePath - plant API base path
- * @param {object} sink - supervisor sink with pool and profile
- * @returns {object} routes and optional operators provider
- *
- * @example
- *   centralOperatorRoutes('/api/v1', sink);
- */
-function centralOperatorRoutes(basePath, sink) {
-    if (sink.sinkDbProfile !== 'central') {
-        return { routes: [], provider: undefined, decisions: undefined };
-    }
-    const provider = operatorsFromPg(sink.pool);
-    const decisions = userDecisionsFromPg(sink.pool);
-    return {
-        routes: [
-            ...operatorRoute(basePath, provider),
-            ...decisionRoute(basePath, decisions)
-        ],
-        provider,
-        decisions
-    };
-}
-
-function operatorRoutesForProfile(basePath, sink, env) {
-    if (sink.sinkDbProfile === 'central') {
-        return { ...centralOperatorRoutes(basePath, sink), sync: undefined };
-    }
-    if (sink.sinkDbProfile === 'edge') {
-        const edge = edgeOperatorCatalog(basePath, env);
-        if (!sink.pool) {
-            return { ...edge, decisions: undefined };
-        }
-        const decisions = userDecisionsFromPg(sink.pool);
-        return {
-            ...edge,
-            routes: [...edge.routes, ...decisionRoute(basePath, decisions)],
-            decisions
-        };
-    }
-    return { routes: [], sync: undefined, provider: undefined, decisions: undefined };
 }
 
 function clickhouseMetricsUrl(env) {
@@ -220,7 +171,7 @@ export default async function siteServer(config) {
     const telemetry = startTelemetryIngest(env, config.streams);
     const operationSync = startOperationSync(sink, env);
     const basePath = config.basePath || '/api/v1';
-    const catalog = operatorRoutesForProfile(basePath, sink, env);
+    const catalog = siteOperatorCatalog(basePath, sink, env);
     if (catalog.sync) {
         await catalog.sync.start();
     }
