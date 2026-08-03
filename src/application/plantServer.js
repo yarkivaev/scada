@@ -94,7 +94,8 @@ export default async function plantServer(config) {
         requestTimeoutMs,
         extraRoutes: extra,
         timelineOperator: config.timelineOperator,
-        operationDecisions: config.operationDecisions
+        operationDecisions: config.operationDecisions,
+        owners: config.owners
     });
     const server = http.createServer((req, res) => {
         return api.handle(req, res);

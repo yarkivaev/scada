@@ -594,4 +594,65 @@ describe('operationRoute', function() {
             'create did not insert user_decisions audit row'
         );
     });
+
+    it('proxies POST to owning edge without local upsert', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const calls = [];
+        const api = plantApi('/api/v1', p, {
+            clock: virtualClock(() => {
+                return new Date();
+            }),
+            timelineOperator: {
+                anonymousUsers: { monitoring: 'Анонимный пользователь панели мониторинга' }
+            },
+            owners: {
+                resolve() {
+                    return {
+                        kind: 'edge',
+                        baseUrl: 'http://edge.test/api/v1',
+                        async fetch(url, options) {
+                            calls.push({ url, options });
+                            return {
+                                ok: true,
+                                status: 200,
+                                async text() {
+                                    return JSON.stringify({
+                                        machine: machineId,
+                                        kind: 'bath',
+                                        external_key: `bath:${machineId}:edge`,
+                                        payload: { action: 'set', amount: 0, unit: 't', source: 'api' }
+                                    });
+                                }
+                            };
+                        }
+                    };
+                }
+            }
+        });
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'bath',
+                client: 'monitoring',
+                payload: { action: 'set', amount: 0, unit: 't', source: 'api' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 200, 'owner proxy POST did not succeed');
+        assert.strictEqual(
+            calls.length === 1 && calls[0].options.method === 'POST',
+            true,
+            'owner proxy did not POST to edge'
+        );
+        assert.strictEqual(
+            JSON.parse(res.body).external_key,
+            `bath:${machineId}:edge`,
+            'owner proxy did not return edge response body'
+        );
+    });
 });
