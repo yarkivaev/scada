@@ -184,7 +184,8 @@ export default async function siteServer(config) {
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
         timelineOperator: timelineOperatorFromEnv(catalog, env, config),
-        operationDecisions: catalog.decisions
+        operationDecisions: catalog.decisions,
+        owners: config.owners
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }

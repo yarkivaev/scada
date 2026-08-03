@@ -1,9 +1,8 @@
 import machineInPlant from '../../../../application/machineInPlant.js';
 import operationJson from '../json/operationJson.js';
 import timelineOperator from '../timelineOperator.js';
-import { decisionRow, stampPayload } from '../operationAudit.js';
-import { draftFromBody, draftFromUpdate } from './operationDrafts.js';
-import { errorResponse, jsonResponse, readBody, route, sendRouteError } from '@yarkivaev/simple-server';
+import operationWrites from './operationWrites.js';
+import { jsonResponse, route } from '@yarkivaev/simple-server';
 
 function parseRange(query) {
     const range = {};
@@ -30,123 +29,30 @@ function resolveKinds(query) {
     return undefined;
 }
 
-function isMissing(err) {
-    return typeof err.message === 'string' && err.message.includes('not found for machine');
-}
-
-function sendFailure(gate, res, err) {
-    if (gate && gate.sendError(res, err)) {
-        return;
-    }
-    if (err.routeCode && err.routeStatus) {
-        errorResponse(err.routeCode, err.message, err.routeStatus).send(res);
-        return;
-    }
-    if (isMissing(err)) {
-        errorResponse('NOT_FOUND', err.message, 404).send(res);
-        return;
-    }
-    sendRouteError(res, err);
-}
-
-function machineMissing(plant, machineId, res) {
-    const result = machineInPlant(plant, machineId);
-    if (!result || !plant.operations) {
-        errorResponse('NOT_FOUND', `Machine '${machineId}' not found`, 404).send(res);
-        return true;
-    }
-    return false;
-}
-
-async function record(decisions, machine, item, audit, verb) {
-    if (!decisions || typeof decisions.insert !== 'function') {
-        return;
-    }
-    await decisions.insert(decisionRow(machine, item, audit, verb));
-}
-
-async function readJson(req) {
-    if (typeof req.on !== 'function') {
-        return {};
-    }
-    const raw = await readBody(req);
-    if (!raw || String(raw).trim().length === 0) {
-        return {};
-    }
-    return JSON.parse(raw);
-}
-
-async function writeCreate(ctx, machineId, req, res) {
-    if (machineMissing(ctx.plant, machineId, res)) {
-        return;
-    }
-    try {
-        const parsed = await readJson(req);
-        const audit = await ctx.gate.resolve(parsed);
-        const item = draftFromBody(machineId, parsed);
-        item.payload = stampPayload(item.payload, audit);
-        await ctx.plant.operations.upsert(item);
-        await record(ctx.decisions, machineId, item, audit, 'create');
-        jsonResponse(operationJson(item)).send(res);
-    } catch (err) {
-        sendFailure(ctx.gate, res, err);
-    }
-}
-
-async function writeUpdate(ctx, machineId, key, req, res) {
-    if (machineMissing(ctx.plant, machineId, res)) {
-        return;
-    }
-    try {
-        const parsed = await readJson(req);
-        const audit = await ctx.gate.resolve(parsed);
-        const existing = await ctx.plant.operations.get(machineId, key);
-        const item = draftFromUpdate(machineId, key, existing, parsed);
-        item.payload = stampPayload(item.payload, audit);
-        await ctx.plant.operations.upsert(item);
-        await record(ctx.decisions, machineId, item, audit, 'update');
-        jsonResponse(operationJson(item)).send(res);
-    } catch (err) {
-        sendFailure(ctx.gate, res, err);
-    }
-}
-
-async function writeDelete(ctx, machineId, key, req, res) {
-    if (machineMissing(ctx.plant, machineId, res)) {
-        return;
-    }
-    try {
-        const parsed = await readJson(req);
-        const audit = await ctx.gate.resolve(parsed);
-        const item = await ctx.plant.operations.remove(machineId, key);
-        await record(ctx.decisions, machineId, item, audit, 'delete');
-        jsonResponse(operationJson(item)).send(res);
-    } catch (err) {
-        sendFailure(ctx.gate, res, err);
-    }
-}
-
 /**
  * Operations REST routes for machine-scoped reads and writes.
  *
  * Writes resolve operator via timelineOperator and stamp payload.operator.
- * Optional userDecisions port records create/update/delete chronology.
+ * Edge-owned machines proxy create/update/delete to the owning plant API
+ * (no local upsert or decision insert). Optional owners registry mirrors timeline.
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
  * @param {object} [operatorOptions] - timelineOperator options
  * @param {object} [decisions] - userDecisions port with insert
+ * @param {object} [owners] - machineOwners registry
  * @returns {array} route objects
  *
  * @example
- *   operationRoute('/api/v1', plant, timelineOperatorOpts, decisions);
+ *   operationRoute('/api/v1', plant, timelineOperatorOpts, decisions, owners);
  */
-export default function operationRoute(basePath, plant, operatorOptions, decisions) {
-    const ctx = {
+export default function operationRoute(basePath, plant, operatorOptions, decisions, owners) {
+    const writes = operationWrites({
         plant,
         gate: timelineOperator(operatorOptions),
-        decisions
-    };
+        decisions,
+        owners
+    });
     return [
         route('GET', `${basePath}/machines/:machineId/operations`, async (req, res, params, query) => {
             const result = machineInPlant(plant, params.machineId);
@@ -162,13 +68,13 @@ export default function operationRoute(basePath, plant, operatorOptions, decisio
             jsonResponse({ items: rows.map(operationJson) }).send(res);
         }),
         route('POST', `${basePath}/machines/:machineId/operations`, async (req, res, params) => {
-            await writeCreate(ctx, params.machineId, req, res);
+            await writes.writeCreate(params.machineId, req, res);
         }),
         route('PUT', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
-            await writeUpdate(ctx, params.machineId, decodeURIComponent(params.key), req, res);
+            await writes.writeUpdate(params.machineId, decodeURIComponent(params.key), req, res);
         }),
         route('DELETE', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
-            await writeDelete(ctx, params.machineId, decodeURIComponent(params.key), req, res);
+            await writes.writeDelete(params.machineId, decodeURIComponent(params.key), req, res);
         })
     ];
 }
