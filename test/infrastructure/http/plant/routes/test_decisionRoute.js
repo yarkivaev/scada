@@ -137,4 +137,36 @@ describe('decisionRoute', function() {
             'decision items must keep catalog chronology order'
         );
     });
+
+    it('lists operation decisions by key through listByKey', async function() {
+        const machine = `icht-${Math.random()}`;
+        const key = `bath:${machine}:${Math.random().toString(36).slice(2)}`;
+        const seen = [];
+        const catalog = {
+            async list() {
+                return [];
+            },
+            async listByKey(id, opKey) {
+                seen.push({ id, opKey });
+                return [{
+                    username: 'Иван',
+                    decidedAt: new Date('2024-06-01T12:05:00.000Z'),
+                    payload: JSON.stringify({ kind: 'bath_op', verb: 'create', key: opKey })
+                }];
+            }
+        };
+        const api = routes(decisionRoute('/api/v1', catalog));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${encodeURIComponent(machine)}/operations/${encodeURIComponent(key)}/decisions`,
+            headers: {}
+        }, res);
+        const body = JSON.parse(res.body);
+        assert.strictEqual(
+            seen[0].opKey === key && body.items[0].operator === 'Иван',
+            true,
+            'operation decisions route did not use listByKey'
+        );
+    });
 });

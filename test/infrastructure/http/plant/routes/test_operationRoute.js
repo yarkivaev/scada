@@ -528,4 +528,70 @@ describe('operationRoute', function() {
         }, res);
         assert.strictEqual(res.statusCode, 404, 'DELETE unknown key cannot succeed');
     });
+
+    it('stamps operator display name into payload on POST', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const name = `Оператор_${Math.floor(Math.random() * 900 + 100)}`;
+        const api = plantApi('/api/v1', p, {
+            clock: virtualClock(() => {
+                return new Date();
+            }),
+            timelineOperator: {
+                anonymousUsers: { hmi: name }
+            }
+        });
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'bath',
+                client: 'hmi',
+                payload: { action: 'set', amount: 3, unit: 't', source: 'hmi' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        const body = JSON.parse(res.body);
+        assert.strictEqual(body.payload.operator, name, 'POST did not stamp operator into payload');
+    });
+
+    it('records create decision when decisions port is provided', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const rows = [];
+        const api = plantApi('/api/v1', p, {
+            clock: virtualClock(() => {
+                return new Date();
+            }),
+            timelineOperator: {
+                anonymousUsers: { monitoring: 'Анонимный пользователь панели мониторинга' }
+            },
+            operationDecisions: {
+                async insert(row) {
+                    rows.push(row);
+                }
+            }
+        });
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'bath',
+                client: 'monitoring',
+                key: `bath:${machineId}:audit-${Math.random().toString(36).slice(2)}`,
+                payload: { action: 'set', amount: 2, unit: 't', source: 'api' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            mockRes()
+        );
+        assert.strictEqual(
+            rows.length === 1 && rows[0].payload.verb === 'create',
+            true,
+            'create did not insert user_decisions audit row'
+        );
+    });
 });

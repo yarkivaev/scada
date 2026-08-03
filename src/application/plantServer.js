@@ -93,7 +93,8 @@ export default async function plantServer(config) {
         heartbeat: config.heartbeat || 1000,
         requestTimeoutMs,
         extraRoutes: extra,
-        timelineOperator: config.timelineOperator
+        timelineOperator: config.timelineOperator,
+        operationDecisions: config.operationDecisions
     });
     const server = http.createServer((req, res) => {
         return api.handle(req, res);

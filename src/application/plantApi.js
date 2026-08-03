@@ -39,7 +39,7 @@ export default function plantApi(basePath, plant, config) {
         ...alertRoute(basePath, plant),
         ...timelineRoute(basePath, plant, opts.timelineOperator),
         ...timelineStream(basePath, plant, time),
-        ...operationRoute(basePath, plant),
+        ...operationRoute(basePath, plant, opts.timelineOperator, opts.operationDecisions),
         ...operationStream(basePath, plant, time),
         ...heartbeatStream(basePath, time, opts.heartbeat),
         ...(time.jump ? simulationRoute(basePath, time) : []),
