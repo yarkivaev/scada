@@ -86,7 +86,7 @@ function startOperationSync(sink, env) {
  */
 function centralOperatorRoutes(basePath, sink) {
     if (sink.sinkDbProfile !== 'central') {
-        return { routes: [], provider: undefined };
+        return { routes: [], provider: undefined, decisions: undefined };
     }
     const provider = operatorsFromPg(sink.pool);
     const decisions = userDecisionsFromPg(sink.pool);
@@ -95,7 +95,8 @@ function centralOperatorRoutes(basePath, sink) {
             ...operatorRoute(basePath, provider),
             ...decisionRoute(basePath, decisions)
         ],
-        provider
+        provider,
+        decisions
     };
 }
 
@@ -104,9 +105,18 @@ function operatorRoutesForProfile(basePath, sink, env) {
         return { ...centralOperatorRoutes(basePath, sink), sync: undefined };
     }
     if (sink.sinkDbProfile === 'edge') {
-        return edgeOperatorCatalog(basePath, env);
+        const edge = edgeOperatorCatalog(basePath, env);
+        if (!sink.pool) {
+            return { ...edge, decisions: undefined };
+        }
+        const decisions = userDecisionsFromPg(sink.pool);
+        return {
+            ...edge,
+            routes: [...edge.routes, ...decisionRoute(basePath, decisions)],
+            decisions
+        };
     }
-    return { routes: [], sync: undefined, provider: undefined };
+    return { routes: [], sync: undefined, provider: undefined, decisions: undefined };
 }
 
 function clickhouseMetricsUrl(env) {
@@ -222,7 +232,8 @@ export default async function siteServer(config) {
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
-        timelineOperator: timelineOperatorFromEnv(catalog, env, config)
+        timelineOperator: timelineOperatorFromEnv(catalog, env, config),
+        operationDecisions: catalog.decisions
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }

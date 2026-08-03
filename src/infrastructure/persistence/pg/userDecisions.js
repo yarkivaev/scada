@@ -1,14 +1,32 @@
 /**
- * PostgreSQL user_decisions read port for central site-server.
- * Implements list(machine, start) for segment audit chronology.
+ * PostgreSQL user_decisions port for segment and operation audit.
+ *
+ * list(machine, start) returns segment chronology.
+ * listByKey(machine, key) returns operation chronology by payload.key.
+ * insert writes one audit row.
  *
  * @param {object} pool - pg pool
- * @returns {object} catalog with async list(machine, start)
+ * @returns {object} catalog with list, listByKey, insert
  *
  * @example
  *   const catalog = userDecisionsFromPg(pool);
- *   const rows = await catalog.list('icht1', new Date('2024-06-01T12:00:00.000Z'));
+ *   await catalog.insert({
+ *     machine: 'icht1', startTime: new Date(), username: 'Иван',
+ *     decidedAt: new Date(), payload: { kind: 'bath_op', verb: 'create', key: 'bath:icht1:1' }
+ *   });
  */
+function mapRow(row) {
+    const item = {
+        username: row.username,
+        decidedAt: row.decided_at,
+        payload: row.payload
+    };
+    if (row.operator_id !== undefined && row.operator_id !== null) {
+        item.operatorId = row.operator_id;
+    }
+    return item;
+}
+
 export default function userDecisionsFromPg(pool) {
     return {
         async list(machine, start) {
@@ -19,17 +37,36 @@ export default function userDecisionsFromPg(pool) {
                  ORDER BY decided_at ASC NULLS LAST`,
                 [machine, start]
             );
-            return result.rows.map((row) => {
-                const item = {
-                    username: row.username,
-                    decidedAt: row.decided_at,
-                    payload: row.payload
-                };
-                if (row.operator_id !== undefined && row.operator_id !== null) {
-                    item.operatorId = row.operator_id;
-                }
-                return item;
-            });
+            return result.rows.map(mapRow);
+        },
+        async listByKey(machine, key) {
+            const result = await pool.query(
+                `SELECT username, operator_id, decided_at, payload
+                 FROM user_decisions
+                 WHERE machine = $1
+                   AND (payload::jsonb->>'key') = $2
+                 ORDER BY decided_at ASC NULLS LAST`,
+                [machine, key]
+            );
+            return result.rows.map(mapRow);
+        },
+        async insert(row) {
+            const payload = typeof row.payload === 'string'
+                ? row.payload
+                : JSON.stringify(row.payload);
+            await pool.query(
+                `INSERT INTO user_decisions
+                 (machine, start_time, username, operator_id, decided_at, payload)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                    row.machine,
+                    row.startTime,
+                    row.username,
+                    row.operatorId ?? null,
+                    row.decidedAt,
+                    payload
+                ]
+            );
         }
     };
 }

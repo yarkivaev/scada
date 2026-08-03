@@ -16,9 +16,24 @@ function payload(method, data) {
 }
 
 /**
+ * Copies optional audit fields onto an API body.
+ *
+ * @param {object} data - mutable body
+ * @param {object} fields - create/update/delete fields
+ */
+function attachAudit(data, fields) {
+    if (fields.operatorId !== undefined) {
+        data.operatorId = fields.operatorId;
+    }
+    if (fields.client !== undefined) {
+        data.client = fields.client;
+    }
+}
+
+/**
  * Maps camelCase createOperation fields to snake_case API body.
  *
- * @param {object} fields - kind, payload, optional occurredAt and key
+ * @param {object} fields - kind, payload, optional occurredAt, key, operatorId, client
  * @returns {object} POST body for /operations
  */
 function createBody(fields) {
@@ -32,13 +47,14 @@ function createBody(fields) {
     if (fields.key !== undefined) {
         data.key = fields.key;
     }
+    attachAudit(data, fields);
     return data;
 }
 
 /**
  * Maps camelCase updateOperation fields to snake_case API body.
  *
- * @param {object} fields - payload, optional kind and occurredAt
+ * @param {object} fields - payload, optional kind, occurredAt, operatorId, client
  * @returns {object} PUT body for /operations/:key
  */
 function updateBody(fields) {
@@ -51,11 +67,12 @@ function updateBody(fields) {
     if (fields.occurredAt !== undefined) {
         data.occurred_at = fields.occurredAt;
     }
+    attachAudit(data, fields);
     return data;
 }
 
 /**
- * Machine operations list, create, update, delete, and SSE methods.
+ * Machine operations list, create, update, delete, decisions, and SSE methods.
  *
  * @param {string} baseUrl - API base URL
  * @param {function} request - authenticated JSON request helper
@@ -65,10 +82,8 @@ function updateBody(fields) {
  *
  * @example
  *   const ops = machineOperationsClient(baseUrl, request, EventSource, logger);
- *   const items = await ops.operations({ kind: 'chem' });
- *   await ops.createOperation({ kind: 'bath', payload: { action: 'load' } });
- *   await ops.updateOperation(key, { payload: { action: 'load' } });
- *   await ops.deleteOperation(key);
+ *   await ops.createOperation({ kind: 'bath', payload: {}, operatorId: 2 });
+ *   await ops.operationDecisions(key);
  */
 export default function machineOperationsClient(baseUrl, request, eventSource, logger) {
     return {
@@ -97,8 +112,22 @@ export default function machineOperationsClient(baseUrl, request, eventSource, l
                 payload('PUT', updateBody(fields))
             );
         },
-        deleteOperation(key) {
-            return request(`/operations/${encodeURIComponent(key)}`, { method: 'DELETE' });
+        deleteOperation(key, fields) {
+            const audit = fields || {};
+            const data = {};
+            attachAudit(data, audit);
+            if (Object.keys(data).length === 0) {
+                return request(`/operations/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            }
+            return request(
+                `/operations/${encodeURIComponent(key)}`,
+                payload('DELETE', data)
+            );
+        },
+        operationDecisions(key) {
+            return request(`/operations/${encodeURIComponent(key)}/decisions`).then((body) => {
+                return body.items;
+            });
         },
         operationsStream(callback) {
             const conn = sseConnection(`${baseUrl}/operations/stream`, eventSource, logger);
