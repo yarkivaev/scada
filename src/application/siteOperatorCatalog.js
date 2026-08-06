@@ -56,3 +56,22 @@ export default function siteOperatorCatalog(basePath, sink, env) {
     }
     return { routes: [], sync: undefined, provider: undefined, decisions: undefined };
 }
+
+/**
+ * Picks plant operatorCatalog override or the built-in site catalog.
+ *
+ * @param {object} config - siteServer config, may include operatorCatalog factory
+ * @param {string} basePath - plant API base path
+ * @param {object} sink - supervisor sink
+ * @param {object} env - process environment
+ * @returns {object} routes, provider, decisions, sync
+ *
+ * @example
+ *   buildSiteOperatorCatalog({ operatorCatalog: plantCatalog }, '/api/v1', sink, env);
+ */
+export function buildSiteOperatorCatalog(config, basePath, sink, env) {
+    const factory = config && config.operatorCatalog
+        ? config.operatorCatalog
+        : siteOperatorCatalog;
+    return factory(basePath, sink, env);
+}
