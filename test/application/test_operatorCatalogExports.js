@@ -6,6 +6,7 @@ import {
     edgeOperatorCatalog,
     edgeOperators,
     operator,
+    operatorExtras,
     operatorJson,
     operatorRoute,
     operators,
@@ -26,6 +27,7 @@ describe('operator catalog package exports', function() {
                 typeof operatorRoute,
                 typeof decisionRoute,
                 typeof operatorJson,
+                typeof operatorExtras,
                 typeof operators,
                 typeof centralOperators,
                 typeof edgeOperators,
@@ -33,7 +35,7 @@ describe('operator catalog package exports', function() {
                 typeof operator,
                 typeof userDecisionsFromPg
             ],
-            Array(13).fill('function'),
+            Array(14).fill('function'),
             'package did not export operator catalog building blocks for plant override'
         );
     });

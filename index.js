@@ -36,6 +36,7 @@ export { default as operators } from './src/infrastructure/operators/operators.j
 export { default as centralOperators } from './src/infrastructure/operators/centralOperators.js';
 export { default as edgeOperators } from './src/infrastructure/operators/edgeOperators.js';
 export { default as operatorsSync } from './src/infrastructure/operators/operatorsSync.js';
+export { default as operatorExtras } from './src/infrastructure/operators/operatorExtras.js';
 
 export { default as pgTimeline } from './src/infrastructure/persistence/pg/timeline.js';
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';

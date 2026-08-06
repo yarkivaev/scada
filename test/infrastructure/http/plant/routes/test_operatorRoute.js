@@ -99,6 +99,47 @@ describe('operatorRoute', function() {
         );
     });
 
+    it('forwards plant-owned create fields to the provider and JSON response', async function() {
+        const uid = `plant-${Math.random().toString(36).slice(2)}`.toUpperCase();
+        const code = `code-${Math.random().toString(36).slice(2)}`;
+        let received;
+        const provider = {
+            async list() {
+                return [];
+            },
+            async create(fields) {
+                received = fields;
+                return {
+                    id: 88,
+                    cardUid: fields.cardUid,
+                    firstName: fields.firstName,
+                    lastName: fields.lastName,
+                    displayName: fields.displayName,
+                    plantCode: fields.plantCode
+                };
+            }
+        };
+        const api = routes(operatorRoute('/api/v1', provider));
+        const res = mockRes();
+        const req = mockReq(
+            JSON.stringify({
+                cardUid: uid,
+                firstName: 'Ольга',
+                lastName: 'Смирнова',
+                displayName: 'Ольга Смирнова',
+                plantCode: code
+            }),
+            { method: 'POST', url: '/api/v1/operators' }
+        );
+        await api.handle(req, res);
+        const payload = JSON.parse(res.body);
+        assert.deepStrictEqual(
+            { received: received.plantCode, exposed: payload.plantCode },
+            { received: code, exposed: code },
+            'operator route did not forward plant-owned create fields'
+        );
+    });
+
     it('rejects duplicate cardUid on POST with conflict', async function() {
         const uid = `dup-${Math.random().toString(36).slice(2)}`.toUpperCase();
         const provider = {

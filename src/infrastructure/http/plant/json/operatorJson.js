@@ -1,5 +1,8 @@
+import operatorExtras, { operatorIdentityKeys } from '../../../operators/operatorExtras.js';
+
 /**
  * Maps an operator domain record to REST JSON shape.
+ * Plant-owned attributes beyond identity are passed through unchanged.
  *
  * @param {object} row - operator with id, cardUid, firstName, lastName, displayName
  * @returns {object} JSON-serializable operator
@@ -13,6 +16,7 @@ export default function operatorJson(row) {
         cardUid: row.cardUid,
         firstName: row.firstName,
         lastName: row.lastName,
-        displayName: row.displayName
+        displayName: row.displayName,
+        ...operatorExtras(row, operatorIdentityKeys())
     };
 }

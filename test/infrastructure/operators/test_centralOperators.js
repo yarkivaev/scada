@@ -30,6 +30,38 @@ describe('centralOperators', function() {
         assert.strictEqual(rows[0].cardUid, uid, 'central operators did not map operator card uid');
     });
 
+    it('pull keeps plant-owned fields from central operator json', async function() {
+        const uid = `extra-${Math.random()}`;
+        const code = `plant-${Math.random().toString(36).slice(2)}`;
+        const payload = {
+            items: [{
+                id: 3,
+                cardUid: uid,
+                firstName: 'Никита',
+                lastName: 'Орлов',
+                displayName: 'Никита Орлов',
+                plantCode: code
+            }]
+        };
+        const server = http.createServer((req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(payload));
+        });
+        await new Promise((resolve) => {
+            server.listen(0, resolve);
+        });
+        const { port } = server.address();
+        const client = stateHttpClient({ baseUrl: `http://127.0.0.1:${port}` });
+        const source = centralOperators(client, '/api/v1');
+        const rows = await source.pull();
+        server.close();
+        assert.strictEqual(
+            rows[0].plantCode,
+            code,
+            'central operators dropped plant-owned fields during pull'
+        );
+    });
+
     it('pull rejects response without items array', async function() {
         const server = http.createServer((req, res) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
