@@ -10,7 +10,7 @@ import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
 import bindSilentStreams from './bindSilentStreams.js';
 import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
-import siteOperatorCatalog from './siteOperatorCatalog.js';
+import { buildSiteOperatorCatalog } from './siteOperatorCatalog.js';
 
 function stompFromEnv(env) {
     return {
@@ -142,7 +142,7 @@ function siteExtraRoutes(catalog, extraRoutes) {
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
- * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, kindSources, streams, env
+ * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, operatorCatalog, kindSources, streams, env
  * @returns {Promise<object>} sink, plant, mqtt pipeline
  *
  * @example
@@ -171,7 +171,7 @@ export default async function siteServer(config) {
     const telemetry = startTelemetryIngest(env, config.streams);
     const operationSync = startOperationSync(sink, env);
     const basePath = config.basePath || '/api/v1';
-    const catalog = siteOperatorCatalog(basePath, sink, env);
+    const catalog = buildSiteOperatorCatalog(config, basePath, sink, env);
     if (catalog.sync) {
         await catalog.sync.start();
     }

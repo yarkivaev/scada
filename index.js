@@ -21,6 +21,22 @@ export { default as plantOperations } from './src/application/plantOperations.js
 export { default as metricsPlant } from './src/application/metricsPlant.js';
 export { default as plantServer } from './src/application/plantServer.js';
 export { default as siteServer } from './src/application/siteServer.js';
+export {
+    default as siteOperatorCatalog,
+    buildSiteOperatorCatalog
+} from './src/application/siteOperatorCatalog.js';
+export { default as edgeOperatorCatalog } from './src/application/edgeOperatorCatalog.js';
+export { default as operator } from './src/domain/operator/operator.js';
+export { default as operatorsFromPg } from './src/infrastructure/persistence/pg/operators.js';
+export { default as userDecisionsFromPg } from './src/infrastructure/persistence/pg/userDecisions.js';
+export { default as operatorRoute } from './src/infrastructure/http/plant/routes/operatorRoute.js';
+export { default as decisionRoute } from './src/infrastructure/http/plant/routes/decisionRoute.js';
+export { default as operatorJson } from './src/infrastructure/http/plant/json/operatorJson.js';
+export { default as operators } from './src/infrastructure/operators/operators.js';
+export { default as centralOperators } from './src/infrastructure/operators/centralOperators.js';
+export { default as edgeOperators } from './src/infrastructure/operators/edgeOperators.js';
+export { default as operatorsSync } from './src/infrastructure/operators/operatorsSync.js';
+export { default as operatorExtras } from './src/infrastructure/operators/operatorExtras.js';
 
 export { default as pgTimeline } from './src/infrastructure/persistence/pg/timeline.js';
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';

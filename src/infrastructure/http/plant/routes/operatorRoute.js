@@ -1,4 +1,5 @@
 import operatorJson from '../json/operatorJson.js';
+import operatorExtras, { operatorDraftKeys } from '../../../operators/operatorExtras.js';
 import { errorResponse, jsonResponse, readBody, route, sendRouteError } from '@yarkivaev/simple-server';
 
 function routeFailure(code, message, status) {
@@ -46,7 +47,13 @@ function draftFromBody(parsed) {
     if (typeof displayName !== 'string' || !displayName.trim()) {
         throw routeFailure('BAD_REQUEST', 'displayName is required', 400);
     }
-    return { cardUid, firstName, lastName, displayName };
+    return {
+        cardUid,
+        firstName,
+        lastName,
+        displayName,
+        ...operatorExtras(parsed, operatorDraftKeys())
+    };
 }
 
 function flagFromBody(parsed) {

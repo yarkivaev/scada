@@ -1,4 +1,5 @@
 import operator from '../../domain/operator/operator.js';
+import operatorExtras, { operatorIdentityKeys } from './operatorExtras.js';
 
 function operatorFromJson(row) {
     if (row.id === undefined || row.id === null) {
@@ -16,7 +17,10 @@ function operatorFromJson(row) {
     if (!row.displayName) {
         throw new Error('central operators item missing displayName');
     }
-    return operator(row.id, row.cardUid, row.firstName, row.lastName, row.displayName);
+    return {
+        ...operator(row.id, row.cardUid, row.firstName, row.lastName, row.displayName),
+        ...operatorExtras(row, operatorIdentityKeys())
+    };
 }
 
 /**
