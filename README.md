@@ -125,7 +125,7 @@ const job = exportJob({ query, transform: (rows) => rows, sink });
 await job.run({ kind: 'segments', machine: 'furnace-α', from, to });
 ```
 
-Downstream plant packages should pin a released tag (e.g. `#v2.3.45`).
+Downstream plant packages should pin a released tag (e.g. `#v2.3.46`).
 
 Alert and HMI copy are inject-only: pass `translations` into `siteServer` / `plantServer` / `alertPipeline` config, and override `TAG_CATALOG_PATH` or `plantApi({ tagCatalog })` for site taxonomy. Defaults ship empty or English stubs.
 
@@ -209,7 +209,7 @@ import stateDataFake from '@yarkivaev/scada/stateDataFake';
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
 | ClickHouse + PG adapters | Plant wiring (`metricsPlant`, shops, machines) |
 
-Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.45"`), not a local path, in downstream packages.
+Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.46"`), not a local path, in downstream packages.
 
 ## CI/CD
 

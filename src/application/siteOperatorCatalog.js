@@ -9,6 +9,7 @@ import edgeOperatorCatalog from './edgeOperatorCatalog.js';
  *
  * @param {string} basePath - plant API base path
  * @param {object} sink - supervisor sink with pool and profile
+ * @param {object} [owners] - machineOwners registry for edge decision proxy
  * @returns {object} routes, provider, decisions
  */
 function centralOperatorRoutes(basePath, sink, owners) {
