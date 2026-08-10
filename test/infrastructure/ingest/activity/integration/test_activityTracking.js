@@ -216,7 +216,7 @@ describe('activityTracking pipeline integration', function() {
         const line = JSON.stringify({
             StartUTC: new Date().toISOString(),
             RequestMethod: 'GET',
-            RequestPath: `/запрос/${marker}`,
+            RequestPath: `/request/${marker}`,
             DownstreamStatus: 200,
             Duration: 1000000000,
             ClientHost: '127.0.0.1'

@@ -1,10 +1,10 @@
 {
-  "name": "scada",
-  "version": "2.3.42",
+  "name": "@yarkivaev/scada",
+  "version": "2.3.45",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
-    "url": "https://gitlab.scada.svsokol.ru/scada/scada"
+    "url": "https://github.com/yarkivaev/scada"
   },
   "type": "module",
   "main": "index.js",
@@ -22,7 +22,7 @@
     "test": "mocha --exit 'test/**/test*.js'",
     "test:deep": "mocha --exit 'test/domain/**/test*.js' 'test/infrastructure/ingest/**/test*.js'",
     "coverage": "c8 --all --src src npm test",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-eo-names.mjs",
     "lint:fix": "eslint . --fix",
     "lint:eo": "node scripts/check-eo-names.mjs"
   },

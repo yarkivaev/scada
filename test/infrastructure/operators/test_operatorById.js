@@ -7,12 +7,12 @@ describe('operatorById', function() {
         const uid = `card-${Math.random()}`;
         const provider = {
             async list() {
-                return [operator(5, uid, 'Анна', 'Козлова', 'Анна Козлова')];
+                return [operator(5, uid, 'Anna', 'Kozlov', 'Anna Kozlov')];
             }
         };
         const lookup = operatorById(provider);
         const row = await lookup.resolve(5);
-        assert.strictEqual(row.displayName, 'Анна Козлова', 'operatorById did not return matching operator');
+        assert.strictEqual(row.displayName, 'Anna Kozlov', 'operatorById did not return matching operator');
     });
 
     it('returns undefined when id is absent from provider list', async function() {

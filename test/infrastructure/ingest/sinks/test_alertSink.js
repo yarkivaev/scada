@@ -20,8 +20,8 @@ describe('alertSink', function() {
         const pool = fakePool();
         const sink = alertSink(pool);
         const name = `rule_${Math.random()}`;
-        const machine = `ичт${Math.random()}`;
-        const message = `сообщение_${Math.random()}`;
+        const machine = `m${Math.random()}`;
+        const message = `message_${Math.random()}`;
         const severity = `severity_${Math.random()}`;
         const timestamp = new Date(1700000000 * 1000 + Math.floor(Math.random() * 100000000)).toISOString();
         await sink.accept({ name, message, machine, severity, status: 'pending', timestamp });
@@ -32,15 +32,15 @@ describe('alertSink', function() {
         const pool = fakePool();
         const sink = alertSink(pool);
         const name = `rule_${Math.random()}`;
-        const machine = `ичт${Math.random()}`;
-        await sink.accept({ name, message: 'тест', machine, severity: 'warning', status: 'completed', timestamp: new Date().toISOString() });
+        const machine = `m${Math.random()}`;
+        await sink.accept({ name, message: 'test', machine, severity: 'warning', status: 'completed', timestamp: new Date().toISOString() });
         assert.deepStrictEqual(pool.queries[0].params, [name, machine], 'completed alert was not updated with correct params');
     });
 
     it('does not query on unknown status', async function() {
         const pool = fakePool();
         const sink = alertSink(pool);
-        await sink.accept({ name: 'test', message: 'тест', machine: 'icht2', severity: 'warning', status: `unknown_${Math.random()}`, timestamp: new Date().toISOString() });
+        await sink.accept({ name: 'test', message: 'test', machine: 'm2', severity: 'warning', status: `unknown_${Math.random()}`, timestamp: new Date().toISOString() });
         assert.strictEqual(pool.queries.length, 0, 'unexpected query on unknown status');
     });
 });
@@ -55,8 +55,8 @@ describe('alertSink propagates query failure', function() {
             () => {
                 return sink.accept({
                     name: `rule_${Math.random()}`,
-                    message: 'тест',
-                    machine: `icht${Math.random()}`,
+                    message: 'test',
+                    machine: `m${Math.random()}`,
                     severity: 'warning',
                     status: 'pending',
                     timestamp: new Date().toISOString()
@@ -76,7 +76,7 @@ describe('alertSink propagates query failure', function() {
             () => {
                 return sink.accept({
                     name: 'low_cosphi',
-                    machine: `icht${Math.random()}`,
+                    machine: `m${Math.random()}`,
                     status: 'completed'
                 });
             },

@@ -7,7 +7,7 @@ describe('edgeOperators', function() {
     it('create posts to central and refreshes local cache from pull', async function() {
         const uid = `edge-create-${Math.random().toString(36).slice(2)}`;
         const cache = operators();
-        const created = operator(11, uid.toUpperCase(), 'Наталья', 'Фёдорова', 'Наталья Фёдорова');
+        const created = operator(11, uid.toUpperCase(), 'Natalia', 'Fedorova', 'Natalia Fedorova');
         const source = {
             async create(fields) {
                 assert.strictEqual(fields.cardUid, uid.toUpperCase(), 'edge create did not forward draft');
@@ -20,9 +20,9 @@ describe('edgeOperators', function() {
         const provider = edgeOperators(cache, source);
         const row = await provider.create({
             cardUid: uid.toUpperCase(),
-            firstName: 'Наталья',
-            lastName: 'Фёдорова',
-            displayName: 'Наталья Фёдорова'
+            firstName: 'Natalia',
+            lastName: 'Fedorova',
+            displayName: 'Natalia Fedorova'
         });
         const rows = await cache.list();
         assert.deepStrictEqual(
@@ -39,9 +39,9 @@ describe('edgeOperators', function() {
         try {
             await provider.create({
                 cardUid: `NO-CENTRAL-${Math.random().toString(36).slice(2)}`,
-                firstName: 'Олег',
-                lastName: 'Морозов',
-                displayName: 'Олег Морозов'
+                firstName: 'Oleg',
+                lastName: 'Morozov',
+                displayName: 'Oleg Morozov'
             });
         } catch {
             threw = true;
@@ -56,7 +56,7 @@ describe('edgeOperators', function() {
 
     it('create leaves cache unchanged when central create fails', async function() {
         const uid = `stale-edge-${Math.random().toString(36).slice(2)}`;
-        const cache = operators([operator(1, uid, 'Илья', 'Громов', 'Илья Громов')]);
+        const cache = operators([operator(1, uid, 'Ilya', 'Gromov', 'Ilya Gromov')]);
         const source = {
             async create() {
                 throw new Error('central unreachable');
@@ -70,9 +70,9 @@ describe('edgeOperators', function() {
         try {
             await provider.create({
                 cardUid: `FAIL-${Math.random().toString(36).slice(2)}`,
-                firstName: 'Кирилл',
-                lastName: 'Белов',
-                displayName: 'Кирилл Белов'
+                firstName: 'Kirill',
+                lastName: 'Belov',
+                displayName: 'Kirill Belov'
             });
         } catch {
             threw = true;

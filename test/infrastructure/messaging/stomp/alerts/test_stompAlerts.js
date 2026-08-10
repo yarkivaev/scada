@@ -30,15 +30,15 @@ describe('stompAlerts', function() {
     it('returns empty array when no alerts exist', async function() {
         const hydrate = fakeHydrate([]);
         const stomp = fakeStomp();
-        const history = stompAlerts(hydrate, stomp.factory, { [`rule_${Math.random()}`]: 'тест' });
+        const history = stompAlerts(hydrate, stomp.factory, { [`rule_${Math.random()}`]: 'test' });
         await history.init();
         assert.strictEqual(history.all().length, 0, 'alerts were not empty');
     });
 
     it('loads unacknowledged alerts from hydration port on init', async function() {
         const id = Math.floor(Math.random() * 10000) + 1;
-        const message = `сообщение_${Math.random()}`;
-        const machine = `ичт${Math.random()}`;
+        const message = `message_${Math.random()}`;
+        const machine = `m${Math.random()}`;
         const name = `rule_${Math.random()}`;
         const hydrate = fakeHydrate([{ id, message, machine, timestamp: new Date(), acknowledged: false, name }]);
         const stomp = fakeStomp();
@@ -51,7 +51,7 @@ describe('stompAlerts', function() {
         const hydrate = fakeHydrate([]);
         const stomp = fakeStomp();
         const name = `low_cosphi_${Math.random()}`;
-        const translations = { [name]: `Выключить_${Math.random()}` };
+        const translations = { [name]: `Disable_${Math.random()}` };
         const history = stompAlerts(hydrate, stomp.factory, translations);
         await history.init();
         const events = [];
@@ -59,16 +59,16 @@ describe('stompAlerts', function() {
             events.push(evt);
         });
         stomp.ref.collector.accept({
-            payload: JSON.stringify({ name, machine: 'icht2', severity: 'warning', status: 'pending', start: 1700000000 + Math.floor(Math.random() * 1000) })
+            payload: JSON.stringify({ name, machine: 'm2', severity: 'warning', status: 'pending', start: 1700000000 + Math.floor(Math.random() * 1000) })
         });
         assert.strictEqual(events[0].type, 'created', 'created event was not emitted');
     });
 
     it('acknowledges alert on completed STOMP message and emits acknowledged event', async function() {
-        const machine = `ичт${Math.random()}`;
+        const machine = `m${Math.random()}`;
         const id = Math.floor(Math.random() * 10000) + 1;
         const name = `rule_${Math.random()}`;
-        const hydrate = fakeHydrate([{ id, message: 'тест', machine, timestamp: new Date(), acknowledged: false, name }]);
+        const hydrate = fakeHydrate([{ id, message: 'test', machine, timestamp: new Date(), acknowledged: false, name }]);
         const stomp = fakeStomp();
         const history = stompAlerts(hydrate, stomp.factory, {});
         await history.init();
@@ -84,9 +84,9 @@ describe('stompAlerts', function() {
 
     it('finds alert by string id', async function() {
         const id = Math.floor(Math.random() * 10000) + 1;
-        const machine = `ичт${Math.random()}`;
+        const machine = `m${Math.random()}`;
         const name = `n_${Math.random()}`;
-        const hydrate = fakeHydrate([{ id, message: 'тест', machine, timestamp: new Date(), acknowledged: false, name }]);
+        const hydrate = fakeHydrate([{ id, message: 'test', machine, timestamp: new Date(), acknowledged: false, name }]);
         const stomp = fakeStomp();
         const history = stompAlerts(hydrate, stomp.factory, {});
         await history.init();
@@ -95,9 +95,9 @@ describe('stompAlerts', function() {
 
     it('filters alerts via all with predicate', async function() {
         const id = Math.floor(Math.random() * 10000) + 1;
-        const machine = `ичт${Math.random()}`;
+        const machine = `m${Math.random()}`;
         const name = `n_${Math.random()}`;
-        const hydrate = fakeHydrate([{ id, message: 'тест', machine, timestamp: new Date(), acknowledged: false, name }]);
+        const hydrate = fakeHydrate([{ id, message: 'test', machine, timestamp: new Date(), acknowledged: false, name }]);
         const stomp = fakeStomp();
         const history = stompAlerts(hydrate, stomp.factory, {});
         await history.init();
@@ -114,7 +114,7 @@ describe('stompAlerts', function() {
         await history.init();
         const name = `unknown_rule_${Math.random()}`;
         stomp.ref.collector.accept({
-            payload: JSON.stringify({ name, machine: 'icht2', severity: 'warning', status: 'pending', start: 1700000000 })
+            payload: JSON.stringify({ name, machine: 'm2', severity: 'warning', status: 'pending', start: 1700000000 })
         });
         const all = history.all();
         assert.strictEqual(all[0].message, name, 'unknown rule was not used as fallback message');

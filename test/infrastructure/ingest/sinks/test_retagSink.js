@@ -16,7 +16,7 @@ describe('retagSink', function() {
     it('executes exactly one query per accept call', async function() {
         const pool = fakePool();
         const sink = retagSink(pool);
-        await sink.accept({ machine: 'icht-ü', start_time: '2024-01-01T00:00:00.000Z',
+        await sink.accept({ machine: 'm-ü', start_time: '2024-01-01T00:00:00.000Z',
             tags: '[]', properties: '{}', options: null, resolved: true });
         assert.strictEqual(pool.queries.length, 1, 'should execute one query');
     });
@@ -24,7 +24,7 @@ describe('retagSink', function() {
     it('uses UPDATE segments statement', async function() {
         const pool = fakePool();
         const sink = retagSink(pool);
-        await sink.accept({ machine: 'icht-ü', start_time: '2024-01-01T00:00:00.000Z',
+        await sink.accept({ machine: 'm-ü', start_time: '2024-01-01T00:00:00.000Z',
             tags: '[]', properties: '{}', options: null, resolved: true });
         assert.ok(pool.queries[0].sql.includes('UPDATE segments'), 'should use UPDATE segments');
     });
@@ -32,7 +32,7 @@ describe('retagSink', function() {
     it('binds resolved as a query parameter', async function() {
         const pool = fakePool();
         const sink = retagSink(pool);
-        await sink.accept({ machine: 'icht-ü', start_time: '2024-01-01T00:00:00.000Z',
+        await sink.accept({ machine: 'm-ü', start_time: '2024-01-01T00:00:00.000Z',
             tags: '[]', properties: '{}', options: null, resolved: true });
         assert.ok(pool.queries[0].sql.includes('resolved = $4'), 'should bind resolved column');
     });
@@ -40,7 +40,7 @@ describe('retagSink', function() {
     it('binds options as a query parameter', async function() {
         const pool = fakePool();
         const sink = retagSink(pool);
-        await sink.accept({ machine: 'icht-ü', start_time: '2024-01-01T00:00:00.000Z',
+        await sink.accept({ machine: 'm-ü', start_time: '2024-01-01T00:00:00.000Z',
             tags: '[]', properties: '{}', options: null, resolved: true });
         assert.ok(pool.queries[0].sql.includes('options = $3'), 'should bind options column');
     });
@@ -48,13 +48,13 @@ describe('retagSink', function() {
     it('binds tags, properties, options, resolved, machine, start_time as params', async function() {
         const pool = fakePool();
         const sink = retagSink(pool);
-        const tags = JSON.stringify([`нагрев_${Math.random()}`]);
+        const tags = JSON.stringify([`heating_${Math.random()}`]);
         const properties = JSON.stringify({ batch: Math.floor(Math.random() * 1000) });
-        await sink.accept({ machine: 'ičt-ñ', start_time: '2024-03-01T12:00:00.000Z', tags, properties,
+        await sink.accept({ machine: 'm-ñ', start_time: '2024-03-01T12:00:00.000Z', tags, properties,
             options: null, resolved: true });
         assert.deepStrictEqual(
             pool.queries[0].params,
-            [tags, properties, null, true, 'ičt-ñ', '2024-03-01T12:00:00.000Z'],
+            [tags, properties, null, true, 'm-ñ', '2024-03-01T12:00:00.000Z'],
             'should bind tags, properties, options, resolved, machine, start_time in order'
         );
     });
@@ -85,7 +85,7 @@ describe('retagSink propagates pool failure', function() {
         await assert.rejects(
             () => {
                 return sink.accept({
-                    machine: `icht${Math.random()}`,
+                    machine: `m${Math.random()}`,
                     start_time: new Date().toISOString(),
                     tags: '["heating"]',
                     properties: '{}'
@@ -103,9 +103,9 @@ describe('retagSink propagates pool failure', function() {
         };
         const sink = retagSink(pool);
         await sink.accept({
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             start_time: new Date().toISOString(),
-            tags: '["нагрев"]',
+            tags: '["heating"]',
             properties: '{}'
         });
         assert.strictEqual(queries.length, 1, 'Should execute one query on success');

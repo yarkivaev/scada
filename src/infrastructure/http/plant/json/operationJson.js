@@ -12,7 +12,7 @@ function iso(value) {
  * @returns {object} API item with external_key and source_updated_at
  *
  * @example
- *   operationJson({ key: 'nb-1', occurred_at: new Date(), kind: 'chem', payload: {}, machine: 'icht1' });
+ *   operationJson({ key: 'nb-1', occurred_at: new Date(), kind: 'chem', payload: {}, machine: 'm1' });
  */
 export default function operationJson(row) {
     const occurred = iso(row.occurred_at);

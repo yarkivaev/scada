@@ -3,7 +3,7 @@ import metricsSensor from '../../../../src/infrastructure/http/edge/metricsSenso
 
 describe('metricsSensor', function() {
     it('name returns display label', function() {
-        const label = `Напряжение_${Math.random()}`;
+        const label = `Voltage_${Math.random()}`;
         const client = {
             async getJson() {
                 return { found: false };

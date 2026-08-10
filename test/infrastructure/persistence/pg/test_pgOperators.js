@@ -10,9 +10,9 @@ describe('operatorsFromPg', function() {
                     rows: [{
                         id: 5,
                         card_uid: uid,
-                        first_name: 'Ольга',
-                        last_name: 'Смирнова',
-                        display_name: 'Ольга Смирнова'
+                        first_name: 'Olga',
+                        last_name: 'Smirnov',
+                        display_name: 'Olga Smirnov'
                     }]
                 };
             }
@@ -39,9 +39,9 @@ describe('operatorsFromPg', function() {
         };
         const row = await operatorsFromPg(pool).create({
             cardUid: uid,
-            firstName: 'Наталья',
-            lastName: 'Орлова',
-            displayName: 'Наталья Орлова'
+            firstName: 'Natalia',
+            lastName: 'Orlov',
+            displayName: 'Natalia Orlov'
         });
         assert.strictEqual(row.cardUid, uid, 'pg operators create did not return card uid');
     });
@@ -59,9 +59,9 @@ describe('operatorsFromPg', function() {
         try {
             await operatorsFromPg(pool, { error() {} }).create({
                 cardUid: uid,
-                firstName: 'Борис',
-                lastName: 'Громов',
-                displayName: 'Борис Громов'
+                firstName: 'Boris',
+                lastName: 'Gromov',
+                displayName: 'Boris Gromov'
             });
         } catch (err) {
             caught = err;

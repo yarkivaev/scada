@@ -33,7 +33,7 @@ function anonymousName(body, cfg) {
  * @example
  *   const gate = timelineOperator({
  *     provider, requireOperator: true, defaultUser: 'hmi-kiosk',
- *     anonymousUsers: { hmi: 'Анонимный пользователь HMI' }
+ *     anonymousUsers: { hmi: 'Anonymous HMI user' }
  *   });
  *   const audit = await gate.resolve({ operatorId: 2 });
  */

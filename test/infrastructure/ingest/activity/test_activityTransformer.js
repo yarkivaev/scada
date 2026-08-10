@@ -93,15 +93,15 @@ describe('activityCodec', function() {
         const log = {
             StartUTC: '2024-01-20T10:30:00Z',
             RequestMethod: 'GET',
-            RequestPath: '/api/плавки',
+            RequestPath: '/api/areas',
             DownstreamStatus: 200,
             Duration: 1000000,
             ClientHost: '127.0.0.1',
-            'request_Remote-User': 'Иван'
+            'request_Remote-User': 'Ivan'
         };
         transformer.accept({ ts: Date.now(), line: JSON.stringify(log) });
-        assert.strictEqual(received[0].path, '/api/плавки', 'should handle unicode path');
-        assert.strictEqual(received[0].user, 'Иван', 'should handle unicode user');
+        assert.strictEqual(received[0].path, '/api/areas', 'should handle unicode path');
+        assert.strictEqual(received[0].user, 'Ivan', 'should handle unicode user');
     });
 
     it('skips entries without required fields', function() {

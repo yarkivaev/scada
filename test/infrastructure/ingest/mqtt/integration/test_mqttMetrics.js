@@ -132,7 +132,7 @@ describe('mqttMetrics pipeline integration', function() {
 
     it('handles unicode sensor data', async function() {
         this.timeout(30000);
-        const topic = `датчик/${Math.random().toString(36).slice(2)}`;
+        const topic = `sensor/${Math.random().toString(36).slice(2)}`;
         const pipeline = mqttMetrics(mqttUrl, clickhouseSink(clickhouseUrl, 'scada.metrics'), topic, {
             size: 1,
             interval: 1,
@@ -147,7 +147,7 @@ describe('mqttMetrics pipeline integration', function() {
         pipeline.stop();
         await new Promise((resolve) => { setTimeout(resolve, 1000)});
         const result = await clickhouseClient.query({
-            query: `SELECT * FROM scada.metrics WHERE topic LIKE 'датчик/%'`,
+            query: `SELECT * FROM scada.metrics WHERE topic LIKE 'sensor/%'`,
             format: 'JSONEachRow'
         });
         const rows = await result.json();

@@ -7,9 +7,9 @@
  * @returns {object} wrapper with init() and get() methods
  *
  * @example
- *   const machines = initialized({ icht1: machine }, Object.values);
+ *   const machines = initialized({ m1: machine }, Object.values);
  *   machines.init();
- *   machines.get().icht1;
+ *   machines.get().m1;
  */
 export default function initialized(collection, toList) {
     let done = false;

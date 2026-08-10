@@ -15,7 +15,7 @@ describe('operations upsert', function() {
         const ops = operations(persistence, bus);
         const key = `new-${Math.random()}`;
         await ops.upsert({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: new Date(),
             kind: 'chem',
             key,
@@ -34,14 +34,14 @@ describe('operations remove', function() {
         bus.stream((event) => {
             events.push(event);
         });
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `del-${Math.random().toString(36).slice(2)}`;
         await persistence.upsert({
             machine: machineId,
             occurred_at: new Date('2024-06-01T12:00:00.000Z'),
             kind: 'bath',
             key,
-            payload: { action: 'load', unit: 'кг' }
+            payload: { action: 'load', unit: 'kg' }
         });
         const ops = operations(persistence, bus);
         await ops.remove(machineId, key);
@@ -53,7 +53,7 @@ describe('operations listForMachine', function() {
     it('merges persistence and injectable kind sources sorted by occurred_at', async function() {
         const store = { operations: [] };
         const persistence = operationStateMemory(store);
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const chemKey = `chem-${Math.random()}`;
         await persistence.upsert({
             machine: machineId,
@@ -101,7 +101,7 @@ describe('operations listForMachine', function() {
     it('defaults kinds to injectable source keys when kinds are omitted', async function() {
         const store = { operations: [] };
         const persistence = operationStateMemory(store);
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const key = `temp-only-${Math.random()}`;
         const ops = operations(persistence, pubsub(), {
             temp: {
@@ -125,7 +125,7 @@ describe('operations listForMachine', function() {
     it('accepts a single kind string for persistence-backed reads', async function() {
         const store = { operations: [] };
         const persistence = operationStateMemory(store);
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const key = `chem-${Math.random()}`;
         await persistence.upsert({
             machine: machineId,

@@ -105,7 +105,7 @@ function gateState(config) {
  *   const streams = silentStreams({
  *     budget: 15,
  *     interval: 5,
- *     sources: [mx210Tcp('icht-1', '192.168.2.148', 502)]
+ *     sources: [mx210Tcp('m-1', '192.0.2.10', 502)]
  *   });
  *   streams.bind(clickhouseSink);
  *   streams.start();

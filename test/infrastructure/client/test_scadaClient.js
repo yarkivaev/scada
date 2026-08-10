@@ -54,7 +54,7 @@ describe('scadaClient', function() {
 
     it('returns machine client for machine id', function() {
         const client = scadaClient('http://localhost/api', () => {}, function() {});
-        const machine = client.machine('icht1');
+        const machine = client.machine('m1');
         assert(typeof machine.info === 'function');
     });
 

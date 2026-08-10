@@ -6,7 +6,7 @@
  * @returns {object|undefined} machine and shop or undefined
  *
  * @example
- *   const found = machineInPlant(plant, 'icht1');
+ *   const found = machineInPlant(plant, 'm1');
  *   found.machine.sensors;
  */
 export default function machineInPlant(plant, id) {

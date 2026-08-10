@@ -9,7 +9,7 @@
  * @returns {object} machine with name, sensors, timeline, alerts methods
  *
  * @example
- *   const m = machine('icht1', { sensors: { voltage }, alerts: history, timeline: tl });
+ *   const m = machine('m1', { sensors: { voltage }, alerts: history, timeline: tl });
  *   m.name();
  */
 export default function machine(name, deps) {

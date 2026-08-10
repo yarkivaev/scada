@@ -3,7 +3,7 @@ import userDecisionsFromPg from '../../../../src/infrastructure/persistence/pg/u
 
 describe('userDecisionsFromPg', function() {
     it('queries user_decisions by machine and start_time ordered by decided_at', async function() {
-        const machine = `icht-${Math.random()}`;
+        const machine = `m-${Math.random()}`;
         const start = new Date(`2024-0${Math.floor(Math.random() * 9) + 1}-15T10:00:00.000Z`);
         const captured = [];
         const pool = {
@@ -23,10 +23,10 @@ describe('userDecisionsFromPg', function() {
     });
 
     it('maps username operator_id decided_at and payload from rows', async function() {
-        const username = `оператор_${Math.random()}`;
+        const username = `operator_${Math.random()}`;
         const operatorId = 3 + Math.floor(Math.random() * 80);
         const decidedAt = new Date('2024-07-01T08:15:00.000Z');
-        const payload = JSON.stringify({ tags: [`нагрев_${Math.random()}`], user: username });
+        const payload = JSON.stringify({ tags: [`heating_${Math.random()}`], user: username });
         const pool = {
             async query() {
                 return {
@@ -39,7 +39,7 @@ describe('userDecisionsFromPg', function() {
                 };
             }
         };
-        const rows = await userDecisionsFromPg(pool).list('icht1', new Date('2024-07-01T08:00:00.000Z'));
+        const rows = await userDecisionsFromPg(pool).list('m1', new Date('2024-07-01T08:00:00.000Z'));
         assert.deepStrictEqual(
             rows[0],
             { username, operatorId, decidedAt, payload },
@@ -48,7 +48,7 @@ describe('userDecisionsFromPg', function() {
     });
 
     it('queries user_decisions by machine and payload key', async function() {
-        const machine = `icht-${Math.random()}`;
+        const machine = `m-${Math.random()}`;
         const key = `bath:${machine}:${Math.random().toString(36).slice(2)}`;
         const captured = [];
         const pool = {
@@ -67,8 +67,8 @@ describe('userDecisionsFromPg', function() {
     });
 
     it('inserts user_decisions row with operator_id and payload json', async function() {
-        const machine = `icht-${Math.random()}`;
-        const username = `оператор_${Math.random()}`;
+        const machine = `m-${Math.random()}`;
+        const username = `operator_${Math.random()}`;
         const captured = [];
         const pool = {
             async query(sql, params) {
@@ -82,7 +82,7 @@ describe('userDecisionsFromPg', function() {
             username,
             operatorId: 5,
             decidedAt: new Date('2024-07-01T08:01:00.000Z'),
-            payload: { kind: 'bath_op', verb: 'create', key: `bath:${machine}:1` }
+            payload: { kind: 'operation_op', verb: 'create', key: `bath:${machine}:1` }
         });
         assert.ok(
             captured[0].sql.includes('INSERT INTO user_decisions')

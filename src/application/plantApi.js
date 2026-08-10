@@ -21,7 +21,7 @@ import { routes } from '@yarkivaev/simple-server';
  * @returns {object} routes with list() and handle()
  *
  * @example
- *   const api = plantApi('/api/v1', plant, { extraRoutes: meltingRoute('/api/v1', plant) });
+ *   const api = plantApi('/api/v1', plant, { extraRoutes: siteRoute('/api/v1', plant) });
  */
 export default function plantApi(basePath, plant, config) {
     const opts = config || {};

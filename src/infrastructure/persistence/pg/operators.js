@@ -96,7 +96,7 @@ async function writeFlag(pool, logger, flag) {
  *   const provider = operatorsFromPg(pool);
  *   const rows = await provider.list();
  *   const created = await provider.create({
- *     cardUid: 'AB12', firstName: 'Иван', lastName: 'Петров', displayName: 'Иван Петров'
+ *     cardUid: 'AB12', firstName: 'Ivan', lastName: 'Petrov', displayName: 'Ivan Petrov'
  *   });
  *   await provider.permit(true);
  */

@@ -11,7 +11,7 @@
  *
  * @example
  *   const rows = await pollTopicCursors(conn, [
- *     { topic: 'icht1/voltage', since: lastTs }
+ *     { topic: 'm1/voltage', since: lastTs }
  *   ], new Date());
  */
 function formatDateTime(date) {

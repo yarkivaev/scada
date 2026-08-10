@@ -1,5 +1,5 @@
 /**
- * ClickHouse connection factory for Sokol SCADA system.
+ * ClickHouse connection factory for SCADA metrics storage.
  *
  * Provides connection with query and insert methods for sensor data.
  * When username is provided, skips schema initialization (for read-only users).
@@ -13,7 +13,7 @@
  *
  * @example
  *   const conn = await clickhouseConnection('localhost', { username: 'readonly', password: 'secret' });
- *   const rows = await conn.query('SELECT * FROM scada.metrics WHERE topic = {topic:String}', { topic: 'icht1/voltage' });
+ *   const rows = await conn.query('SELECT * FROM scada.metrics WHERE topic = {topic:String}', { topic: 'm1/voltage' });
  *   await conn.close();
  */
 import { createClient } from '@clickhouse/client';

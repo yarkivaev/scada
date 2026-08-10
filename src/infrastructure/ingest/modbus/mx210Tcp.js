@@ -52,7 +52,7 @@ export function mx210Metrics(device, collector) {
  * not MQTT publish envelopes.
  *
  * @example
- *   const stream = mx210Tcp('icht-1', '192.168.2.148', 502);
+ *   const stream = mx210Tcp('m-1', '192.0.2.10', 502);
  *   const poll = stream.open(collector, clock, 5);
  *   poll.start();
  *

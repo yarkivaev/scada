@@ -22,7 +22,7 @@ function mapRow(item) {
  * @returns {object} timeline read port with list, rowAt, pending
  *
  * @example
- *   const pg = pgTimeline(pool, 'icht1');
+ *   const pg = pgTimeline(pool, 'm1');
  *   await pg.list({ from: '2024-01-01' });
  */
 export default function pgTimeline(pool, machineId) {

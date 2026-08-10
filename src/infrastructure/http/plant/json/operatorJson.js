@@ -8,7 +8,7 @@ import operatorExtras, { operatorIdentityKeys } from '../../../operators/operato
  * @returns {object} JSON-serializable operator
  *
  * @example
- *   operatorJson({ id: 1, cardUid: 'dev-card-001', firstName: 'Иван', lastName: 'Петров', displayName: 'Иван Петров' });
+ *   operatorJson({ id: 1, cardUid: 'dev-card-001', firstName: 'Ivan', lastName: 'Petrov', displayName: 'Ivan Petrov' });
  */
 export default function operatorJson(row) {
     return {

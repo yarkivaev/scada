@@ -18,7 +18,7 @@ describe('amqpMqttRelay', function() {
         };
         const consume = relayConsumer(sink, channel);
         consume({
-            fields: { routingKey: `plant.icht-2.${suffix}` },
+            fields: { routingKey: `plant.m-2.${suffix}` },
             content: Buffer.from('42')
         });
         assert.strictEqual(acked.length, 1, 'should ack message via bound channel');

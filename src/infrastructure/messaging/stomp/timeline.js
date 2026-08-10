@@ -6,7 +6,7 @@
  * @returns {object} timeline write port with retag and respond
  *
  * @example
- *   const stomp = stompTimeline(decisions, 'icht1');
+ *   const stomp = stompTimeline(decisions, 'm1');
  *   await stomp.retag(new Date(), ['on'], {}, audit);
  */
 export default function stompTimeline(decisions, machineId) {

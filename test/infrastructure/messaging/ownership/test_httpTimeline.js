@@ -7,7 +7,7 @@ function audit(id, displayName) {
 
 describe('httpTimeline', function() {
     it('PATCHes segments with start tags properties and operatorId', async function() {
-        const machine = `icht-α-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-α-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2024-06-01T09:00:00.000Z');
         const calls = [];
         const port = httpTimeline({
@@ -20,7 +20,7 @@ describe('httpTimeline', function() {
                 } };
             }
         }, machine);
-        await port.retag(start, ['heating', 'скат'], { note: 'да' }, audit(7, 'Елена'));
+        await port.retag(start, ['heating', 'skim'], { note: 'yes' }, audit(7, 'Elena'));
         assert.deepStrictEqual(calls[0], {
             url: `http://edge.test/api/v1/machines/${encodeURIComponent(machine)}/segments`,
             options: {
@@ -28,8 +28,8 @@ describe('httpTimeline', function() {
                 headers: { 'Content-Type': 'application/json', Authorization: 'Bearer sëcret' },
                 body: JSON.stringify({
                     start: start.toISOString(),
-                    tags: ['heating', 'скат'],
-                    properties: { note: 'да' },
+                    tags: ['heating', 'skim'],
+                    properties: { note: 'yes' },
                     operatorId: 7
                 })
             }
@@ -37,7 +37,7 @@ describe('httpTimeline', function() {
     });
 
     it('POSTs respond to owner request path', async function() {
-        const machine = `icht-β-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-β-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2024-06-02T11:00:00.000Z');
         const calls = [];
         const port = httpTimeline({
@@ -49,7 +49,7 @@ describe('httpTimeline', function() {
                 } };
             }
         }, machine);
-        await port.respond(start, ['idle'], {}, audit(3, 'Иван'));
+        await port.respond(start, ['idle'], {}, audit(3, 'Ivan'));
         assert.strictEqual(
             calls[0].url,
             `http://edge.test/api/v1/machines/${encodeURIComponent(machine)}/requests/${encodeURIComponent(start.toISOString())}/respond`,
@@ -58,7 +58,7 @@ describe('httpTimeline', function() {
     });
 
     it('throws SERVICE_UNAVAILABLE when owner fetch rejects', async function() {
-        const machine = `icht-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const port = httpTimeline({
             baseUrl: 'http://down.test/api/v1',
             async fetch() {
@@ -77,7 +77,7 @@ describe('httpTimeline', function() {
     });
 
     it('throws BAD_GATEWAY when owner returns non-ok status', async function() {
-        const machine = `icht-δ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-δ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const port = httpTimeline({
             baseUrl: 'http://edge.test/api/v1',
             async fetch() {

@@ -6,7 +6,7 @@
  *
  * @example
  * parseModbusDeviceSpec('cooling-1:rtu:/dev/ttyUSB0:9600:8N1:1');
- * parseModbusDeviceSpec('icht-2:192.168.2.149:502');
+ * parseModbusDeviceSpec('m-2:192.0.2.11:502');
  */
 
 /**

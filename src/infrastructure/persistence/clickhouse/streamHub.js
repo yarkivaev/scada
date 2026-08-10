@@ -6,7 +6,7 @@
  *
  * @example
  *   const hub = clickhouseStreamHub(connection);
- *   const sub = hub.watch('icht1/V', since, 1000, onRow, { unit: 'V', clock });
+ *   const sub = hub.watch('m1/V', since, 1000, onRow, { unit: 'V', clock });
  *   sub.cancel();
  */
 import pollTopicCursors from './pollTopicCursors.js';

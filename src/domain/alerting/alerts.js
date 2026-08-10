@@ -11,10 +11,10 @@ import pubsub from '../shared/pubsub.js';
  *
  * @example
  *   const history = alerts(alert, acknowledgedAlert);
- *   const a = history.trigger('High voltage', new Date(), 'icht1');
+ *   const a = history.trigger('High voltage', new Date(), 'm1');
  *   a.id; // 'alert-0'
  *   a.acknowledge(); // replaces with acknowledged version
- *   history.trigger('From event', new Date(), 'icht1', sourceEvent); // with event
+ *   history.trigger('From event', new Date(), 'm1', sourceEvent); // with event
  *   history.stream((evt) => console.log(evt)); // subscribe to events
  */
 export default function alerts(alert, acknowledgedAlert) {

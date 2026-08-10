@@ -3,7 +3,7 @@ import { pgMetricsSensor } from '../../../../src/infrastructure/persistence/metr
 
 describe('pgMetricsSensor', function() {
     it('current reads latest value from metrics port', async function() {
-        const topic = `MX210/icht-${Math.random()}/GET/AI1/VALUE`;
+        const topic = `MX210/m-${Math.random()}/GET/AI1/VALUE`;
         const metrics = {
             async latestForTopic(key) {
                 if (key !== topic) {

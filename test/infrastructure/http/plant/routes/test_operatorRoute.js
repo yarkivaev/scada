@@ -45,7 +45,7 @@ describe('operatorRoute', function() {
         const uid = `route-${Math.random()}`;
         const provider = {
             async list() {
-                return [operator(9, uid, 'Елена', 'Волкова', 'Елена Волкова')];
+                return [operator(9, uid, 'Elena', 'Volkov', 'Elena Volkov')];
             }
         };
         const api = routes(operatorRoute('/api/v1', provider));
@@ -84,9 +84,9 @@ describe('operatorRoute', function() {
         const req = mockReq(
             JSON.stringify({
                 cardUid: `  ${uid}  `,
-                firstName: 'Ирина',
-                lastName: 'Ковалёва',
-                displayName: 'Ирина Ковалёва'
+                firstName: 'Irina',
+                lastName: 'Kovaleva',
+                displayName: 'Irina Kovaleva'
             }),
             { method: 'POST', url: '/api/v1/operators' }
         );
@@ -124,9 +124,9 @@ describe('operatorRoute', function() {
         const req = mockReq(
             JSON.stringify({
                 cardUid: uid,
-                firstName: 'Ольга',
-                lastName: 'Смирнова',
-                displayName: 'Ольга Смирнова',
+                firstName: 'Olga',
+                lastName: 'Smirnov',
+                displayName: 'Olga Smirnov',
                 plantCode: code
             }),
             { method: 'POST', url: '/api/v1/operators' }
@@ -158,9 +158,9 @@ describe('operatorRoute', function() {
         const req = mockReq(
             JSON.stringify({
                 cardUid: uid,
-                firstName: 'Пётр',
-                lastName: 'Сидоров',
-                displayName: 'Пётр Сидоров'
+                firstName: 'Petr',
+                lastName: 'Sidorov',
+                displayName: 'Petr Sidorov'
             }),
             { method: 'POST', url: '/api/v1/operators' }
         );

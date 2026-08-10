@@ -9,7 +9,7 @@
  * @returns {object} operator with id, cardUid, firstName, lastName, displayName
  *
  * @example
- *   const op = operator(1, 'dev-card-001', 'Иван', 'Петров', 'Иван Петров');
+ *   const op = operator(1, 'dev-card-001', 'Ivan', 'Petrov', 'Ivan Petrov');
  *   op.displayName;
  */
 export default function operator(id, cardUid, firstName, lastName, displayName) {

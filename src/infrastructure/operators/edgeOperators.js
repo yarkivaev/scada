@@ -8,7 +8,7 @@
  *
  * @example
  *   const provider = edgeOperators(operators(), centralOperators(client, '/api/v1'));
- *   await provider.create({ cardUid: 'AB12', firstName: 'Иван', lastName: 'Петров', displayName: 'Иван Петров' });
+ *   await provider.create({ cardUid: 'AB12', firstName: 'Ivan', lastName: 'Petrov', displayName: 'Ivan Petrov' });
  */
 export default function edgeOperators(cache, source) {
     return {

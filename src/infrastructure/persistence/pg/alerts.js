@@ -6,7 +6,7 @@
  *
  * @example
  *   const store = alertsStatePg(pool);
- *   const rows = await store.listUnacknowledged({ machine: 'icht1' });
+ *   const rows = await store.listUnacknowledged({ machine: 'm1' });
  */
 export default function alertsStatePg(pool) {
     return {

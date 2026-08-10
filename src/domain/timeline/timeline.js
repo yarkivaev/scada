@@ -6,7 +6,7 @@
  * @returns {object} timeline with list, rowAt, pending, stream
  *
  * @example
- *   const tl = timeline(pgTimeline(pool, 'icht1'), bus);
+ *   const tl = timeline(pgTimeline(pool, 'm1'), bus);
  *   await tl.list({ from: '2024-01-01' });
  */
 export default function timeline(read, bus) {

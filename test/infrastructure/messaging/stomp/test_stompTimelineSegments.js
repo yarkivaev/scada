@@ -20,7 +20,7 @@ function fakeStomp(ref) {
 describe('stompTimelineSegments', function() {
     it('emits created segment event on matching machine bus', function() {
         const stomp = fakeStomp({ collector: null, events: [] });
-        const machine = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = Date.now() + Math.floor(Math.random() * 1e6);
         const bus = pubsub();
         bus.stream((event) => {
@@ -41,7 +41,7 @@ describe('stompTimelineSegments', function() {
     });
     it('omits tags field when supervisor payload tags are null', function() {
         const stomp = fakeStomp({ collector: null, events: [] });
-        const machine = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = Date.now() + Math.floor(Math.random() * 1e6);
         const bus = pubsub();
         bus.stream((event) => {

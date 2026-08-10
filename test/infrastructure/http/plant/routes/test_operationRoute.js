@@ -93,7 +93,7 @@ describe('operationRoute', function() {
     });
 
     it('returns only rows matching kind and occurred_at window', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p, wrapped } = buildPlant(data, machineId);
         const key = `op-${Math.random()}`;
@@ -123,7 +123,7 @@ describe('operationRoute', function() {
     });
 
     it('merges kinds from postgres and injectable source sorted by occurred_at', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const stamp = `temp-${Math.random()}`;
         const kindSources = {
@@ -174,7 +174,7 @@ describe('operationRoute', function() {
     });
 
     it('defaults requested kinds to injectable source keys when query omits kind filters', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const key = `temp-only-${Math.random()}`;
         const kindSources = {
@@ -205,8 +205,8 @@ describe('operationRoute', function() {
     });
 
     it('creates operation via POST and returns external_key from body key', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `key-${Math.random().toString(36).slice(2)}`;
         const kind = `chem-${Math.floor(Math.random() * 900 + 100)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
@@ -228,7 +228,7 @@ describe('operationRoute', function() {
     });
 
     it('lists POST-created operation on subsequent GET', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const key = `list-${Math.random().toString(36).slice(2)}`;
         const kind = `qc-${Math.floor(Math.random() * 900 + 100)}`;
         const data = stateDataFake({});
@@ -240,7 +240,7 @@ describe('operationRoute', function() {
                 kind,
                 key,
                 occurred_at: '2024-06-01T12:00:00.000Z',
-                payload: { note: 'загрузка' }
+                payload: { note: 'loading' }
             }), {
                 method: 'POST',
                 url: `/api/v1/machines/${machineId}/operations`
@@ -258,7 +258,7 @@ describe('operationRoute', function() {
     });
 
     it('generates key when POST omits key', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
@@ -267,7 +267,7 @@ describe('operationRoute', function() {
         await api.handle(
             mockReq(JSON.stringify({
                 kind,
-                payload: { action: 'load', unit: 'кг' }
+                payload: { action: 'load', unit: 'kg' }
             }), {
                 method: 'POST',
                 url: `/api/v1/machines/${machineId}/operations`
@@ -284,7 +284,7 @@ describe('operationRoute', function() {
     });
 
     it('returns 404 when POST targets unknown machine', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const missing = `missing-${Math.random().toString(36).slice(2)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
@@ -304,7 +304,7 @@ describe('operationRoute', function() {
     });
 
     it('returns 404 when plant has no operations port', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const history = alerts(alert, acknowledgedAlert);
         const item = machine(machineId, {
             sensors: {},
@@ -339,7 +339,7 @@ describe('operationRoute', function() {
     });
 
     it('returns 400 when POST omits kind', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
         const api = apiFor(p);
@@ -358,7 +358,7 @@ describe('operationRoute', function() {
     });
 
     it('returns 400 when POST omits payload', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
         const api = apiFor(p);
@@ -377,8 +377,8 @@ describe('operationRoute', function() {
     });
 
     it('updates existing operation via PUT and returns new payload', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `прав-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `edit-${Math.random().toString(36).slice(2)}`;
         const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
         const data = stateDataFake({});
         const { plant: p, wrapped } = buildPlant(data, machineId);
@@ -394,7 +394,7 @@ describe('operationRoute', function() {
         const res = mockRes();
         await api.handle(
             mockReq(JSON.stringify({
-                payload: { action: 'load', amount, unit: 'кг' }
+                payload: { action: 'load', amount, unit: 'kg' }
             }), {
                 method: 'PUT',
                 url: `/api/v1/machines/${machineId}/operations/${encodeURIComponent(key)}`
@@ -406,8 +406,8 @@ describe('operationRoute', function() {
     });
 
     it('lists PUT-updated occurred_at on subsequent GET', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `время-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `time-${Math.random().toString(36).slice(2)}`;
         const kind = `chem-${Math.floor(Math.random() * 900 + 100)}`;
         const data = stateDataFake({});
         const { plant: p, wrapped } = buildPlant(data, machineId);
@@ -441,7 +441,7 @@ describe('operationRoute', function() {
     });
 
     it('returns 404 when PUT targets unknown key', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
         const api = apiFor(p);
@@ -459,9 +459,9 @@ describe('operationRoute', function() {
     });
 
     it('returns 404 when PUT targets key owned by another machine', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const otherId = `other-${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `чужой-${Math.random().toString(36).slice(2)}`;
+        const key = `other-${Math.random().toString(36).slice(2)}`;
         const data = stateDataFake({});
         const { plant: p, wrapped } = buildPlant(data, machineId);
         await wrapped.upsert({
@@ -486,8 +486,8 @@ describe('operationRoute', function() {
     });
 
     it('deletes existing operation via DELETE', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `del-${Math.random().toString(36).slice(2)}`;
         const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
         const data = stateDataFake({});
         const { plant: p, wrapped } = buildPlant(data, machineId);
@@ -516,7 +516,7 @@ describe('operationRoute', function() {
     });
 
     it('returns 404 when DELETE targets unknown key', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
         const api = apiFor(p);
@@ -530,10 +530,10 @@ describe('operationRoute', function() {
     });
 
     it('stamps operator display name into payload on POST', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
-        const name = `Оператор_${Math.floor(Math.random() * 900 + 100)}`;
+        const name = `Operator_${Math.floor(Math.random() * 900 + 100)}`;
         const api = plantApi('/api/v1', p, {
             clock: virtualClock(() => {
                 return new Date();
@@ -559,7 +559,7 @@ describe('operationRoute', function() {
     });
 
     it('records create decision when decisions port is provided', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
         const rows = [];
@@ -568,7 +568,7 @@ describe('operationRoute', function() {
                 return new Date();
             }),
             timelineOperator: {
-                anonymousUsers: { monitoring: 'Анонимный пользователь панели мониторинга' }
+                anonymousUsers: { monitoring: 'Anonymous monitoring user' }
             },
             operationDecisions: {
                 async insert(row) {
@@ -596,7 +596,7 @@ describe('operationRoute', function() {
     });
 
     it('proxies POST to owning edge without local upsert', async function() {
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
         const { plant: p } = buildPlant(data, machineId);
         const calls = [];
@@ -605,7 +605,7 @@ describe('operationRoute', function() {
                 return new Date();
             }),
             timelineOperator: {
-                anonymousUsers: { monitoring: 'Анонимный пользователь панели мониторинга' }
+                anonymousUsers: { monitoring: 'Anonymous monitoring user' }
             },
             owners: {
                 resolve() {
@@ -653,6 +653,69 @@ describe('operationRoute', function() {
             JSON.parse(res.body).external_key,
             `bath:${machineId}:edge`,
             'owner proxy did not return edge response body'
+        );
+    });
+
+    it('records create decision on central when proxying to owning edge', async function() {
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const rows = [];
+        const api = plantApi('/api/v1', p, {
+            clock: virtualClock(() => {
+                return new Date();
+            }),
+            timelineOperator: {
+                anonymousUsers: { monitoring: 'Anonymous monitoring user' }
+            },
+            operationDecisions: {
+                async insert(row) {
+                    rows.push(row);
+                }
+            },
+            owners: {
+                resolve() {
+                    return {
+                        kind: 'edge',
+                        baseUrl: 'http://edge.test/api/v1',
+                        async fetch() {
+                            return {
+                                ok: true,
+                                status: 200,
+                                async text() {
+                                    return JSON.stringify({
+                                        machine: machineId,
+                                        kind: 'bath',
+                                        external_key: `bath:${machineId}:edge-audit`,
+                                        occurred_at: '2024-06-01T10:00:00.000Z',
+                                        payload: { action: 'set', amount: 1, unit: 't', source: 'api' }
+                                    });
+                                }
+                            };
+                        }
+                    };
+                }
+            }
+        });
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'bath',
+                client: 'monitoring',
+                payload: { action: 'set', amount: 1, unit: 't', source: 'api' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        assert.strictEqual(
+            res.statusCode === 200
+                && rows.length === 1
+                && rows[0].payload.verb === 'create'
+                && rows[0].payload.key === `bath:${machineId}:edge-audit`,
+            true,
+            'owner proxy create did not insert central user_decisions row'
         );
     });
 });

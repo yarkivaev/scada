@@ -23,7 +23,7 @@ describe('modbusMqtt', () => {
     assert.throws(
       () => {return modbusMqtt(
         `mqtt://broker-${Math.random().toString(36).slice(2)}`,
-        `прибор-${Math.random().toString(36).slice(2)}:localhost:502`
+        `device-${Math.random().toString(36).slice(2)}:localhost:502`
       )},
       /Config must be an object/u,
       'Should reject missing config'
@@ -34,7 +34,7 @@ describe('modbusMqtt', () => {
     assert.throws(
       () => {return modbusMqtt(
         `mqtt://broker-${Math.random().toString(36).slice(2)}`,
-        `прибор-${Math.random().toString(36).slice(2)}:localhost:502`,
+        `device-${Math.random().toString(36).slice(2)}:localhost:502`,
         { interval: 5 }
       )},
       /transformerFactory is required/u,
@@ -46,7 +46,7 @@ describe('modbusMqtt', () => {
     const path = `/dev/ttyUSB${Math.floor(Math.random() * 9)}`;
     const pipeline = modbusMqtt(
       `mqtt://broker-${Math.random().toString(36).slice(2)}`,
-      `icht-1:rtu:${path}:9600:8N2:1,icht-2:rtu:${path}:9600:8N2:2`,
+      `m-1:rtu:${path}:9600:8N2:1,m-2:rtu:${path}:9600:8N2:2`,
       {
         interval: 5,
         address: 1280,

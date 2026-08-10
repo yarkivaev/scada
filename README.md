@@ -1,26 +1,26 @@
 # scada
 
-Generic industrial monitoring domain, state persistence, and HTTP APIs for the Sokol SCADA platform.
+Generic industrial monitoring domain, state persistence, and HTTP APIs (`@yarkivaev/scada`).
 
-This package is plant-agnostic: it defines `plant` → `shop` → `machine` hierarchy, timeline and alerts, sensor read ports, STOMP ingest pipelines, and PostgreSQL/ClickHouse adapters. Sokol melting-shop specifics live in [`sokol-scada`](https://gitlab.scada.svsokol.ru/scada/sokol-scada).
+This package is plant-agnostic: it defines `plant` → `shop` → `machine` hierarchy, timeline and alerts, sensor read ports, STOMP ingest pipelines, and PostgreSQL/ClickHouse adapters. Plant-specific routes, sensors, HMI strings, and tag taxonomies live in downstream plant packages.
 
-Repository: `https://gitlab.scada.svsokol.ru/scada/scada`
+Repository: `https://github.com/yarkivaev/scada`
 
 ## Install
 
 ```bash
-npm install
+npm install @yarkivaev/scada
 ```
 
-Node.js 22+, ES modules. Published to the GitLab npm registry on tag push.
+Node.js 22+, ES modules.
 
 ## Quick start
 
 ```javascript
-import { plantApi, metricsPlant, clickhouseConnection } from 'scada';
+import { plantApi, metricsPlant, clickhouseConnection } from '@yarkivaev/scada';
 
 const p = await metricsPlant(
-  [{ device: 'icht-1', machine: 'icht1' }],
+  [{ device: 'device-1', machine: 'm1' }],
   {
     connection: () => clickhouseConnection(process.env.CLICKHOUSE_HOST),
     buildSensors: (conn, entry) => ({ /* sensor factories */ }),
@@ -31,7 +31,7 @@ const p = await metricsPlant(
 const api = plantApi('/api/v1', p);
 ```
 
-For a full deployable process, use `siteServer` or the `supervisor-sink` binary (see below). In production, `sokol-scada` wraps these with melting routes and MX210 sensors.
+For a full deployable process, use `siteServer` or the `supervisor-sink` binary (see below). Plant packages wrap these with site-specific routes and sensors.
 
 ## Layout
 
@@ -68,7 +68,7 @@ Dependency rules:
 ```
 ClickHouse ← mqttMetrics / amqpMetricsIngest
 PostgreSQL ← STOMP alerts (via plantServer)
-plantApi → REST + SSE → frontend / scada/client
+plantApi → REST + SSE → frontend / @yarkivaev/scada/client
 ```
 
 **Supervisor-sink** (write path):
@@ -83,14 +83,14 @@ edgeApi (:8081) ← metrics batch, checkpoints, retention (edge profile)
 
 ## Public exports
 
-Main entry (`import { … } from 'scada'`):
+Main entry (`import { … } from '@yarkivaev/scada'`):
 
 | Export | Purpose |
 |--------|---------|
 | `plant`, `shop`, `machine` | Domain hierarchy |
 | `timeline`, `alerts`, `alert`, `acknowledgedAlert` | Timeline and alerting |
 | `plantApi`, `plantServer`, `siteServer` | HTTP composition |
-| `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `scada/client` |
+| `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `@yarkivaev/scada/client` |
 | `metricsPlant`, `shopWithTimeline`, `machineInPlant` | Plant wiring helpers |
 | `supervisorSink`, `readDeploymentConfig` | STOMP ingest + PG persistence |
 | `edgeApi`, `stateHttpClient`, `metricsSensor` | Edge HTTP read/write |
@@ -102,17 +102,17 @@ Main entry (`import { … } from 'scada'`):
 
 Subpath exports:
 
-- `scada/client` — browser/Node HTTP+SSE client (`scadaClient`, `machineClient`) plus re-exported export ports
-- `scada/stateDataFake` — in-memory state backends for tests
-- `scada/startTestEdgeApi` — ephemeral edge API for integration tests
+- `@yarkivaev/scada/client` — browser/Node HTTP+SSE client (`scadaClient`, `machineClient`) plus re-exported export ports
+- `@yarkivaev/scada/stateDataFake` — in-memory state backends for tests
+- `@yarkivaev/scada/startTestEdgeApi` — ephemeral edge API for integration tests
 
 ## Export ports
 
-Generic read/stream/write contract for outbound jobs. Read side uses existing `plantApi` / `scada/client` only (no direct DB). Destination adapters and plant maps live in plant packages (e.g. `sokol-scada`), not here. Do not put export into `edgeApi`.
+Generic read/stream/write contract for outbound jobs. Read side uses existing `plantApi` / `@yarkivaev/scada/client` only (no direct DB). Destination adapters and plant maps live in plant packages, not here. Do not put export into `edgeApi`.
 
 ```javascript
-import { exportQuery, exportStream, exportSink, exportJob } from 'scada';
-import { scadaClient } from 'scada/client';
+import { exportQuery, exportStream, exportSink, exportJob } from '@yarkivaev/scada';
+import { scadaClient } from '@yarkivaev/scada/client';
 
 const client = scadaClient(baseUrl, fetch, EventSource);
 const query = exportQuery(client);
@@ -125,7 +125,9 @@ const job = exportJob({ query, transform: (rows) => rows, sink });
 await job.run({ kind: 'segments', machine: 'furnace-α', from, to });
 ```
 
-Downstream (`sokol-scada`) should pin the released tag after this version (e.g. `#v2.3.32`).
+Downstream plant packages should pin a released tag (e.g. `#v2.3.45`).
+
+Alert and HMI copy are inject-only: pass `translations` into `siteServer` / `plantServer` / `alertPipeline` config, and override `TAG_CATALOG_PATH` or `plantApi({ tagCatalog })` for site taxonomy. Defaults ship empty or English stubs.
 
 ## Binaries
 
@@ -133,7 +135,7 @@ Downstream (`sokol-scada`) should pin the released tag after this version (e.g. 
 |--------|------|
 | `supervisor-sink` | STOMP → PostgreSQL ingest + edge HTTP API (`STATE_HTTP_PORT`, default 8081) |
 
-Full plant API + melting routes: use `sokol-scada/bin/central-site.js` or `edge-site.js`, which call `siteServer` from this package.
+Full plant API with site-specific routes: plant packages call `siteServer` from this package.
 
 ## Sensor port
 
@@ -186,7 +188,7 @@ Tests mirror `src/` under `test/`. Use fakes instead of mocks; one assertion per
 For HTTP/state tests without PostgreSQL:
 
 ```javascript
-import stateDataFake from 'scada/stateDataFake';
+import stateDataFake from '@yarkivaev/scada/stateDataFake';
 ```
 
 ## Design conventions
@@ -198,31 +200,17 @@ import stateDataFake from 'scada/stateDataFake';
 
 ## Package boundary
 
-| This package (`scada`) | Downstream (`sokol-scada`) |
-|------------------------|----------------------------|
-| Generic plant, timeline, alerts, ingest | Melting domain, MX210 sensors, Russian HMI strings |
-| `plantApi`, `siteServer`, `supervisorSink` | `central-site.js`, `edge-site.js` bins |
+| This package (`@yarkivaev/scada`) | Downstream plant package |
+|------------------------|--------------------------|
+| Generic plant, timeline, alerts, ingest | Site domain, sensors, HMI strings, tag taxonomy |
+| Empty/injectable alert `translations` | Localized rule messages |
+| Opaque operation `kind` strings | Site-specific kinds (`sample`, `load`, …) |
+| `plantApi`, `siteServer`, `supervisorSink` | Site bins and routes |
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
-| ClickHouse + PG adapters | `sokolPlant`, `edgePlant` wiring |
+| ClickHouse + PG adapters | Plant wiring (`metricsPlant`, shops, machines) |
 
-Depend on a pinned version (`"scada": "git+ssh://…#v2.3.32"`), not a local path, in downstream packages.
+Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.45"`), not a local path, in downstream packages.
 
 ## CI/CD
 
-GitLab project `scada/scada`. Pipeline from `gitlab-ci-templates`: test, validate-version, create-tag, release-npm. This repo publishes an npm package only; container images are built in downstream deploy repos (e.g. `sokol-scada`).
-
-
-
-Задачи:
-- добавить к каждому пользовательскому действию метку, идентифицирующую оператора              high priority
-- настроить корректную работу алертов
-- добавить получение данных с датчиков контуров охлаждения воды, охлаждающих индукционные печи high priority
-- добавить получение данных с датчика температуры металла в индукционной печи
-- добавить получение информации о хим составе металла в индукционной печи
-- добавить возможность выделения циклов плавки металла. Информация о циклах плавки должна      high priority
-  отображаться в hmi, monitoring панели, ежедневных отчётах
-- добавить возможность указывать вес металла в определённых для этого сегментах и другие поля  higt priority
-- добавить возможность указывать ремонтные простои и отправлять их в 1с
-  - изменить структуру таким образом, чтобы была возможность поддержки иерархичной структуры
-    тегов
-  - настроить возможность отправки информации о ремонтных простоев
+GitHub Actions via `yarkivaev/npm-workflows` (lint, test, version check). This repo publishes an npm package only; container images are built in downstream deploy repos.

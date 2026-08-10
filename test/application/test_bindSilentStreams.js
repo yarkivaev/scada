@@ -12,7 +12,7 @@ describe('bindSilentStreams', function() {
     });
 
     it('forwards onSeen names into streams.seen', function() {
-        const name = `icht-${Math.random().toString(36).slice(2)}`;
+        const name = `m-${Math.random().toString(36).slice(2)}`;
         const seen = [];
         const streams = {
             bind() {},

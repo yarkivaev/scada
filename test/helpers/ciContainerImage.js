@@ -26,7 +26,7 @@ const PUBLIC_HUB_IMAGES = {
  * in upper case with hyphens as underscores (e.g. eclipse-mosquitto →
  * TESTCONTAINERS_ECLIPSE_MOSQUITTO_IMAGE).
  *
- * @param {string} name - mirror image name in infra/gitlab-ci-templates registry
+ * @param {string} name - mirror image short name (e.g. eclipse-mosquitto)
  * @param {string} tag - image tag
  * @param {NodeJS.ProcessEnv} env - environment variables
  * @returns {string} full docker image reference
@@ -54,7 +54,7 @@ export function resolveCiContainerImage(name, tag, env = process.env) {
 /**
  * Resolves a testcontainers image using process.env.
  *
- * @param {string} name - mirror image name in infra/gitlab-ci-templates registry
+ * @param {string} name - mirror image short name (e.g. eclipse-mosquitto)
  * @param {string} tag - image tag
  * @returns {string} full docker image reference
  *

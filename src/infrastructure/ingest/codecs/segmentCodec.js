@@ -9,7 +9,7 @@ import processingErrorLog from '../processingErrorLog.js';
  *
  * @example
  *   const codec = segmentCodec(collector);
- *   codec.accept({ destination: '/exchange/scada.segments', payload: '{"machine":"icht2","name":"on","start":1700000000,"end":1700003600,"duration":3600}' });
+ *   codec.accept({ destination: '/exchange/scada.segments', payload: '{"machine":"m2","name":"on","start":1700000000,"end":1700003600,"duration":3600}' });
  */
 export default function segmentCodec(collector) {
     if (!collector || typeof collector.accept !== 'function') {

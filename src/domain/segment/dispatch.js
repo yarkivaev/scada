@@ -9,7 +9,7 @@
  *
  * @example
  *   const route = segmentDispatch(segmentSink, retag, splitSink, closer);
- *   await route.accept({ type: 'segment', machine: 'icht1', start_time: '...', duration: 0 });
+ *   await route.accept({ type: 'segment', machine: 'm1', start_time: '...', duration: 0 });
  */
 export default function segmentDispatch(segmentSink, retag, splitSink, closer) {
     return {

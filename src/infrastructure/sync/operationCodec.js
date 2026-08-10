@@ -55,8 +55,8 @@ async function decode(parsed, collector) {
  *
  * @example
  *   const codec = operationCodec(collector);
- *   await codec.accept(Buffer.from('{"machine":"icht1","occurred_at":"2024-06-01T10:00:00.000Z","kind":"chem","external_key":"nb-1","payload":{}}'));
- *   await codec.accept(Buffer.from('{"type":"deleted","machine":"icht1","occurred_at":"2024-06-01T10:00:00.000Z","kind":"bath","external_key":"k"}'));
+ *   await codec.accept(Buffer.from('{"machine":"m1","occurred_at":"2024-06-01T10:00:00.000Z","kind":"chem","external_key":"nb-1","payload":{}}'));
+ *   await codec.accept(Buffer.from('{"type":"deleted","machine":"m1","occurred_at":"2024-06-01T10:00:00.000Z","kind":"bath","external_key":"k"}'));
  */
 export default function operationCodec(collector) {
     if (!collector || typeof collector.accept !== 'function') {

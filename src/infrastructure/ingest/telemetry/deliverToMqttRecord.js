@@ -2,8 +2,8 @@
  * Maps AMQP deliver fields to MQTT publish record.
  *
  * @example
- *   const record = deliverToMqttRecord({ routingKey: 'MX210.icht-1.GET.AI1.VALUE' }, Buffer.from('1'));
- *   // record.topic === 'MX210/icht-1/GET/AI1/VALUE'
+ *   const record = deliverToMqttRecord({ routingKey: 'MX210.m-1.GET.AI1.VALUE' }, Buffer.from('1'));
+ *   // record.topic === 'MX210/m-1/GET/AI1/VALUE'
  *
  * @param {object} fields - AMQP deliver fields with routingKey
  * @param {Buffer|string} body - Raw message body

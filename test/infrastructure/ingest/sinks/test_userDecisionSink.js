@@ -16,16 +16,16 @@ describe('userDecisionSink', function() {
     it('executes exactly one INSERT per accept call', async function() {
         const pool = fakePool();
         const sink = userDecisionSink(pool);
-        await sink.accept({ machine: 'ičt-ñ', startTime: '2024-01-01T00:00:00.000Z',
-            username: 'оп1', decidedAt: '2024-01-01T00:00:00.000Z', payload: '{}' });
+        await sink.accept({ machine: 'm-ñ', startTime: '2024-01-01T00:00:00.000Z',
+            username: 'op1', decidedAt: '2024-01-01T00:00:00.000Z', payload: '{}' });
         assert.strictEqual(pool.queries.length, 1, 'should execute one query');
     });
 
     it('uses INSERT INTO user_decisions statement', async function() {
         const pool = fakePool();
         const sink = userDecisionSink(pool);
-        await sink.accept({ machine: 'ičt-ñ', startTime: '2024-01-01T00:00:00.000Z',
-            username: 'оп1', decidedAt: '2024-01-01T00:00:00.000Z', payload: '{}' });
+        await sink.accept({ machine: 'm-ñ', startTime: '2024-01-01T00:00:00.000Z',
+            username: 'op1', decidedAt: '2024-01-01T00:00:00.000Z', payload: '{}' });
         assert.ok(pool.queries[0].sql.includes('INSERT INTO user_decisions'), 'should use INSERT INTO user_decisions');
     });
 
@@ -35,9 +35,9 @@ describe('userDecisionSink', function() {
         const operatorId = 4 + Math.floor(Math.random() * 100);
         const decidedAt = '2024-06-01T12:05:00.000Z';
         await sink.accept({
-            machine: 'ičt-ñ',
+            machine: 'm-ñ',
             startTime: '2024-01-01T00:00:00.000Z',
-            username: 'Елена Волкова',
+            username: 'Elena Volkov',
             operatorId,
             decidedAt,
             payload: '{}'
@@ -50,8 +50,8 @@ describe('userDecisionSink', function() {
         const sink = userDecisionSink(pool);
         const machine = `ičt-${Math.random()}`;
         const startTime = `2024-0${Math.floor(Math.random() * 9) + 1}-01T00:00:00.000Z`;
-        const username = `оператор_${Math.random()}`;
-        const payload = JSON.stringify({ tags: [`нагрев_${Math.random()}`] });
+        const username = `operator_${Math.random()}`;
+        const payload = JSON.stringify({ tags: [`heating_${Math.random()}`] });
         await sink.accept({ machine, startTime, username, operatorId: 1, decidedAt: startTime, payload });
         assert.deepStrictEqual(
             pool.queries[0].params,
@@ -78,9 +78,9 @@ describe('userDecisionSink propagates query failure', function() {
         await assert.rejects(
             () => {
                 return sink.accept({
-                    machine: `icht${Math.random()}`,
+                    machine: `m${Math.random()}`,
                     startTime: new Date().toISOString(),
-                    username: `оператор_${Math.random()}`,
+                    username: `operator_${Math.random()}`,
                     decidedAt: new Date().toISOString(),
                     payload: '{}'
                 });

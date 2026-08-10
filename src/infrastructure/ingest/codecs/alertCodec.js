@@ -9,8 +9,8 @@ import processingErrorLog from '../processingErrorLog.js';
  * ISO strings for PostgreSQL TIMESTAMPTZ columns.
  *
  * @example
- *   const codec = alertCodec(collector, { low_cosphi: 'Выключить переключатель компенсации' });
- *   codec.accept({ destination: '/exchange/scada.alerts', payload: '{"name":"low_cosphi","machine":"icht2","severity":"warning","status":"pending","start":1700000000}' });
+ *   const codec = alertCodec(collector, { low_cosphi: 'Switch off compensation' });
+ *   codec.accept({ destination: '/exchange/scada.alerts', payload: '{"name":"low_cosphi","machine":"m2","severity":"warning","status":"pending","start":1700000000}' });
  *
  * @param {object} collector - Collector with accept() method
  * @param {object} translations - Map of rule names to human-readable messages

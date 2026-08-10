@@ -5,7 +5,7 @@
  * @returns {object} normalized segment record
  *
  * @example
- *   const row = segmentNormalize({ machine: 'icht1', name: 'on', start: 1, end: 2, duration: 1 });
+ *   const row = segmentNormalize({ machine: 'm1', name: 'on', start: 1, end: 2, duration: 1 });
  */
 export default function segmentNormalize(parsed) {
     if (typeof parsed.machine !== 'string') {

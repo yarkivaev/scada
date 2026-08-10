@@ -139,7 +139,7 @@ function sseCapture() {
  *   const text = await segmentStreamScene().afterSupervisorPersist();
  */
 export default function segmentStreamScene() {
-    const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+    const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
     const data = stateDataFake({});
     const store = data.seed;
     const tl = machineTimeline(store, machineId, fakeDecisions());
@@ -147,8 +147,8 @@ export default function segmentStreamScene() {
     stompTimelineSegments(fakeStomp(stompRef), { [machineId]: tl.bus });
     const history = alerts(alert, acknowledgedAlert);
     const item = machine(machineId, { sensors: {}, alerts: history, timeline: tl });
-    const area = shop('meltingShop', initialized({ [machineId]: item }, Object.values), history);
-    const p = plant(initialized({ meltingShop: area }, Object.values));
+    const area = shop('shopA', initialized({ [machineId]: item }, Object.values), history);
+    const p = plant(initialized({ shopA: area }, Object.values));
     const clock = virtualClock(function clockSource() {
         return new Date();
     });

@@ -34,7 +34,7 @@ export default function tagCatalog(env) {
             return raw.slice();
         },
         /**
-         * @returns {object} id to Russian label map
+         * @returns {object} id to label map
          */
         labels() {
             const map = {};

@@ -44,7 +44,7 @@ function sseCapture() {
  *   const text = await operationStreamScene().afterUpsert();
  */
 export default function operationStreamScene() {
-    const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+    const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
     const data = stateDataFake({});
     const wrapped = plantOperations(data.operations);
     const history = alerts(alert, acknowledgedAlert);
@@ -63,8 +63,8 @@ export default function operationStreamScene() {
             }
         }
     });
-    const area = shop('meltingShop', initialized({ [machineId]: item }, Object.values), history);
-    const p = plant(initialized({ meltingShop: area }, Object.values), { operations: wrapped });
+    const area = shop('shopA', initialized({ [machineId]: item }, Object.values), history);
+    const p = plant(initialized({ shopA: area }, Object.values), { operations: wrapped });
     const clock = virtualClock(function clockSource() {
         return new Date();
     });
@@ -86,7 +86,7 @@ export default function operationStreamScene() {
                 occurred_at: new Date(Date.now() + Math.floor(Math.random() * 1e6)),
                 kind: 'chem',
                 key: `stream-${Math.random()}`,
-                payload: { note: 'ж' }
+                payload: { note: 'x' }
             });
             await new Promise((resolve) => {
                 setImmediate(resolve);
@@ -94,13 +94,13 @@ export default function operationStreamScene() {
             return capture.text();
         },
         async afterRemove() {
-            const key = `удал-${Math.random().toString(36).slice(2)}`;
+            const key = `del-${Math.random().toString(36).slice(2)}`;
             await wrapped.upsert({
                 machine: machineId,
                 occurred_at: new Date(Date.now() + Math.floor(Math.random() * 1e6)),
                 kind: 'bath',
                 key,
-                payload: { action: 'load', unit: 'кг' }
+                payload: { action: 'load', unit: 'kg' }
             });
             const capture = await openStream();
             await wrapped.remove(machineId, key);

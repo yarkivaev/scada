@@ -6,27 +6,27 @@ describe('alertCodec', function() {
     it('translates known rule name to human-readable message', function() {
         const received = [];
         const collector = { accept: (record) => { return received.push(record); } };
-        const translations = { low_cosphi: 'Выключить переключатель компенсации' };
+        const translations = { low_cosphi: 'Switch off compensation' };
         const codec = alertCodec(collector, translations);
         const payload = JSON.stringify({
             name: 'low_cosphi',
-            machine: `ичт${Math.random()}`,
+            machine: `m${Math.random()}`,
             severity: 'warning',
             status: 'pending',
             start: 1700000000000
         });
         codec.accept({ destination: '/exchange/scada.alerts', payload });
-        assert.strictEqual(received[0].message, 'Выключить переключатель компенсации', 'known rule name was not translated');
+        assert.strictEqual(received[0].message, 'Switch off compensation', 'known rule name was not translated');
     });
 
     it('falls back to rule name for unknown rules', function() {
         const received = [];
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = alertCodec(collector, {});
-        const name = `неизвестное_правило_${Math.random()}`;
+        const name = `unknown_rule_${Math.random()}`;
         const payload = JSON.stringify({
             name,
-            machine: 'icht2',
+            machine: 'm2',
             severity: 'warning',
             status: 'pending',
             start: 1700000000000
@@ -43,7 +43,7 @@ describe('alertCodec', function() {
         const status = `status${Math.random()}`;
         const payload = JSON.stringify({
             name: 'low_cosphi',
-            machine: 'icht2',
+            machine: 'm2',
             severity,
             status,
             start: 1700000000000
@@ -59,7 +59,7 @@ describe('alertCodec', function() {
         const epoch = 1700000000000 + Math.floor(Math.random() * 100000000);
         const payload = JSON.stringify({
             name: 'low_cosphi',
-            machine: 'icht2',
+            machine: 'm2',
             severity: 'warning',
             status: 'pending',
             start: epoch
@@ -71,7 +71,7 @@ describe('alertCodec', function() {
     it('throws on missing name field', async function() {
         const collector = { accept: () => {} };
         const codec = alertCodec(collector, {});
-        const payload = JSON.stringify({ machine: 'icht2', severity: 'warning', status: 'pending', start: 1700000000000 });
+        const payload = JSON.stringify({ machine: 'm2', severity: 'warning', status: 'pending', start: 1700000000000 });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.alerts', payload }); },
             /Alert missing name field/u,
@@ -93,7 +93,7 @@ describe('alertCodec', function() {
     it('throws on invalid timestamp', async function() {
         const collector = { accept: () => {} };
         const codec = alertCodec(collector, {});
-        const payload = JSON.stringify({ name: 'низкий_косинус', machine: 'ичт2', severity: 'warning', status: 'pending', start: 'вчера' });
+        const payload = JSON.stringify({ name: 'low_power_factor', machine: 'm2', severity: 'warning', status: 'pending', start: 'yesterday' });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.alerts', payload }); },
             { name: 'RangeError' },
@@ -118,7 +118,7 @@ describe('alertCodec propagates downstream accept failure', function() {
         const codec = alertCodec(sink, {});
         const payload = JSON.stringify({
             name: 'low_cosphi',
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             severity: 'warning',
             status: 'pending',
             start: Date.now()
@@ -138,7 +138,7 @@ describe('alertCodec propagates downstream accept failure', function() {
         const codec = alertCodec(sink, {});
         const payload = JSON.stringify({
             name: `rule_${Math.random()}`,
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             severity: 'warning',
             status: 'pending',
             start: Date.now()
@@ -157,7 +157,7 @@ describe('alertCodec full chain with alertSink', function() {
         const codec = alertCodec(sink, {});
         const payload = JSON.stringify({
             name: `rule_${Math.random()}`,
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             severity: 'warning',
             status: 'pending',
             start: Date.now()

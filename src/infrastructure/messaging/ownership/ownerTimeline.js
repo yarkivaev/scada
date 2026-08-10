@@ -13,9 +13,9 @@ import httpTimeline from './httpTimeline.js';
  * @example
  *   const write = ownerTimeline(
  *     (id) => stompTimeline(decisions, id),
- *     machineOwners([{ baseUrl: 'http://edge/api/v1', machines: ['icht2'] }])
+ *     machineOwners([{ baseUrl: 'http://edge/api/v1', machines: ['m2'] }])
  *   );
- *   await write('icht2').retag(start, ['heat'], {}, audit);
+ *   await write('m2').retag(start, ['heat'], {}, audit);
  */
 export default function ownerTimeline(localTimeline, owners) {
     return function forMachine(machineId) {

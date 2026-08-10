@@ -20,7 +20,7 @@ function body(raw) {
  *
  * @example
  *   decisionJson({
- *     username: 'Елена Волкова', operatorId: 2,
+ *     username: 'Elena Volkov', operatorId: 2,
  *     decidedAt: new Date('2024-06-01T12:05:00.000Z'),
  *     payload: '{"tags":["charge_loading"]}'
  *   });

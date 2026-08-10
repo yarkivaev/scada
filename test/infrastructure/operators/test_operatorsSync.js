@@ -9,7 +9,7 @@ describe('operatorsSync', function() {
         const provider = operators();
         const source = {
             async pull() {
-                return [operator(2, uid, 'Мария', 'Орлова', 'Мария Орлова')];
+                return [operator(2, uid, 'Maria', 'Orlov', 'Maria Orlov')];
             }
         };
         const sync = operatorsSync(source, provider, { intervalMs: 60000 });
@@ -22,7 +22,7 @@ describe('operatorsSync', function() {
     it('start keeps previous snapshot when central pull fails', async function() {
         const uid = `stale-${Math.random()}`;
         const provider = operators();
-        provider.replace([operator(1, uid, 'Игорь', 'Лебедев', 'Игорь Лебедев')]);
+        provider.replace([operator(1, uid, 'Igor', 'Lebedev', 'Igor Lebedev')]);
         const source = {
             async pull() {
                 throw new Error('central unreachable');

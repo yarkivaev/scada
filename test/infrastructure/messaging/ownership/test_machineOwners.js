@@ -4,7 +4,7 @@ import machineOwners from '../../../../src/infrastructure/messaging/ownership/ma
 describe('machineOwners', function() {
     it('resolves edge ownership for listed machines', function() {
         const site = `http://edge-${Math.random()}.local/api/v1`;
-        const machine = `icht-π-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-π-${Math.floor(Math.random() * 9000 + 1000)}`;
         const owners = machineOwners([{ baseUrl: site, token: 'tøkën', machines: [machine] }]);
         assert.deepStrictEqual(
             owners.resolve(machine),

@@ -14,7 +14,7 @@
  * @returns {object} sensor with name, current, measurements and stream methods
  *
  * @example
- *   const sensor = clickhouseSensor(conn, 'icht1/voltage', 'Voltage', 'V');
+ *   const sensor = clickhouseSensor(conn, 'm1/voltage', 'Voltage', 'V');
  *   sensor.name(); // 'Voltage'
  *   await sensor.current(); // { found: true, timestamp, value, unit } or { found: false }
  *   await sensor.measurements({ start, end }, 60000); // downsampled to 1-minute intervals

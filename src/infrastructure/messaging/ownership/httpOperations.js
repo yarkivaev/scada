@@ -44,7 +44,7 @@ async function readJson(res) {
  * @returns {object} operations write port
  *
  * @example
- *   const port = httpOperations({ baseUrl: 'http://edge/api/v1' }, 'icht2');
+ *   const port = httpOperations({ baseUrl: 'http://edge/api/v1' }, 'm2');
  *   await port.create({ kind: 'bath', payload: {}, operatorId: 2 });
  */
 export default function httpOperations(site, machineId) {
@@ -86,6 +86,11 @@ export default function httpOperations(site, machineId) {
         },
         remove(key, body) {
             return send('DELETE', `${root}/${encodeURIComponent(key)}`, body);
+        },
+        decisions(key) {
+            return send('GET', `${root}/${encodeURIComponent(key)}/decisions`).then((body) => {
+                return Array.isArray(body && body.items) ? body.items : [];
+            });
         }
     });
 }

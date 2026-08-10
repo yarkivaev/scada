@@ -75,7 +75,7 @@ describe('ownerTimeline', function() {
             })
         }));
         const start = new Date('2024-07-01T10:00:00.000Z');
-        await write(edgeId).retag(start, ['скат'], {}, audit(2));
+        await write(edgeId).retag(start, ['skim'], {}, audit(2));
         assert.deepStrictEqual(
             {
                 stomp: local.published.length,

@@ -12,7 +12,7 @@
  * @returns {object} alert with id, message, timestamp, object, event, acknowledge, acknowledged
  *
  * @example
- *   const a = alert('alert-1', 'High voltage', new Date(), 'icht1', srcEvent, ackCallback);
+ *   const a = alert('alert-1', 'High voltage', new Date(), 'm1', srcEvent, ackCallback);
  *   a.id; // 'alert-1'
  *   a.event; // srcEvent reference
  *   a.acknowledged; // false
@@ -42,7 +42,7 @@ export function alert(id, message, timestamp, object, source, acknowledge) {
  * @returns {object} acknowledged alert with id, message, timestamp, object, event, acknowledged
  *
  * @example
- *   const a = acknowledgedAlert('alert-1', 'High voltage', new Date(), 'icht1', srcEvent);
+ *   const a = acknowledgedAlert('alert-1', 'High voltage', new Date(), 'm1', srcEvent);
  *   a.id; // 'alert-1'
  *   a.event; // srcEvent reference
  *   a.acknowledged; // true

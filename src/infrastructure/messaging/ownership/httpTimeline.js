@@ -48,7 +48,7 @@ async function readError(res) {
  * @returns {object} timeline write port
  *
  * @example
- *   const port = httpTimeline({ baseUrl: 'http://edge/api/v1' }, 'icht2');
+ *   const port = httpTimeline({ baseUrl: 'http://edge/api/v1' }, 'm2');
  *   await port.retag(start, ['heat'], {}, audit);
  */
 export default function httpTimeline(site, machineId) {

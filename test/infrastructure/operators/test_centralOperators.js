@@ -10,9 +10,9 @@ describe('centralOperators', function() {
             items: [{
                 id: 7,
                 cardUid: uid,
-                firstName: 'Анна',
-                lastName: 'Кузнецова',
-                displayName: 'Анна Кузнецова'
+                firstName: 'Anna',
+                lastName: 'Kuznetsov',
+                displayName: 'Anna Kuznetsov'
             }]
         };
         const server = http.createServer((req, res) => {
@@ -37,9 +37,9 @@ describe('centralOperators', function() {
             items: [{
                 id: 3,
                 cardUid: uid,
-                firstName: 'Никита',
-                lastName: 'Орлов',
-                displayName: 'Никита Орлов',
+                firstName: 'Nikita',
+                lastName: 'Orlov',
+                displayName: 'Nikita Orlov',
                 plantCode: code
             }]
         };
@@ -110,9 +110,9 @@ describe('centralOperators', function() {
         const source = centralOperators(client, '/api/v1');
         const row = await source.create({
             cardUid: uid,
-            firstName: 'Виктор',
-            lastName: 'Павлов',
-            displayName: 'Виктор Павлов'
+            firstName: 'Viktor',
+            lastName: 'Pavlov',
+            displayName: 'Viktor Pavlov'
         });
         server.close();
         assert.strictEqual(row.cardUid, uid, 'central operators did not map created card uid');

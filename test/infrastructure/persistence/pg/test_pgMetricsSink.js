@@ -10,7 +10,7 @@ describe('pgMetricsSink', function() {
             }
         };
         const sink = metricsSinkFromPool(pool);
-        const topic = `MX210/icht-${Math.random()}/GET/AI1/VALUE`;
+        const topic = `MX210/m-${Math.random()}/GET/AI1/VALUE`;
         const value = Math.random() * 400;
         const ts = new Date();
         await sink.write([{ topic, ts, value }]);

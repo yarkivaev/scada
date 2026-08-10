@@ -3,7 +3,7 @@ import cooldown from '../../../src/infrastructure/ingest/cooldown.js';
 
 describe('cooldown', function() {
     it('calls issue callback on first invocation', function() {
-        const message = `сообщение${Math.random()}`;
+        const message = `message${Math.random()}`;
         let received = null;
         const limited = cooldown(function(msg) { received = msg; }, 60000);
         limited(message, new Date());
@@ -19,7 +19,7 @@ describe('cooldown', function() {
     });
 
     it('blocks duplicate message within cooldown interval', function() {
-        const message = `тест${Math.random()}`;
+        const message = `test${Math.random()}`;
         let count = 0;
         const limited = cooldown(function() { count += 1; }, 60000);
         const now = new Date();
@@ -30,7 +30,7 @@ describe('cooldown', function() {
 
     it('allows same message after cooldown interval expires', function() {
         const interval = 1000 + Math.floor(Math.random() * 1000);
-        const message = `повтор${Math.random()}`;
+        const message = `repeat${Math.random()}`;
         let count = 0;
         const limited = cooldown(function() { count += 1; }, interval);
         const now = new Date();
@@ -40,8 +40,8 @@ describe('cooldown', function() {
     });
 
     it('tracks cooldown per message independently', function() {
-        const first = `первое${Math.random()}`;
-        const second = `второе${Math.random()}`;
+        const first = `first${Math.random()}`;
+        const second = `second${Math.random()}`;
         const received = [];
         const limited = cooldown(function(msg) { received.push(msg); }, 60000);
         const now = new Date();
@@ -51,8 +51,8 @@ describe('cooldown', function() {
     });
 
     it('blocks only the specific message that is in cooldown', function() {
-        const blocked = `блок${Math.random()}`;
-        const allowed = `разрешен${Math.random()}`;
+        const blocked = `block${Math.random()}`;
+        const allowed = `allowed${Math.random()}`;
         const received = [];
         const limited = cooldown(function(msg) { received.push(msg); }, 60000);
         const now = new Date();
@@ -64,7 +64,7 @@ describe('cooldown', function() {
 
     it('allows message exactly at cooldown boundary', function() {
         const interval = 500 + Math.floor(Math.random() * 500);
-        const message = `граница${Math.random()}`;
+        const message = `boundary${Math.random()}`;
         let count = 0;
         const limited = cooldown(function() { count += 1; }, interval);
         const now = new Date();
@@ -73,17 +73,17 @@ describe('cooldown', function() {
         assert(count === 2, 'message was blocked at exact cooldown boundary');
     });
 
-    it('handles cyrillic messages correctly', function() {
-        const message = `Включить переключатель компенсации ${Math.random()}`;
+    it('handles unicode messages correctly', function() {
+        const message = `msg-α-${Math.random()}`;
         let received = null;
         const limited = cooldown(function(msg) { received = msg; }, 60000);
         limited(message, new Date());
-        assert(received === message, 'cyrillic message was not handled correctly');
+        assert(received === message, 'unicode message was not handled correctly');
     });
 
     it('resets cooldown after interval passes', function() {
         const interval = 100;
-        const message = `сброс${Math.random()}`;
+        const message = `reset${Math.random()}`;
         const received = [];
         const limited = cooldown(function(msg) { received.push(msg); }, interval);
         const base = new Date();

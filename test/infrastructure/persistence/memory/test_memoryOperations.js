@@ -7,7 +7,7 @@ describe('memoryOperations upsert', function() {
         const port = operationStateMemory(store);
         const key = `dup-${Math.random()}`;
         const first = {
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: new Date('2024-06-01T10:00:00.000Z'),
             kind: 'chem',
             key,
@@ -28,7 +28,7 @@ describe('memoryOperations listForMachine', function() {
         const store = { operations: [] };
         const port = operationStateMemory(store);
         const inside = {
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: new Date('2024-06-01T12:00:00.000Z'),
             kind: 'chem',
             key: `in-${Math.random()}`,
@@ -36,11 +36,11 @@ describe('memoryOperations listForMachine', function() {
         };
         const outside = {
             ...inside,
-            machine: 'icht2',
+            machine: 'm2',
             key: `out-${Math.random()}`
         };
         store.operations.push(inside, outside);
-        const rows = await port.listForMachine('icht1', 'chem', {
+        const rows = await port.listForMachine('m1', 'chem', {
             from: new Date('2024-06-01T00:00:00.000Z'),
             to: new Date('2024-06-02T00:00:00.000Z')
         });
@@ -52,8 +52,8 @@ describe('memoryOperations get', function() {
     it('returns row scoped to machine and key', async function() {
         const store = { operations: [] };
         const port = operationStateMemory(store);
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `key-${Math.random().toString(36).slice(2)}`;
         const row = {
             machine: machineId,
             occurred_at: new Date('2024-06-01T12:00:00.000Z'),
@@ -73,7 +73,7 @@ describe('memoryOperations get', function() {
     it('rejects when key is absent for machine', async function() {
         const store = { operations: [] };
         const port = operationStateMemory(store);
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         await assert.rejects(
             () => {
                 return port.get(machineId, `missing-${Math.random()}`);
@@ -90,8 +90,8 @@ describe('memoryOperations remove', function() {
     it('deletes row scoped to machine and key', async function() {
         const store = { operations: [] };
         const port = operationStateMemory(store);
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `del-${Math.random().toString(36).slice(2)}`;
         store.operations.push({
             machine: machineId,
             occurred_at: new Date('2024-06-01T12:00:00.000Z'),
@@ -106,7 +106,7 @@ describe('memoryOperations remove', function() {
     it('rejects when key belongs to another machine', async function() {
         const store = { operations: [] };
         const port = operationStateMemory(store);
-        const key = `чужой-${Math.random().toString(36).slice(2)}`;
+        const key = `other-${Math.random().toString(36).slice(2)}`;
         store.operations.push({
             machine: `owner-${Math.random()}`,
             occurred_at: new Date('2024-06-01T12:00:00.000Z'),

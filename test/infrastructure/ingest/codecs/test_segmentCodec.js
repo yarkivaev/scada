@@ -12,7 +12,7 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'on',
             start: 1700000000000,
             end: 1700003600000,
@@ -21,7 +21,7 @@ describe('segmentCodec', function() {
         });
         await codec.accept({ destination: '/exchange/scada.segments', payload });
         assert.strictEqual(received.length, 1, 'should accept one record');
-        assert.strictEqual(received[0].machine, 'icht2', 'should extract machine');
+        assert.strictEqual(received[0].machine, 'm2', 'should extract machine');
         assert.strictEqual(received[0].name, 'on', 'should extract name');
         assert.strictEqual(received[0].duration, 3600, 'should extract duration');
     });
@@ -31,7 +31,7 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'heating',
             start: 1700000000000,
             end: 1700003600000,
@@ -56,7 +56,7 @@ describe('segmentCodec', function() {
     it('throws on invalid timestamp', async function() {
         const collector = { accept: async () => {} };
         const codec = segmentCodec(collector);
-        const payload = JSON.stringify({ machine: 'ичт2', name: 'нагрев', start: 'вчера', end: 1700003600000, duration: 3600 });
+        const payload = JSON.stringify({ machine: 'm2', name: 'heating', start: 'yesterday', end: 1700003600000, duration: 3600 });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.segments', payload }); },
             { name: 'RangeError' },
@@ -69,14 +69,14 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'ичт2',
-            name: 'нагрев',
+            machine: 'm2',
+            name: 'heating',
             start: 1700000000000,
             end: 1700003600000,
             duration: 3600
         });
         await codec.accept({ destination: '/exchange/scada.segments', payload });
-        assert.strictEqual(received[0].name, 'нагрев', 'should handle unicode name');
+        assert.strictEqual(received[0].name, 'heating', 'should handle unicode name');
     });
 
     it('sets options to null when absent', async function() {
@@ -84,7 +84,7 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'off',
             start: 1700000000000,
             end: 1700003600000,
@@ -98,9 +98,9 @@ describe('segmentCodec', function() {
         const received = [];
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
-        const tags = [`нагрев_${Math.random()}`];
+        const tags = [`heating_${Math.random()}`];
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'on',
             start: 1700000000000,
             end: 1700003600000,
@@ -117,7 +117,7 @@ describe('segmentCodec', function() {
         const codec = segmentCodec(collector);
         const properties = { weight: Math.floor(Math.random() * 1000) };
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'off',
             start: 1700000000000,
             end: 1700003600000,
@@ -134,7 +134,7 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'off',
             start: 1700000000000,
             end: 1700003600000,
@@ -150,7 +150,7 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'on',
             start: 1700000000000,
             end: 1700003600000,
@@ -165,7 +165,7 @@ describe('segmentCodec', function() {
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             name: 'on',
             start: 1700000000000,
             end: 1700003600000,
@@ -181,8 +181,8 @@ describe('segmentCodec', function() {
         const codec = segmentCodec(collector);
         const type = ['segment', 'retag', 'split'][Math.floor(Math.random() * 3)];
         const payload = JSON.stringify({
-            machine: 'icht2',
-            name: 'нагрев',
+            machine: 'm2',
+            name: 'heating',
             start: 1700000000000,
             end: 1700003600000,
             duration: 3600,
@@ -211,7 +211,7 @@ describe('segmentCodec propagates downstream write failure', function() {
         const codec = segmentCodec(router);
         const payload = JSON.stringify({
             type: 'segment',
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             name: 'on',
             start: Date.now(),
             end: Date.now() + 5000,
@@ -233,7 +233,7 @@ describe('segmentCodec full chain with segmentDispatch', function() {
         const codec = segmentCodec(router);
         const payload = JSON.stringify({
             type: 'segment',
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             name: 'off',
             start: Date.now(),
             end: Date.now() + 3000,
@@ -254,7 +254,7 @@ describe('segmentCodec full chain with segmentDispatch', function() {
         const codec = segmentCodec(router);
         const payload = JSON.stringify({
             type: 'segment',
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             name: 'on',
             start: Date.now(),
             end: Date.now() + 5000,

@@ -8,9 +8,9 @@ describe('operatorExtras', function() {
             {
                 id: 9,
                 cardUid: 'CARD',
-                firstName: 'Иван',
-                lastName: 'Петров',
-                displayName: 'Иван Петров',
+                firstName: 'Ivan',
+                lastName: 'Petrov',
+                displayName: 'Ivan Petrov',
                 plantCode: code
             },
             ['id', 'cardUid', 'firstName', 'lastName', 'displayName']

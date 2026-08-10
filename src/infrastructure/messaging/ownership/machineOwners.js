@@ -8,10 +8,10 @@
  *
  * @example
  *   const owners = machineOwners([
- *     { baseUrl: 'http://edge:3000/api/v1', token: 'secret', machines: ['icht2'] }
+ *     { baseUrl: 'http://edge:3000/api/v1', token: 'secret', machines: ['m2'] }
  *   ]);
- *   owners.resolve('icht2'); // { kind: 'edge', baseUrl, token }
- *   owners.resolve('icht1'); // { kind: 'local' }
+ *   owners.resolve('m2'); // { kind: 'edge', baseUrl, token }
+ *   owners.resolve('m1'); // { kind: 'local' }
  */
 export default function machineOwners(sites) {
     const map = new Map();

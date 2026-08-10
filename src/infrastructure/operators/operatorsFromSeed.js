@@ -6,7 +6,7 @@
  * @returns {object} provider with async list()
  *
  * @example
- *   const provider = operatorsFromSeed([operator(1, 'card-1', 'Иван', 'Петров', 'Иван Петров')]);
+ *   const provider = operatorsFromSeed([operator(1, 'card-1', 'Ivan', 'Petrov', 'Ivan Petrov')]);
  *   const rows = await provider.list();
  */
 export default function operatorsFromSeed(seed) {

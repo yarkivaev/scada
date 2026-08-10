@@ -8,7 +8,7 @@ describe('userDecisionCodec', function() {
         const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
         const machine = `ičt-${Math.random()}`;
-        const payload = JSON.stringify({ machine, start: 1700000000, user: 'оператор1' });
+        const payload = JSON.stringify({ machine, start: 1700000000, user: 'operator1' });
         await codec.accept({ destination: '/exchange/scada.user_decisions', payload });
         assert.strictEqual(received[0].machine, machine, 'machine field was not extracted');
     });
@@ -18,7 +18,7 @@ describe('userDecisionCodec', function() {
         const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
         const start = 1700000000 + Math.floor(Math.random() * 100000);
-        const payload = JSON.stringify({ machine: 'icht2', start, user: 'оператор1' });
+        const payload = JSON.stringify({ machine: 'm2', start, user: 'operator1' });
         await codec.accept({ destination: '/exchange/scada.user_decisions', payload });
         assert.strictEqual(
             received[0].startTime,
@@ -33,9 +33,9 @@ describe('userDecisionCodec', function() {
         const codec = userDecisionCodec(collector);
         const operatorId = 2 + Math.floor(Math.random() * 100);
         const payload = JSON.stringify({
-            machine: 'icht2',
+            machine: 'm2',
             start: 1700000000,
-            user: 'Елена Волкова',
+            user: 'Elena Volkov',
             operator_id: operatorId,
             decided_at: 1700000060
         });
@@ -47,8 +47,8 @@ describe('userDecisionCodec', function() {
         const received = [];
         const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
-        const user = `оператор_${Math.random()}`;
-        const payload = JSON.stringify({ machine: 'ičt-ñ', start: 1700000000, user });
+        const user = `operator_${Math.random()}`;
+        const payload = JSON.stringify({ machine: 'm-ñ', start: 1700000000, user });
         await codec.accept({ destination: '/exchange/scada.user_decisions', payload });
         assert.strictEqual(received[0].username, user, 'user field was not extracted as username');
     });
@@ -57,8 +57,8 @@ describe('userDecisionCodec', function() {
         const received = [];
         const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
-        const raw = JSON.stringify({ machine: 'ičt-ñ', start: 1700000000, user: 'оп1',
-            tags: [`нагрев_${Math.random()}`], properties: {} });
+        const raw = JSON.stringify({ machine: 'm-ñ', start: 1700000000, user: 'op1',
+            tags: [`heating_${Math.random()}`], properties: {} });
         await codec.accept({ destination: '/exchange/scada.user_decisions', payload: raw });
         assert.strictEqual(received[0].payload, raw, 'raw payload was not preserved');
     });
@@ -66,7 +66,7 @@ describe('userDecisionCodec', function() {
     it('throws on missing machine field', async function() {
         const collector = { accept: () => { return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
-        const payload = JSON.stringify({ start: 1700000000, user: 'оп1' });
+        const payload = JSON.stringify({ start: 1700000000, user: 'op1' });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.user_decisions', payload }); },
             /Decision missing machine field/u,
@@ -77,7 +77,7 @@ describe('userDecisionCodec', function() {
     it('throws on missing user field', async function() {
         const collector = { accept: () => { return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
-        const payload = JSON.stringify({ machine: 'ičt-ñ', start: 1700000000 });
+        const payload = JSON.stringify({ machine: 'm-ñ', start: 1700000000 });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.user_decisions', payload }); },
             /Decision missing user field/u,
@@ -88,7 +88,7 @@ describe('userDecisionCodec', function() {
     it('throws RangeError on non-numeric start', async function() {
         const collector = { accept: () => { return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
-        const payload = JSON.stringify({ machine: 'ičt-ñ', start: 'вчера', user: 'оп1' });
+        const payload = JSON.stringify({ machine: 'm-ñ', start: 'yesterday', user: 'op1' });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.user_decisions', payload }); },
             { name: 'RangeError' },
@@ -113,9 +113,9 @@ describe('userDecisionCodec full chain with userDecisionSink', function() {
         const sink = userDecisionSink(pool);
         const codec = userDecisionCodec(sink);
         const payload = JSON.stringify({
-            machine: `icht${Math.random()}`,
+            machine: `m${Math.random()}`,
             start: Date.now() / 1000,
-            user: `оператор_${Math.random()}`
+            user: `operator_${Math.random()}`
         });
         await assert.rejects(
             () => { return codec.accept({ destination: '/exchange/scada.user_decisions', payload }); },

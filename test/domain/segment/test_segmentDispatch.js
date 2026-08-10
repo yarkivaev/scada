@@ -67,7 +67,7 @@ describe('segmentDispatch', function() {
     it('throws when segment command type is unknown', async function() {
         const route = segmentDispatch(fakeSink(), { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser());
         await assert.rejects(
-            () => { return route.accept({ type: `тип-${Math.random()}`, machine: 'icht1', start_time: '2024-01-01T00:00:00.000Z' }); },
+            () => { return route.accept({ type: `type-${Math.random()}`, machine: 'm1', start_time: '2024-01-01T00:00:00.000Z' }); },
             /Segment command type .* is not defined/u,
             'unknown segment command type did not throw'
         );
@@ -76,7 +76,7 @@ describe('segmentDispatch', function() {
     it('throws when segment command type is missing', async function() {
         const route = segmentDispatch(fakeSink(), { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser());
         await assert.rejects(
-            () => { return route.accept({ machine: 'icht1', start_time: '2024-01-01T00:00:00.000Z' }); },
+            () => { return route.accept({ machine: 'm1', start_time: '2024-01-01T00:00:00.000Z' }); },
             /Segment command type .* is not defined/u,
             'missing segment command type did not throw'
         );

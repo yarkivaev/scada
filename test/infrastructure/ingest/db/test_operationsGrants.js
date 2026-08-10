@@ -86,13 +86,13 @@ describe('operations table grants for supervisor_sink', function() {
         const store = operationStatePg(sinkPool);
         const key = `grant-${Math.random().toString(36).slice(2)}`;
         await store.upsert({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: new Date('2024-06-01T10:00:00.000Z'),
             kind: 'chem',
             key,
             payload: { status: 'ok', elements: { Fe: 0.1 } }
         });
-        const rows = await store.listForMachine('icht1', 'chem', {});
+        const rows = await store.listForMachine('m1', 'chem', {});
         assert.strictEqual(rows.length, 1, 'supervisor_sink must read and write operations after grant migration');
     });
 });

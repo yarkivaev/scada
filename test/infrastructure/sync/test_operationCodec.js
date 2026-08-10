@@ -13,7 +13,7 @@ describe('operationCodec', function() {
         };
         const codec = operationCodec(collector);
         const body = JSON.stringify({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: '2024-06-01T10:00:00.000Z',
             kind: 'chem',
             external_key: `nb-${suffix}`,
@@ -53,11 +53,11 @@ describe('operationCodec occurred_at', function() {
         const codec = operationCodec(collector);
         const epoch = 1700000000000;
         const body = JSON.stringify({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: epoch,
             kind: 'chem',
             external_key: `nb-${Math.random()}`,
-            payload: { note: 'проба' }
+            payload: { note: 'sample' }
         });
         await codec.accept(Buffer.from(body));
         assert.strictEqual(
@@ -84,14 +84,14 @@ describe('operationCodec deleted', function() {
         const key = `gone-${Math.random().toString(36).slice(2)}`;
         const body = JSON.stringify({
             type: 'deleted',
-            machine: 'icht2',
+            machine: 'm2',
             occurred_at: '2024-06-01T14:00:00.000Z',
             kind: 'bath',
             external_key: key
         });
         await codec.accept(Buffer.from(body));
         assert.deepStrictEqual(removed[0], {
-            machine: 'icht2',
+            machine: 'm2',
             occurred_at: new Date('2024-06-01T14:00:00.000Z'),
             kind: 'bath',
             key

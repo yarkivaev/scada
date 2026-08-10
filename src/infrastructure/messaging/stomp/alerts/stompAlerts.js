@@ -10,7 +10,7 @@
  * @returns {object} alert collection with init, all, find, stream, trigger, stop methods
  *
  * @example
- *   const history = stompAlerts(pgAlerts(pool), sourceFactory, { low_cosphi: 'Выключить...' });
+ *   const history = stompAlerts(pgAlerts(pool), sourceFactory, { low_cosphi: 'Switch off...' });
  *   await history.init();
  *   history.all();
  */

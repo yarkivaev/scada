@@ -44,12 +44,12 @@ function mockReq(bodyText, meta) {
 }
 
 function buildScene(requireOperator) {
-    const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+    const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
     const uid = `route-${Math.random()}`;
     const captured = [];
     const provider = {
         async list() {
-            return [operator(3, uid, 'Елена', 'Волкова', 'Елена Волкова')];
+            return [operator(3, uid, 'Elena', 'Volkov', 'Elena Volkov')];
         }
     };
     const history = alerts(alert, acknowledgedAlert);
@@ -113,6 +113,6 @@ describe('timelineRoute operator audit', function() {
             }),
             res
         );
-        assert.strictEqual(scene.captured[0].audit.displayName, 'Елена Волкова', 'timeline route did not resolve operator display name');
+        assert.strictEqual(scene.captured[0].audit.displayName, 'Elena Volkov', 'timeline route did not resolve operator display name');
     });
 });

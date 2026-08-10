@@ -10,7 +10,7 @@ import processingErrorLog from '../processingErrorLog.js';
  * @example
  *   const pool = new pg.Pool({ connectionString: url });
  *   const sink = retagSink(pool);
- *   sink.accept({ machine: 'icht2', start_time: '2024-01-01T00:00:00.000Z',
+ *   sink.accept({ machine: 'm2', start_time: '2024-01-01T00:00:00.000Z',
  *                 tags: '["charge_loading"]', properties: '{}' });
  *
  * @param {object} pool - pg Pool (or compatible) with query() method

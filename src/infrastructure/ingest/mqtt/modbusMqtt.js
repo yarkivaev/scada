@@ -183,7 +183,7 @@ export default function modbusMqtt(mqtt, devices, config) {
     const clk = clock();
     const breaker = circuit(config.threshold, config.timeout, clk);
     const sink = mqttSink(mqtt, {
-        clientId: config.clientId || 'sokol-modbus',
+        clientId: config.clientId || 'scada-modbus',
         qos: 1
     });
     const collector = batch(sink, 5, breaker);

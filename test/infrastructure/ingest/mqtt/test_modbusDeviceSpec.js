@@ -12,7 +12,7 @@ describe('parseModbusLineFormat', () => {
 describe('parseModbusDeviceSpec', () => {
   it('parses TCP device spec', () => {
     const suffix = Math.random().toString(36).slice(2);
-    const spec = parseModbusDeviceSpec(`icht-${suffix}:192.168.2.149:502`);
+    const spec = parseModbusDeviceSpec(`m-${suffix}:192.0.2.11:502`);
     assert.strictEqual(spec.kind, 'tcp', 'Legacy host:port spec should parse as tcp');
   });
 

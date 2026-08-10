@@ -7,7 +7,7 @@ function auditBody(id) {
 
 describe('httpOperations', function() {
     it('POSTs create body with operatorId to owner operations', async function() {
-        const machine = `icht-α-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-α-${Math.floor(Math.random() * 9000 + 1000)}`;
         const amount = Number((Math.random() * 20 + 1).toFixed(1));
         const calls = [];
         const port = httpOperations({
@@ -42,7 +42,7 @@ describe('httpOperations', function() {
     });
 
     it('PUTs update body to owner operation key path', async function() {
-        const machine = `icht-β-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-β-${Math.floor(Math.random() * 9000 + 1000)}`;
         const key = `bath:${machine}:${Math.floor(Math.random() * 90 + 10)}`;
         const calls = [];
         const port = httpOperations({
@@ -67,8 +67,37 @@ describe('httpOperations', function() {
         assert.strictEqual(calls[0].options.method, 'PUT', 'update did not use PUT');
     });
 
+    it('GETs owner operation decisions by key', async function() {
+        const machine = `m-ε-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `bath:${machine}:hist`;
+        const calls = [];
+        const port = httpOperations({
+            baseUrl: 'http://edge.test/api/v1',
+            async fetch(url, options) {
+                calls.push({ url, options });
+                return {
+                    ok: true,
+                    status: 200,
+                    async text() {
+                        return JSON.stringify({
+                            items: [{ operator: 'Ivan', payload: { kind: 'operation_op', verb: 'create', key } }]
+                        });
+                    }
+                };
+            }
+        }, machine);
+        const items = await port.decisions(key);
+        assert.strictEqual(
+            calls[0].options.method === 'GET'
+                && calls[0].url.includes(`/operations/${encodeURIComponent(key)}/decisions`)
+                && items[0].operator === 'Ivan',
+            true,
+            'httpOperations did not GET owner operation decisions'
+        );
+    });
+
     it('DELETEs owner operation key with audit body', async function() {
-        const machine = `icht-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const key = `bath:${machine}:del`;
         const calls = [];
         const port = httpOperations({
@@ -101,7 +130,7 @@ describe('httpOperations', function() {
     });
 
     it('throws SERVICE_UNAVAILABLE when owner fetch rejects', async function() {
-        const machine = `icht-δ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-δ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const port = httpOperations({
             baseUrl: 'http://down.test/api/v1',
             async fetch() {
@@ -120,7 +149,7 @@ describe('httpOperations', function() {
     });
 
     it('throws BAD_GATEWAY when owner returns non-ok status', async function() {
-        const machine = `icht-ε-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `m-ε-${Math.floor(Math.random() * 9000 + 1000)}`;
         const port = httpOperations({
             baseUrl: 'http://edge.test/api/v1',
             async fetch() {

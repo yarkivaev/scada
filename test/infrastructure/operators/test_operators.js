@@ -12,7 +12,7 @@ describe('operators', function() {
     it('returns replaced operators from list', async function() {
         const uid = `memory-${Math.random()}`;
         const provider = operators();
-        provider.replace([operator(4, uid, 'Ольга', 'Смирнова', 'Ольга Смирнова')]);
+        provider.replace([operator(4, uid, 'Olga', 'Smirnov', 'Olga Smirnov')]);
         const rows = await provider.list();
         assert.strictEqual(rows[0].cardUid, uid, 'operators did not expose replaced operator');
     });

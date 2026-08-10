@@ -20,7 +20,7 @@ describe('operationSyncConsumer deliver', function() {
         const codec = operationCodec(sink);
         const suffix = Math.random().toString(36).slice(2);
         const body = JSON.stringify({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: '2024-06-01T10:00:00.000Z',
             kind: 'chem',
             external_key: `dup-${suffix}`,
@@ -43,7 +43,7 @@ describe('operationSyncConsumer ack', function() {
         const consume = operationConsumer(codec, channel);
         const msg = {
             content: Buffer.from(JSON.stringify({
-                machine: 'icht1',
+                machine: 'm1',
                 occurred_at: '2024-06-01T10:00:00.000Z',
                 kind: 'chem',
                 external_key: `nb-${Math.random()}`,
@@ -63,7 +63,7 @@ describe('operationSyncConsumer idempotency', function() {
         const codec = operationCodec(sink);
         const suffix = Math.random().toString(36).slice(2);
         const body = JSON.stringify({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: '2024-06-01T10:00:00.000Z',
             kind: 'chem',
             external_key: `dup-${suffix}`,
@@ -99,14 +99,14 @@ describe('operationSyncConsumer delete', function() {
         const key = `del-${Math.random().toString(36).slice(2)}`;
         const body = JSON.stringify({
             type: 'deleted',
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: '2024-06-01T10:00:00.000Z',
             kind: 'bath',
             external_key: key
         });
         await acceptOperationDeliver(codec, Buffer.from(body));
         assert.deepStrictEqual(removals[0], {
-            machineId: 'icht1',
+            machineId: 'm1',
             key
         }, 'deleted deliver must call operations.remove');
     });

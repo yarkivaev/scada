@@ -8,7 +8,7 @@ import processingErrorLog from '../processingErrorLog.js';
  *
  * @example
  *   const closer = closeOrphanOpen(pool);
- *   await closer.close('icht1', '2024-01-01T00:00:00.000Z');
+ *   await closer.close('m1', '2024-01-01T00:00:00.000Z');
  */
 export default function closeOrphanOpen(pool) {
     if (!pool || typeof pool.query !== 'function') {

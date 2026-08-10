@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 describe('tagCatalog', function () {
-    it('loads embedded catalog with heating and off roots', function () {
+    it('loads embedded catalog with heating under on', function () {
         const catalog = tagCatalog({});
         assert.equal(
             catalog.get('heating').parent,
@@ -13,24 +13,24 @@ describe('tagCatalog', function () {
             'heating was not parented to on'
         );
         assert.ok(
-            catalog.children('off').includes('metal_structure'),
-            'off roots did not include metal_structure'
+            catalog.children('off').includes('idle'),
+            'off roots did not include idle'
         );
     });
 
     it('reads labels for a leaf reason', function () {
         const catalog = tagCatalog({});
         assert.equal(
-            catalog.labels().analysis_wait,
-            'ожидание анализа',
-            'analysis_wait label was missing'
+            catalog.labels().maintenance,
+            'Maintenance',
+            'maintenance label was missing'
         );
     });
 
     it('loads catalog from TAG_CATALOG_PATH override', function () {
         const path = join(dirname(fileURLToPath(import.meta.url)), '../../../src/infrastructure/catalog/tag-catalog.json');
         const catalog = tagCatalog({ TAG_CATALOG_PATH: path });
-        assert.ok(catalog.entries().length > 10, 'override catalog was too small');
+        assert.ok(catalog.entries().length >= 3, 'override catalog was too small');
     });
 });
 

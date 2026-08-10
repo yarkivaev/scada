@@ -9,7 +9,7 @@ import processingErrorLog from '../processingErrorLog.js';
  *
  * @example
  *   const sink = alertSink(pool);
- *   await sink.accept({ name: 'low_cosphi', message: 'msg', machine: 'icht2', severity: 'warning', status: 'pending', timestamp: '2023-11-14T22:13:20.000Z' });
+ *   await sink.accept({ name: 'low_cosphi', message: 'msg', machine: 'm2', severity: 'warning', status: 'pending', timestamp: '2023-11-14T22:13:20.000Z' });
  */
 export default function alertSink(pool) {
     return {

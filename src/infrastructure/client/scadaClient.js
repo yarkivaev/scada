@@ -14,7 +14,7 @@ import sseConnection from './sseConnection.js';
  * @example
  *   const client = scadaClient('http://localhost:3000/api/v1', fetch, EventSource, logger);
  *   const machines = await client.machines();
- *   const machine = client.machine('icht1');
+ *   const machine = client.machine('m1');
  *   await client.jump('2025-06-15T10:00:00Z');
  *   await client.reset();
  */

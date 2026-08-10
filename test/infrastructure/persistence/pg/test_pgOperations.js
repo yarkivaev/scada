@@ -14,7 +14,7 @@ describe('pgOperations upsert', function() {
         const key = `id-${Math.random()}`;
         const occurred = new Date('2024-06-01T10:00:00.000Z');
         await store.upsert({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: occurred,
             kind: 'chem',
             key,
@@ -39,7 +39,7 @@ describe('pgOperations listForMachine', function() {
         const store = operationStatePg(pool);
         const from = new Date('2024-06-01T00:00:00.000Z');
         const to = new Date('2024-06-02T00:00:00.000Z');
-        await store.listForMachine('icht1', 'chem', { from, to });
+        await store.listForMachine('m1', 'chem', { from, to });
         assert(queries[0].sql.includes('machine = $1'), 'list must filter by machine');
         assert(queries[0].sql.includes('kind = $2'), 'list must filter by kind');
         assert(queries[0].sql.includes('occurred_at >='), 'list must filter by range start');
@@ -50,8 +50,8 @@ describe('pgOperations listForMachine', function() {
 describe('pgOperations get', function() {
     it('selects by machine and key', async function() {
         const queries = [];
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `key-${Math.random().toString(36).slice(2)}`;
         const pool = {
             async query(sql, params) {
                 queries.push({ sql, params });
@@ -86,7 +86,7 @@ describe('pgOperations get', function() {
         const store = operationStatePg(pool);
         await assert.rejects(
             () => {
-                return store.get(`icht${Math.random()}`, `missing-${Math.random()}`);
+                return store.get(`m${Math.random()}`, `missing-${Math.random()}`);
             },
             (err) => {
                 return err instanceof Error;
@@ -99,8 +99,8 @@ describe('pgOperations get', function() {
 describe('pgOperations remove', function() {
     it('deletes by machine and key with returning', async function() {
         const queries = [];
-        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
-        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `del-${Math.random().toString(36).slice(2)}`;
         const pool = {
             async query(sql, params) {
                 queries.push({ sql, params });
@@ -135,7 +135,7 @@ describe('pgOperations remove', function() {
         const store = operationStatePg(pool);
         await assert.rejects(
             () => {
-                return store.remove(`icht${Math.random()}`, `missing-${Math.random()}`);
+                return store.remove(`m${Math.random()}`, `missing-${Math.random()}`);
             },
             (err) => {
                 return err instanceof Error;

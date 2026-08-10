@@ -8,8 +8,8 @@ import processingErrorLog from '../processingErrorLog.js';
  *
  * @example
  *   const sink = userDecisionSink(pool);
- *   sink.accept({ machine: 'icht2', startTime: '2024-01-01T00:00:00.000Z',
- *                 username: 'Иван Петров', operatorId: 2,
+ *   sink.accept({ machine: 'm2', startTime: '2024-01-01T00:00:00.000Z',
+ *                 username: 'Ivan Petrov', operatorId: 2,
  *                 decidedAt: '2024-01-01T00:01:00.000Z',
  *                 payload: '{"tags":["charge_loading"]}' });
  *

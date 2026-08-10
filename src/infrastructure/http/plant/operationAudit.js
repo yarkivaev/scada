@@ -35,7 +35,6 @@ export function stampPayload(payload, audit) {
  * @returns {object} insert row for userDecisions.insert
  */
 export function decisionRow(machine, item, audit, verb) {
-    const kind = item.kind === 'bath' ? 'bath_op' : 'operation_op';
     return {
         machine,
         startTime: item.occurred_at instanceof Date
@@ -45,7 +44,7 @@ export function decisionRow(machine, item, audit, verb) {
         operatorId: audit.id,
         decidedAt: audit.decidedAt,
         payload: {
-            kind,
+            kind: 'operation_op',
             verb,
             key: item.key,
             operation_kind: item.kind,

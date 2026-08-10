@@ -61,7 +61,7 @@ describe('shopWithTimeline owners', function() {
         };
         const httpCalls = [];
         const sites = [{
-            baseUrl: 'http://192.168.5.232:30300/api/v1',
+            baseUrl: 'http://edge.example:30300/api/v1',
             token: 'edge-tøkën',
             machines: [machine]
         }];
@@ -85,7 +85,7 @@ describe('shopWithTimeline owners', function() {
         };
         const tl = shopWithTimeline(machine, { pool: fakePool(), userDecisions: decisions, owners });
         const start = new Date('2024-08-01T11:30:00.000Z');
-        await tl.retag(start, ['скат'], { note: 'да' }, audit(8));
+        await tl.retag(start, ['skim'], { note: 'yes' }, audit(8));
         assert.deepStrictEqual(
             {
                 stomp: published.length,

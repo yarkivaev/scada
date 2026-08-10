@@ -46,7 +46,7 @@ function rangeQuery(options) {
  * @returns {object} client with info, measurements, alerts, segments, cycles, operations methods
  *
  * @example
- *   const machine = machineClient(baseUrl, 'icht1', fetch, EventSource, logger);
+ *   const machine = machineClient(baseUrl, 'm1', fetch, EventSource, logger);
  *   const info = await machine.info();
  *   await machine.createOperation({ kind: 'bath', payload: { action: 'load' } });
  *   await machine.updateOperation(key, { payload: { action: 'load' } });

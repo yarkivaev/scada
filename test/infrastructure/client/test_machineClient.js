@@ -6,17 +6,17 @@ describe('machineClient', function() {
         let fetchedUrl;
         const fakeFetch = async (url) => {
             fetchedUrl = url;
-            return { ok: true, json: async () => {return { id: 'icht1' }} };
+            return { ok: true, json: async () => {return { id: 'm1' }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.info();
-        assert(fetchedUrl === 'http://localhost/api/machines/icht1');
+        assert(fetchedUrl === 'http://localhost/api/machines/m1');
     });
 
     it('returns machine info', async function() {
         const info = { id: `m${Math.random()}`, name: 'Test' };
         const fakeFetch = async () => {return { ok: true, json: async () => {return info} }};
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         const result = await client.info();
         assert(result.id === info.id);
     });
@@ -27,7 +27,7 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.measurements({ keys: ['voltage'], from: 'now-1h', to: 'now', step: 60 });
         assert(fetchedUrl.includes('keys=voltage') && fetchedUrl.includes('step=60'));
     });
@@ -38,9 +38,9 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.measurements();
-        assert(fetchedUrl === 'http://localhost/api/machines/icht1/measurements');
+        assert(fetchedUrl === 'http://localhost/api/machines/m1/measurements');
     });
 
     it('creates measurement stream connection', function() {
@@ -50,7 +50,7 @@ describe('machineClient', function() {
             this.addEventListener = () => {};
             this.close = () => {};
         };
-        const client = machineClient('http://localhost/api', 'icht1', () => {}, FakeEventSource);
+        const client = machineClient('http://localhost/api', 'm1', () => {}, FakeEventSource);
         client.measurementStream({ keys: ['voltage'] });
         assert(createdUrl.includes('/measurements/stream') && createdUrl.includes('keys=voltage'));
     });
@@ -61,7 +61,7 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.alerts({ page: 2, size: 20, acknowledged: false });
         assert(fetchedUrl.includes('page=2') && fetchedUrl.includes('size=20') && fetchedUrl.includes('acknowledged=false'));
     });
@@ -73,7 +73,7 @@ describe('machineClient', function() {
             this.addEventListener = () => {};
             this.close = () => {};
         };
-        const client = machineClient('http://localhost/api', 'icht1', () => {}, FakeEventSource);
+        const client = machineClient('http://localhost/api', 'm1', () => {}, FakeEventSource);
         client.alertStream();
         assert(createdUrl.includes('/alerts/stream'));
     });
@@ -85,7 +85,7 @@ describe('machineClient', function() {
             ({ method, body } = options);
             return { ok: true, json: async () => {return { id: 'a1', acknowledged: true }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.acknowledge('alert-1');
         assert(method === 'PATCH' && JSON.parse(body).acknowledged === true);
     });
@@ -95,7 +95,7 @@ describe('machineClient', function() {
             ok: false,
             json: async () => {return { error: { code: 'NOT_FOUND', message: 'Not found' } }}
         }};
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         let thrown;
         try {
             await client.info();
@@ -113,7 +113,7 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', `m-${Math.random()}`, fakeFetch, function() {});
         await client.cycles({ from, to });
         assert(
             fetchedUrl.includes('/cycles?')
@@ -124,9 +124,9 @@ describe('machineClient', function() {
     });
 
     it('returns cycles payload from GET response', async function() {
-        const payload = { items: [{ id: `цикл-${Math.random()}`, startedAt: '2024-03-01T00:00:00.000Z' }] };
+        const payload = { items: [{ id: `cycle-${Math.random()}`, startedAt: '2024-03-01T00:00:00.000Z' }] };
         const fakeFetch = async () => {return { ok: true, json: async () => {return payload} }};
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         const result = await client.cycles({ from: 'now-1d', to: 'now' });
         assert.strictEqual(result, payload, 'cycles must return response body');
     });
@@ -137,9 +137,9 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.cycles();
-        assert(fetchedUrl === 'http://localhost/api/machines/icht1/cycles', 'cycles without options must hit base path');
+        assert(fetchedUrl === 'http://localhost/api/machines/m1/cycles', 'cycles without options must hit base path');
     });
 
     it('fetches operations with kind and range query params', async function() {
@@ -148,7 +148,7 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.operations({
             kind: 'chem',
             from: '2024-06-01T00:00:00.000Z',
@@ -166,7 +166,7 @@ describe('machineClient', function() {
     it('returns operations items array from GET response', async function() {
         const items = [{ key: `op-${Math.random()}`, kind: 'chem' }];
         const fakeFetch = async () => {return { ok: true, json: async () => {return { items }} }};
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         const result = await client.operations({ kind: 'chem' });
         assert.strictEqual(result, items, 'operations must return items array not wrapper object');
     });
@@ -177,9 +177,9 @@ describe('machineClient', function() {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.operations();
-        assert(fetchedUrl === 'http://localhost/api/machines/icht1/operations', 'operations without options must hit base path');
+        assert(fetchedUrl === 'http://localhost/api/machines/m1/operations', 'operations without options must hit base path');
     });
 
     it('creates operations stream on plant SSE endpoint', function() {
@@ -189,7 +189,7 @@ describe('machineClient', function() {
             this.addEventListener = () => {};
             this.close = () => {};
         };
-        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        const client = machineClient('http://localhost/api/v1', 'm1', () => {}, FakeEventSource);
         client.operationsStream(() => {});
         assert(createdUrl === 'http://localhost/api/v1/operations/stream', 'operations stream must use plant-wide SSE endpoint');
     });
@@ -203,7 +203,7 @@ describe('machineClient', function() {
             this.close = () => {};
         };
         let received;
-        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        const client = machineClient('http://localhost/api/v1', 'm1', () => {}, FakeEventSource);
         client.operationsStream((payload) => {
             received = payload;
         });
@@ -220,7 +220,7 @@ describe('machineClient', function() {
             this.close = () => {};
         };
         let received;
-        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        const client = machineClient('http://localhost/api/v1', 'm1', () => {}, FakeEventSource);
         client.operationsStream((payload) => {
             received = payload;
         });
@@ -233,14 +233,14 @@ describe('machineClient', function() {
         let fetchedUrl;
         let body;
         const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
-        const payload = { action: 'load', unit: 'кг', amount: 3 + Math.random() };
+        const payload = { action: 'load', unit: 'kg', amount: 3 + Math.random() };
         const fakeFetch = async (url, options) => {
             fetchedUrl = url;
             method = options.method;
             body = options.body;
             return { ok: true, json: async () => {return { external_key: `${kind}:x` }} };
         };
-        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', `m-${Math.random()}`, fakeFetch, function() {});
         await client.createOperation({ kind, payload });
         const parsed = JSON.parse(body);
         assert(
@@ -254,13 +254,13 @@ describe('machineClient', function() {
 
     it('posts createOperation with occurred_at and key when provided', async function() {
         let body;
-        const key = `ключ-${Math.random().toString(36).slice(2)}`;
+        const key = `key-${Math.random().toString(36).slice(2)}`;
         const occurredAt = `2024-0${1 + Math.floor(Math.random() * 9)}-15T12:34:56.789Z`;
         const fakeFetch = async (url, options) => {
             body = options.body;
             return { ok: true, json: async () => {return { external_key: key }} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.createOperation({
             kind: 'chem',
             payload: { lot: 'η' },
@@ -279,17 +279,17 @@ describe('machineClient', function() {
         let method;
         let fetchedUrl;
         let body;
-        const key = `прав-${Math.random().toString(36).slice(2)}`;
+        const key = `edit-${Math.random().toString(36).slice(2)}`;
         const kind = `bath-${Math.floor(Math.random() * 900 + 100)}`;
         const occurredAt = `2024-0${1 + Math.floor(Math.random() * 9)}-20T08:15:00.000Z`;
-        const payload = { action: 'load', unit: 'кг', amount: 7 + Math.random() };
+        const payload = { action: 'load', unit: 'kg', amount: 7 + Math.random() };
         const fakeFetch = async (url, options) => {
             fetchedUrl = url;
             method = options.method;
             body = options.body;
             return { ok: true, json: async () => {return { external_key: key }} };
         };
-        const client = machineClient('http://localhost/api', `icht-${Math.random()}`, fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', `m-${Math.random()}`, fakeFetch, function() {});
         await client.updateOperation(key, { kind, payload, occurredAt });
         const parsed = JSON.parse(body);
         assert(
@@ -305,13 +305,13 @@ describe('machineClient', function() {
     it('deletes via deleteOperation by key', async function() {
         let method;
         let fetchedUrl;
-        const key = `удал-${Math.random().toString(36).slice(2)}`;
+        const key = `del-${Math.random().toString(36).slice(2)}`;
         const fakeFetch = async (url, options) => {
             fetchedUrl = url;
             method = options.method;
             return { ok: true, json: async () => {return {}} };
         };
-        const client = machineClient('http://localhost/api', 'icht1', fakeFetch, function() {});
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
         await client.deleteOperation(key);
         assert(
             method === 'DELETE' && fetchedUrl.includes(`/operations/${encodeURIComponent(key)}`),
@@ -328,7 +328,7 @@ describe('machineClient', function() {
             this.close = () => {};
         };
         let received;
-        const client = machineClient('http://localhost/api/v1', 'icht1', () => {}, FakeEventSource);
+        const client = machineClient('http://localhost/api/v1', 'm1', () => {}, FakeEventSource);
         client.operationsStream((payload) => {
             received = payload;
         });
@@ -337,7 +337,7 @@ describe('machineClient', function() {
     });
 
     it('does not expose removed weight and meltings methods', function() {
-        const client = machineClient('http://localhost/api', 'icht1', () => {}, function() {});
+        const client = machineClient('http://localhost/api', 'm1', () => {}, function() {});
         assert.strictEqual(
             [
                 client.weight,

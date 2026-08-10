@@ -86,7 +86,7 @@ describe('operators table grants for supervisor_sink', function() {
         const uid = `grant-op-${Math.random().toString(36).slice(2)}`;
         await adminPool.query(
             'INSERT INTO operators (card_uid, first_name, last_name, display_name) VALUES ($1, $2, $3, $4)',
-            [uid, 'Ирина', 'Ковалёва', 'Ирина Ковалёва']
+            [uid, 'Irina', 'Kovaleva', 'Irina Kovaleva']
         );
         const rows = await operatorsFromPg(sinkPool).list();
         assert.strictEqual(
@@ -103,9 +103,9 @@ describe('operators table grants for supervisor_sink', function() {
         const provider = operatorsFromPg(sinkPool);
         const created = await provider.create({
             cardUid: uid,
-            firstName: 'Глеб',
-            lastName: 'Фёдоров',
-            displayName: 'Глеб Фёдоров'
+            firstName: 'Gleb',
+            lastName: 'Fedorov',
+            displayName: 'Gleb Fedorov'
         });
         await provider.permit(true);
         const enabled = await provider.enabled();

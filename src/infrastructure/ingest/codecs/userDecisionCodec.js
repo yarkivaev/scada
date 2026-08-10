@@ -42,7 +42,7 @@ function decisionRecord(raw, parsed, startTime, decidedAt) {
  * @example
  *   const codec = userDecisionCodec(collector);
  *   codec.accept({ destination: '/exchange/scada.user_decisions',
- *                  payload: '{"machine":"icht2","start":1700000000,"user":"op1","operator_id":2}' });
+ *                  payload: '{"machine":"m2","start":1700000000,"user":"op1","operator_id":2}' });
  *
  * @param {object} collector - Collector with accept() method
  * @returns {object} Codec with accept() method

@@ -7,7 +7,7 @@
  *
  * @example
  *   const provider = operators();
- *   provider.replace([operator(1, 'card-1', 'Иван', 'Петров', 'Иван Петров')]);
+ *   provider.replace([operator(1, 'card-1', 'Ivan', 'Petrov', 'Ivan Petrov')]);
  *   await provider.permit(true);
  *   const rows = await provider.list();
  */

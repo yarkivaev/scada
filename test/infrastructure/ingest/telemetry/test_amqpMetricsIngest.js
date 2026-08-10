@@ -15,12 +15,12 @@ describe('amqpMetricsIngest', function() {
             }
         };
         acceptTelemetryDeliver(codec, {
-            routingKey: `MX210.icht-1.GET.AI1.VALUE-${suffix}`
+            routingKey: `MX210.m-1.GET.AI1.VALUE-${suffix}`
         }, Buffer.from(JSON.stringify({ value })));
         assert.strictEqual(accepted.length, 1, 'should accept one telemetry message');
         assert.strictEqual(
             accepted[0].topic,
-            `MX210/icht-1/GET/AI1/VALUE-${suffix}`,
+            `MX210/m-1/GET/AI1/VALUE-${suffix}`,
             'should map routing key to metrics topic'
         );
     });
@@ -36,14 +36,14 @@ describe('amqpMetricsIngest', function() {
         const codec = { accept() {} };
         const consume = telemetryConsumer(codec, channel);
         consume({
-            fields: { routingKey: `plant.icht-1.${suffix}` },
+            fields: { routingKey: `plant.m-1.${suffix}` },
             content: Buffer.from(JSON.stringify({ value: 1 }))
         });
         assert.strictEqual(acked.length, 1, 'should ack message via bound channel');
     });
 
     it('acceptTelemetryDeliver reports stream name to onSeen', function() {
-        const device = `icht-${Math.random().toString(36).slice(2)}`;
+        const device = `m-${Math.random().toString(36).slice(2)}`;
         const seen = [];
         const codec = { accept() {} };
         acceptTelemetryDeliver(
@@ -66,7 +66,7 @@ describe('amqpMetricsIngest', function() {
         };
         acceptTelemetryDeliver(
             codec,
-            { routingKey: `MX210.icht-${Math.random().toString(36).slice(2)}.GET.AI2.VALUE` },
+            { routingKey: `MX210.m-${Math.random().toString(36).slice(2)}.GET.AI2.VALUE` },
             Buffer.from(JSON.stringify({ value: 3 }))
         );
         assert.strictEqual(accepted.length, 1, 'telemetry was not accepted without onSeen');

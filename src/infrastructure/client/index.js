@@ -3,10 +3,10 @@
  * Provides typed methods for all API endpoints.
  *
  * Export ports (Query/Stream/Sink/Job) are also re-exported for callers that
- * depend on `scada/client` only; destination adapters stay in plant packages.
+ * depend on `@yarkivaev/scada/client` only; destination adapters stay in plant packages.
  *
  * @example
- *   import { scadaClient, exportQuery, exportJob } from 'scada/client';
+ *   import { scadaClient, exportQuery, exportJob } from '@yarkivaev/scada/client';
  *   const client = scadaClient('http://localhost:3000/api/v1', fetch, EventSource);
  *   const query = exportQuery(client);
  */

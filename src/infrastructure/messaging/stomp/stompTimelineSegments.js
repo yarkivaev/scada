@@ -63,7 +63,7 @@ function consume(raw, buses) {
  * @returns {object} bridge with stop() method
  *
  * @example
- *   const bridge = stompTimelineSegments(sourceFactory, { icht1: bus });
+ *   const bridge = stompTimelineSegments(sourceFactory, { m1: bus });
  *   bridge.stop();
  */
 export default function stompTimelineSegments(source, buses) {

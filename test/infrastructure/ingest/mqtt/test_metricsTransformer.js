@@ -48,7 +48,7 @@ describe('metricsCodec', function() {
         const received = [];
         const collector = { accept: (record) => {return received.push(record)} };
         const transformer = metricsCodec(collector);
-        const topic = `датчик/${Math.random().toString(36).slice(2)}`;
+        const topic = `sensor/${Math.random().toString(36).slice(2)}`;
         const value = Math.random();
         transformer.accept({ topic, payload: JSON.stringify({ value, unit: '°C' }) });
         assert.strictEqual(received.length, 1, 'should handle unicode');
@@ -60,7 +60,7 @@ describe('metricsCodec', function() {
         const collector = { accept: (record) => {return received.push(record)} };
         const silencer = { warn: () => {} };
         const transformer = metricsCodec(collector, silencer);
-        const topic = `MX210/icht-${Math.random()}/GET/AI1/VALUE`;
+        const topic = `MX210/m-${Math.random()}/GET/AI1/VALUE`;
         const value = Math.random() * 500;
         transformer.accept({ topic, payload: String(value) });
         assert.strictEqual(received.length, 1, 'should accept raw number payload');

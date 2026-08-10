@@ -44,7 +44,7 @@ function wiredGate(device, started, stopped, clk, budget) {
 
 describe('silent failover path', function() {
     it('does not poll while edge telemetry stays fresh', function() {
-        const device = `icht-${Math.random().toString(36).slice(2)}`;
+        const device = `m-${Math.random().toString(36).slice(2)}`;
         const started = [];
         const stopped = [];
         const clk = fakeClock(1000 + Math.floor(Math.random() * 500));
@@ -62,7 +62,7 @@ describe('silent failover path', function() {
     });
 
     it('polls after edge telemetry silence exceeds the budget', function() {
-        const device = `icht-${Math.random().toString(36).slice(2)}`;
+        const device = `m-${Math.random().toString(36).slice(2)}`;
         const started = [];
         const stopped = [];
         const clk = fakeClock(2000);
@@ -82,7 +82,7 @@ describe('silent failover path', function() {
     });
 
     it('stops polling when edge telemetry resumes', function() {
-        const device = `icht-${Math.random().toString(36).slice(2)}`;
+        const device = `m-${Math.random().toString(36).slice(2)}`;
         const started = [];
         const stopped = [];
         const clk = fakeClock(3000);

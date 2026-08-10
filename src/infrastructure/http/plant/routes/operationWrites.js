@@ -70,6 +70,16 @@ function forwardBody(parsed, audit) {
     return body;
 }
 
+function ownerItem(machineId, key, response, parsed) {
+    return {
+        machine: machineId,
+        key: (response && (response.external_key || response.key)) || key || parsed.key,
+        kind: (response && response.kind) || parsed.kind,
+        occurred_at: (response && response.occurred_at) || parsed.occurred_at || new Date(),
+        payload: (response && response.payload) || parsed.payload
+    };
+}
+
 async function localCreate(ctx, machineId, parsed, audit) {
     const item = draftFromBody(machineId, parsed);
     item.payload = stampPayload(item.payload, audit);
@@ -102,7 +112,9 @@ async function writeCreate(ctx, machineId, req, res) {
         const audit = await ctx.gate.resolve(parsed);
         const port = edgePort(ctx.owners, machineId);
         if (port) {
-            jsonResponse(await port.create(forwardBody(parsed, audit))).send(res);
+            const created = await port.create(forwardBody(parsed, audit));
+            await record(ctx.decisions, machineId, ownerItem(machineId, undefined, created, parsed), audit, 'create');
+            jsonResponse(created).send(res);
             return;
         }
         jsonResponse(operationJson(await localCreate(ctx, machineId, parsed, audit))).send(res);
@@ -120,7 +132,9 @@ async function writeUpdate(ctx, machineId, key, req, res) {
         const audit = await ctx.gate.resolve(parsed);
         const port = edgePort(ctx.owners, machineId);
         if (port) {
-            jsonResponse(await port.update(key, forwardBody(parsed, audit))).send(res);
+            const updated = await port.update(key, forwardBody(parsed, audit));
+            await record(ctx.decisions, machineId, ownerItem(machineId, key, updated, parsed), audit, 'update');
+            jsonResponse(updated).send(res);
             return;
         }
         jsonResponse(operationJson(await localUpdate(ctx, machineId, key, parsed, audit))).send(res);
@@ -138,7 +152,9 @@ async function writeDelete(ctx, machineId, key, req, res) {
         const audit = await ctx.gate.resolve(parsed);
         const port = edgePort(ctx.owners, machineId);
         if (port) {
-            jsonResponse(await port.remove(key, forwardBody(parsed, audit))).send(res);
+            const removed = await port.remove(key, forwardBody(parsed, audit));
+            await record(ctx.decisions, machineId, ownerItem(machineId, key, removed, parsed), audit, 'delete');
+            jsonResponse(removed).send(res);
             return;
         }
         jsonResponse(operationJson(await localDelete(ctx, machineId, key, audit))).send(res);

@@ -3,8 +3,8 @@ import pollTopicCursors from '../../../../src/infrastructure/persistence/clickho
 
 describe('pollTopicCursors', function() {
     it('issues one query for many topics', async function() {
-        const topicA = `COOLING/icht-${Math.random()}/GET/T01/VALUE`;
-        const topicB = `MX210/icht-${Math.random()}/GET/AI1/VALUE`;
+        const topicA = `COOLING/m-${Math.random()}/GET/T01/VALUE`;
+        const topicB = `MX210/m-${Math.random()}/GET/AI1/VALUE`;
         let queries = 0;
         const connection = {
             async query() {

@@ -11,8 +11,8 @@
  * @example
  *   const catalog = userDecisionsFromPg(pool);
  *   await catalog.insert({
- *     machine: 'icht1', startTime: new Date(), username: 'Иван',
- *     decidedAt: new Date(), payload: { kind: 'bath_op', verb: 'create', key: 'bath:icht1:1' }
+ *     machine: 'm1', startTime: new Date(), username: 'Ivan',
+ *     decidedAt: new Date(), payload: { kind: 'operation_op', verb: 'create', key: 'bath:m1:1' }
  *   });
  */
 function mapRow(row) {

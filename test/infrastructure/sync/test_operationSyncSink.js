@@ -13,7 +13,7 @@ describe('operationSyncSink', function() {
         const sink = operationSyncSink(operations);
         const key = `nb-${Math.random()}`;
         await sink.accept({
-            machine: 'icht1',
+            machine: 'm1',
             occurred_at: new Date('2024-06-01T10:00:00.000Z'),
             kind: 'chem',
             key,
@@ -42,13 +42,13 @@ describe('operationSyncSink', function() {
         const sink = operationSyncSink(operations);
         const key = `rm-${Math.random().toString(36).slice(2)}`;
         await sink.remove({
-            machine: 'icht3',
+            machine: 'm3',
             occurred_at: new Date('2024-06-01T11:00:00.000Z'),
             kind: 'bath',
             key
         });
         assert.deepStrictEqual(removals[0], {
-            machineId: 'icht3',
+            machineId: 'm3',
             key
         }, 'sink remove must call operations.remove with machine and key');
     });

@@ -5,7 +5,7 @@ import operatorsFromSeed from '../../../src/infrastructure/operators/operatorsFr
 describe('operatorsFromSeed', function() {
     it('returns seeded operators from list', async function() {
         const uid = `seed-${Math.random()}`;
-        const source = operatorsFromSeed([operator(3, uid, 'Пётр', 'Иванов', 'Пётр Иванов')]);
+        const source = operatorsFromSeed([operator(3, uid, 'Petr', 'Ivanov', 'Petr Ivanov')]);
         const rows = await source.list();
         assert.strictEqual(rows[0].cardUid, uid, 'seed operators source did not return seeded operator');
     });

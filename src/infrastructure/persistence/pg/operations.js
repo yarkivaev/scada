@@ -74,8 +74,8 @@ async function removeOperation(pool, machineId, key) {
  *
  * @example
  *   const store = operationStatePg(pool);
- *   await store.upsert({ machine: 'icht1', key: 'nb-1', kind: 'chem', ... });
- *   await store.remove('icht1', 'nb-1');
+ *   await store.upsert({ machine: 'm1', key: 'nb-1', kind: 'chem', ... });
+ *   await store.remove('m1', 'nb-1');
  */
 export default function operationStatePg(pool) {
     return {

@@ -98,9 +98,9 @@ describe('edgeOperatorCatalog', function() {
             mockReq(
                 JSON.stringify({
                     cardUid: uid,
-                    firstName: 'Татьяна',
-                    lastName: 'Соколова',
-                    displayName: 'Татьяна Соколова'
+                    firstName: 'Tanya',
+                    lastName: 'Volkov',
+                    displayName: 'Tanya Volkov'
                 }),
                 { method: 'POST', url: '/api/v1/operators' }
             ),
@@ -160,9 +160,9 @@ describe('edgeOperatorCatalog', function() {
             mockReq(
                 JSON.stringify({
                     cardUid: `OFFLINE-${Math.random().toString(36).slice(2)}`,
-                    firstName: 'Денис',
-                    lastName: 'Крылов',
-                    displayName: 'Денис Крылов'
+                    firstName: 'Denis',
+                    lastName: 'Krylov',
+                    displayName: 'Denis Krylov'
                 }),
                 { method: 'POST', url: '/api/v1/operators' }
             ),

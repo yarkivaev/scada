@@ -15,7 +15,7 @@ npm run lint:eo       # Elegant Objects naming audit (no -er factories)
 
 ## CI/CD
 
-GitLab project `scada/scada` on `gitlab.scada.svsokol.ru`. Pipeline from `infra/gitlab-ci-templates`: test, validate-version, create-tag, release-npm (no Docker image from this repo).
+GitHub repository `yarkivaev/scada`. PR CI: `npm-workflows` ci.yml (version check, lint including EO audit, test). Push to `main`: release.yml (re-check, tag `v*`, publish `@yarkivaev/scada` to npm).
 
 ## Layout
 
@@ -41,7 +41,7 @@ scada/
 
 ### Export ports
 
-Generic `exportQuery` / `exportStream` / `exportSink` / `exportJob` compose on `plantApi` + `scada/client`. No plant destination names in this package; plant packages own sinks and jobs. Not part of `edgeApi`.
+Generic `exportQuery` / `exportStream` / `exportSink` / `exportJob` compose on `plantApi` + `@yarkivaev/scada/client`. No plant destination names in this package; plant packages own sinks and jobs. Not part of `edgeApi`.
 
 ### Ingest sandwich
 
