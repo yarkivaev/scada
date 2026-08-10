@@ -655,4 +655,67 @@ describe('operationRoute', function() {
             'owner proxy did not return edge response body'
         );
     });
+
+    it('records create decision on central when proxying to owning edge', async function() {
+        const machineId = `icht${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const rows = [];
+        const api = plantApi('/api/v1', p, {
+            clock: virtualClock(() => {
+                return new Date();
+            }),
+            timelineOperator: {
+                anonymousUsers: { monitoring: 'Анонимный пользователь панели мониторинга' }
+            },
+            operationDecisions: {
+                async insert(row) {
+                    rows.push(row);
+                }
+            },
+            owners: {
+                resolve() {
+                    return {
+                        kind: 'edge',
+                        baseUrl: 'http://edge.test/api/v1',
+                        async fetch() {
+                            return {
+                                ok: true,
+                                status: 200,
+                                async text() {
+                                    return JSON.stringify({
+                                        machine: machineId,
+                                        kind: 'bath',
+                                        external_key: `bath:${machineId}:edge-audit`,
+                                        occurred_at: '2024-06-01T10:00:00.000Z',
+                                        payload: { action: 'set', amount: 1, unit: 't', source: 'api' }
+                                    });
+                                }
+                            };
+                        }
+                    };
+                }
+            }
+        });
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                kind: 'bath',
+                client: 'monitoring',
+                payload: { action: 'set', amount: 1, unit: 't', source: 'api' }
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations`
+            }),
+            res
+        );
+        assert.strictEqual(
+            res.statusCode === 200
+                && rows.length === 1
+                && rows[0].payload.verb === 'create'
+                && rows[0].payload.key === `bath:${machineId}:edge-audit`,
+            true,
+            'owner proxy create did not insert central user_decisions row'
+        );
+    });
 });

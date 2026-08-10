@@ -67,6 +67,35 @@ describe('httpOperations', function() {
         assert.strictEqual(calls[0].options.method, 'PUT', 'update did not use PUT');
     });
 
+    it('GETs owner operation decisions by key', async function() {
+        const machine = `icht-ε-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `bath:${machine}:hist`;
+        const calls = [];
+        const port = httpOperations({
+            baseUrl: 'http://edge.test/api/v1',
+            async fetch(url, options) {
+                calls.push({ url, options });
+                return {
+                    ok: true,
+                    status: 200,
+                    async text() {
+                        return JSON.stringify({
+                            items: [{ operator: 'Иван', payload: { kind: 'bath_op', verb: 'create', key } }]
+                        });
+                    }
+                };
+            }
+        }, machine);
+        const items = await port.decisions(key);
+        assert.strictEqual(
+            calls[0].options.method === 'GET'
+                && calls[0].url.includes(`/operations/${encodeURIComponent(key)}/decisions`)
+                && items[0].operator === 'Иван',
+            true,
+            'httpOperations did not GET owner operation decisions'
+        );
+    });
+
     it('DELETEs owner operation key with audit body', async function() {
         const machine = `icht-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const key = `bath:${machine}:del`;
