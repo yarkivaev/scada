@@ -169,4 +169,56 @@ describe('decisionRoute', function() {
             'operation decisions route did not use listByKey'
         );
     });
+
+    it('proxies operation decisions to owning edge when owners resolve edge', async function() {
+        const machine = `icht-${Math.random()}`;
+        const key = `bath:${machine}:${Math.random().toString(36).slice(2)}`;
+        const operator = `оператор_${Math.random().toString(36).slice(2)}`;
+        const calls = [];
+        const catalog = {
+            async list() {
+                return [];
+            },
+            async listByKey() {
+                return [{ username: 'local', decidedAt: new Date(), payload: {} }];
+            }
+        };
+        const api = routes(decisionRoute('/api/v1', catalog, {
+            resolve() {
+                return {
+                    kind: 'edge',
+                    baseUrl: 'http://edge.test/api/v1',
+                    async fetch(url) {
+                        calls.push(url);
+                        return {
+                            ok: true,
+                            status: 200,
+                            async text() {
+                                return JSON.stringify({
+                                    items: [{
+                                        operator,
+                                        decidedAt: '2024-06-01T12:05:00.000Z',
+                                        payload: { kind: 'bath_op', verb: 'create', key }
+                                    }]
+                                });
+                            }
+                        };
+                    }
+                };
+            }
+        }));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${encodeURIComponent(machine)}/operations/${encodeURIComponent(key)}/decisions`,
+            headers: {}
+        }, res);
+        const body = JSON.parse(res.body);
+        assert.strictEqual(
+            calls[0].includes(`/operations/${encodeURIComponent(key)}/decisions`)
+                && body.items[0].operator === operator,
+            true,
+            'operation decisions route did not proxy to owning edge'
+        );
+    });
 });

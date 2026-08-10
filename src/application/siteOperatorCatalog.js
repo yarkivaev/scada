@@ -9,9 +9,10 @@ import edgeOperatorCatalog from './edgeOperatorCatalog.js';
  *
  * @param {string} basePath - plant API base path
  * @param {object} sink - supervisor sink with pool and profile
+ * @param {object} [owners] - machineOwners registry for edge decision proxy
  * @returns {object} routes, provider, decisions
  */
-function centralOperatorRoutes(basePath, sink) {
+function centralOperatorRoutes(basePath, sink, owners) {
     if (sink.sinkDbProfile !== 'central') {
         return { routes: [], provider: undefined, decisions: undefined };
     }
@@ -20,7 +21,7 @@ function centralOperatorRoutes(basePath, sink) {
     return {
         routes: [
             ...operatorRoute(basePath, provider),
-            ...decisionRoute(basePath, decisions)
+            ...decisionRoute(basePath, decisions, owners)
         ],
         provider,
         decisions
@@ -33,14 +34,15 @@ function centralOperatorRoutes(basePath, sink) {
  * @param {string} basePath - plant API base path
  * @param {object} sink - supervisor sink
  * @param {object} env - process environment
+ * @param {object} [owners] - machineOwners registry for edge decision proxy
  * @returns {object} routes, provider, decisions, sync
  *
  * @example
- *   siteOperatorCatalog('/api/v1', sink, process.env);
+ *   siteOperatorCatalog('/api/v1', sink, process.env, owners);
  */
-export default function siteOperatorCatalog(basePath, sink, env) {
+export default function siteOperatorCatalog(basePath, sink, env, owners) {
     if (sink.sinkDbProfile === 'central') {
-        return { ...centralOperatorRoutes(basePath, sink), sync: undefined };
+        return { ...centralOperatorRoutes(basePath, sink, owners), sync: undefined };
     }
     if (sink.sinkDbProfile === 'edge') {
         const edge = edgeOperatorCatalog(basePath, env);
@@ -50,7 +52,7 @@ export default function siteOperatorCatalog(basePath, sink, env) {
         const decisions = userDecisionsFromPg(sink.pool);
         return {
             ...edge,
-            routes: [...edge.routes, ...decisionRoute(basePath, decisions)],
+            routes: [...edge.routes, ...decisionRoute(basePath, decisions, owners)],
             decisions
         };
     }
@@ -73,5 +75,5 @@ export function buildSiteOperatorCatalog(config, basePath, sink, env) {
     const factory = config && config.operatorCatalog
         ? config.operatorCatalog
         : siteOperatorCatalog;
-    return factory(basePath, sink, env);
+    return factory(basePath, sink, env, config && config.owners);
 }

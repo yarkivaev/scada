@@ -86,6 +86,11 @@ export default function httpOperations(site, machineId) {
         },
         remove(key, body) {
             return send('DELETE', `${root}/${encodeURIComponent(key)}`, body);
+        },
+        decisions(key) {
+            return send('GET', `${root}/${encodeURIComponent(key)}/decisions`).then((body) => {
+                return Array.isArray(body && body.items) ? body.items : [];
+            });
         }
     });
 }
