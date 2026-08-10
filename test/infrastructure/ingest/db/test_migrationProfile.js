@@ -34,4 +34,11 @@ describe('migrationApplies', function() {
         const name = 'C0006__central_operators_registration.sql';
         assert.strictEqual(migrationSinkRunnable(name), false, 'C0006 must not run as supervisor_sink');
     });
+
+    it('runs E0004 operations delete grant only with postgres admin url', function() {
+        const name = 'E0004__edge_operations_delete.sql';
+        assert.strictEqual(migrationApplies(name, 'edge'), true, 'edge should apply E0004');
+        assert.strictEqual(migrationApplies(name, 'central'), false, 'central must skip E0004');
+        assert.strictEqual(migrationSinkRunnable(name), false, 'E0004 must not run as supervisor_sink');
+    });
 });

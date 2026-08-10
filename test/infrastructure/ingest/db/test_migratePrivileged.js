@@ -65,6 +65,36 @@ describe('migratePrivileged', function() {
         assert.strictEqual(grant, undefined, 'sink migrate must skip E0003');
     });
 
+    it('does not apply E0004 during supervisor_sink migrate', async function() {
+        const pool = fakePool();
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sink-mig-'));
+        const file = 'E0004__edge_operations_delete.sql';
+        await fs.writeFile(
+            path.join(dir, file),
+            'GRANT DELETE ON operations TO supervisor_sink'
+        );
+        await migrate(pool, dir, 'edge');
+        const grant = pool.calls.find((item) => {
+            return item.sql.includes('GRANT DELETE ON operations');
+        });
+        assert.strictEqual(grant, undefined, 'sink migrate must skip E0004');
+    });
+
+    it('applies E0004 operations delete grant when connected as admin', async function() {
+        const pool = fakePool();
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sink-mig-'));
+        const file = 'E0004__edge_operations_delete.sql';
+        await fs.writeFile(
+            path.join(dir, file),
+            'GRANT DELETE ON operations TO supervisor_sink'
+        );
+        await migratePrivileged(pool, dir, 'edge');
+        const grant = pool.calls.find((item) => {
+            return item.sql.includes('GRANT DELETE ON operations');
+        });
+        assert.ok(grant, 'privileged migrate must execute E0004 delete grant');
+    });
+
     it('does not apply C0005 during supervisor_sink migrate', async function() {
         const pool = fakePool();
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sink-mig-'));
