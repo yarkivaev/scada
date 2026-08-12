@@ -47,6 +47,44 @@ describe('pgOperations listForMachine', function() {
     });
 });
 
+describe('pgOperations latestForMachine', function() {
+    it('selects the newest row at or before to for machine and kind', async function() {
+        const queries = [];
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const kind = `kind-${Math.random().toString(36).slice(2, 6)}`;
+        const to = new Date('2024-06-02T00:00:00.000Z');
+        const pool = {
+            async query(sql, params) {
+                queries.push({ sql, params });
+                return { rows: [] };
+            }
+        };
+        const store = operationStatePg(pool);
+        await store.latestForMachine(machineId, kind, { to });
+        assert(queries[0].sql.includes('occurred_at <='), 'latest must use inclusive upper bound');
+        assert(queries[0].sql.includes('ORDER BY occurred_at DESC'), 'latest must order newest first');
+        assert(queries[0].sql.includes('LIMIT 1'), 'latest must return a single row');
+        assert.strictEqual(queries[0].params[0], machineId, 'latest cannot skip machine filter');
+        assert.strictEqual(queries[0].params[1], kind, 'latest cannot skip kind filter');
+        assert.strictEqual(queries[0].params[2], to, 'latest cannot skip to bound');
+    });
+
+    it('uses exclusive before bound when provided', async function() {
+        const queries = [];
+        const before = new Date('2024-06-01T12:00:00.000Z');
+        const pool = {
+            async query(sql, params) {
+                queries.push({ sql, params });
+                return { rows: [] };
+            }
+        };
+        const store = operationStatePg(pool);
+        await store.latestForMachine('m1', 'chem', { before });
+        assert(queries[0].sql.includes('occurred_at <'), 'latest before must be exclusive');
+        assert.strictEqual(queries[0].params[2], before, 'latest cannot skip before bound');
+    });
+});
+
 describe('pgOperations get', function() {
     it('selects by machine and key', async function() {
         const queries = [];

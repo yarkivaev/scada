@@ -139,3 +139,32 @@ describe('operations listForMachine', function() {
         assert.strictEqual(rows[0].key, key, 'string kind must not fail to load persistence rows');
     });
 });
+
+describe('operations latestForMachine', function() {
+    it('returns the newest persistence row at or before to', async function() {
+        const store = { operations: [] };
+        const persistence = operationStateMemory(store);
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const earlyKey = `early-${Math.random().toString(36).slice(2)}`;
+        const lateKey = `late-${Math.random().toString(36).slice(2)}`;
+        await persistence.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+            kind: 'chem',
+            key: earlyKey,
+            payload: { lot: 'α' }
+        });
+        await persistence.upsert({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'chem',
+            key: lateKey,
+            payload: { lot: 'β' }
+        });
+        const ops = operations(persistence, pubsub());
+        const latest = await ops.latestForMachine(machineId, 'chem', {
+            to: new Date('2024-06-01T11:00:00.000Z')
+        });
+        assert.strictEqual(latest.key, earlyKey, 'latestForMachine did not pick the newest row within bound');
+    });
+});

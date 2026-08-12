@@ -38,6 +38,41 @@ function filterList(store, machineId, kind, range) {
 }
 
 /**
+ * Picks the latest matching row for a machine and kind at a time bound.
+ *
+ * @param {object} store - shared mutable store with operations array
+ * @param {string} machineId - machine identifier
+ * @param {string} kind - operation kind
+ * @param {{ to?: Date, before?: Date }} bound - inclusive to or exclusive before
+ * @returns {object|null} latest row or null
+ */
+function filterLatest(store, machineId, kind, bound) {
+    const range = bound || {};
+    const before = range.before ? new Date(range.before).getTime() : null;
+    const to = range.to ? new Date(range.to).getTime() : null;
+    const matches = store.operations.filter((row) => {
+        if (row.machine !== machineId || row.kind !== kind) {
+            return false;
+        }
+        const at = new Date(row.occurred_at).getTime();
+        if (before !== null && at >= before) {
+            return false;
+        }
+        if (to !== null && at > to) {
+            return false;
+        }
+        return true;
+    }).sort((left, right) => {
+        const delta = new Date(right.occurred_at) - new Date(left.occurred_at);
+        if (delta !== 0) {
+            return delta;
+        }
+        return String(right.key).localeCompare(String(left.key));
+    });
+    return matches[0] || null;
+}
+
+/**
  * In-memory operations state port for tests and local runs.
  *
  * @param {object} store - shared mutable store with operations array
@@ -82,6 +117,9 @@ export default function operationStateMemory(store) {
         },
         listForMachine(machineId, kind, range) {
             return Promise.resolve(filterList(store, machineId, kind, range));
+        },
+        latestForMachine(machineId, kind, bound) {
+            return Promise.resolve(filterLatest(store, machineId, kind, bound));
         }
     };
 }
