@@ -6,9 +6,9 @@ import pubsub from '../domain/shared/pubsub.js';
  *
  * Optional kindSources inject non-PG kinds into listForMachine merges.
  *
- * @param {object} persistence - operations store with upsert, get, remove, listForMachine
+ * @param {object} persistence - operations store with upsert, get, remove, listForMachine, latestForMachine
  * @param {object} [kindSources] - map of kind to { list(machineId, range) }
- * @returns {object} operations with listForMachine, upsert, get, remove, and stream
+ * @returns {object} operations with listForMachine, latestForMachine, upsert, get, remove, and stream
  *
  * @example
  *   const ops = plantOperations(dataAccess.operations, { temp: temperaturePort });

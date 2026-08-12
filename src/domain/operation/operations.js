@@ -32,15 +32,17 @@ function resolveKinds(kinds, sources) {
  *
  * listForMachine merges requested kinds from injectable sources and Postgres,
  * sorted by occurred_at. Omitted kinds default to injectable source keys.
+ * latestForMachine reads only from persistence (single kind).
  *
- * @param {object} persistence - store with upsert, get, remove, listForMachine
+ * @param {object} persistence - store with upsert, get, remove, listForMachine, latestForMachine
  * @param {object} bus - pubsub instance with stream and emit methods
  * @param {object} [kindSources] - map of kind to { list(machineId, range) }
- * @returns {object} operations with listForMachine, upsert, get, remove, stream
+ * @returns {object} operations with listForMachine, latestForMachine, upsert, get, remove, stream
  *
  * @example
  *   const ops = operations(store, bus, { temp: temperaturePort });
  *   await ops.listForMachine('m1', ['chem', 'temp'], { from: new Date() });
+ *   await ops.latestForMachine('m1', 'chem', { to: new Date() });
  *   await ops.remove('m1', 'nb-1');
  */
 export default function operations(persistence, bus, kindSources) {
@@ -58,6 +60,9 @@ export default function operations(persistence, bus, kindSources) {
                     return new Date(left.occurred_at) - new Date(right.occurred_at);
                 });
             });
+        },
+        latestForMachine(machineId, kind, bound) {
+            return persistence.latestForMachine(machineId, kind, bound);
         },
         upsert(item) {
             const updatedAt = new Date();

@@ -38,6 +38,33 @@ function listForMachine(pool, machineId, kind, range) {
     });
 }
 
+/**
+ * Loads the latest operation for a machine and kind at or before a bound.
+ *
+ * @param {object} pool - pg pool
+ * @param {string} machineId - machine identifier
+ * @param {string} kind - operation kind
+ * @param {{ to?: Date, before?: Date }} bound - inclusive to or exclusive before
+ * @returns {Promise<object|null>} latest row or null
+ */
+function latestForMachine(pool, machineId, kind, bound) {
+    const range = bound || {};
+    let sql = `SELECT machine, occurred_at, kind, key, payload
+        FROM operations WHERE machine = $1 AND kind = $2`;
+    const prm = [machineId, kind];
+    if (range.before) {
+        prm.push(range.before);
+        sql += ` AND occurred_at < $${prm.length}`;
+    } else if (range.to) {
+        prm.push(range.to);
+        sql += ` AND occurred_at <= $${prm.length}`;
+    }
+    sql += ' ORDER BY occurred_at DESC, key DESC LIMIT 1';
+    return pool.query(sql, prm).then((result) => {
+        return result.rows[0] || null;
+    });
+}
+
 function missing(machineId, key) {
     return new Error(`operation '${key}' not found for machine '${machineId}'`);
 }
@@ -70,11 +97,12 @@ async function removeOperation(pool, machineId, key) {
  * PostgreSQL operations persistence port for generic machine operations.
  *
  * @param {object} pool - pg pool
- * @returns {object} operations port with upsert, get, remove, and listForMachine
+ * @returns {object} operations port with upsert, get, remove, listForMachine, latestForMachine
  *
  * @example
  *   const store = operationStatePg(pool);
  *   await store.upsert({ machine: 'm1', key: 'nb-1', kind: 'chem', ... });
+ *   await store.latestForMachine('m1', 'chem', { to: new Date() });
  *   await store.remove('m1', 'nb-1');
  */
 export default function operationStatePg(pool) {
@@ -90,6 +118,9 @@ export default function operationStatePg(pool) {
         },
         listForMachine(machineId, kind, range) {
             return listForMachine(pool, machineId, kind, range);
+        },
+        latestForMachine(machineId, kind, bound) {
+            return latestForMachine(pool, machineId, kind, bound);
         }
     };
 }
