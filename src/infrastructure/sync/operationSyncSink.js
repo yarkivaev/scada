@@ -8,8 +8,8 @@ import processingErrorLog from '../ingest/processingErrorLog.js';
  *
  * @example
  *   const sink = operationSyncSink(dataAccess.operations);
- *   await sink.accept({ machine: 'm1', occurred_at: new Date(), kind: 'chem', key: 'nb-1', payload: {} });
- *   await sink.remove({ machine: 'm1', kind: 'chem', key: 'nb-1', occurred_at: new Date() });
+ *   await sink.accept({ machine: 'm1', occurred_at: new Date(), kind: 'sample', key: 'nb-1', payload: {} });
+ *   await sink.remove({ machine: 'm1', kind: 'sample', key: 'nb-1', occurred_at: new Date() });
  */
 export default function operationSyncSink(operations) {
     return {

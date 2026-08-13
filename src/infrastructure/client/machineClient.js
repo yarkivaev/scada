@@ -48,7 +48,7 @@ function rangeQuery(options) {
  * @example
  *   const machine = machineClient(baseUrl, 'm1', fetch, EventSource, logger);
  *   const info = await machine.info();
- *   await machine.createOperation({ kind: 'bath', payload: { action: 'load' } });
+ *   await machine.createOperation({ kind: 'load', payload: { action: 'add' } });
  *   await machine.updateOperation(key, { payload: { action: 'load' } });
  *   await machine.deleteOperation(key);
  */

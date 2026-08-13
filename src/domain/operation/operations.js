@@ -41,8 +41,8 @@ function resolveKinds(kinds, sources) {
  *
  * @example
  *   const ops = operations(store, bus, { temp: temperaturePort });
- *   await ops.listForMachine('m1', ['chem', 'temp'], { from: new Date() });
- *   await ops.latestForMachine('m1', 'chem', { to: new Date() });
+ *   await ops.listForMachine('m1', ['sample', 'temp'], { from: new Date() });
+ *   await ops.latestForMachine('m1', 'sample', { to: new Date() });
  *   await ops.remove('m1', 'nb-1');
  */
 export default function operations(persistence, bus, kindSources) {

@@ -200,14 +200,18 @@ import stateDataFake from '@yarkivaev/scada/stateDataFake';
 
 ## Package boundary
 
-| This package (`@yarkivaev/scada`) | Downstream plant package |
+**Hard rule:** this package is factory-agnostic. It must not contain Sokol melting/bath domain, chem-analysis UI, HMI copy (e.g. Болото), `weight_after` fold semantics, or plant-specific sensors/routes. Those belong in `sokol-scada` (or another plant package).
+
+Opaque operation `kind` strings and generic ports (`latestForMachine`, list/upsert/stream) are allowed; never treat a kind as a first-class domain type here.
+
+| This package (`@yarkivaev/scada`) | Downstream plant package (`sokol-scada`, …) |
 |------------------------|--------------------------|
-| Generic plant, timeline, alerts, ingest | Site domain, sensors, HMI strings, tag taxonomy |
+| Generic plant, shop, machine, timeline, alerts, operations ports | Melting bath, chem, cycles HMI, site sensors |
 | Empty/injectable alert `translations` | Localized rule messages |
-| Opaque operation `kind` strings | Site-specific kinds (`sample`, `load`, …) |
-| `plantApi`, `siteServer`, `supervisorSink` | Site bins and routes |
+| Opaque operation `kind` strings | Site kinds (`bath`, `chem`, …) and fold/prefix logic |
+| `plantApi`, `siteServer`, `supervisorSink` | Site bins, routes, `bathSensor`, reports |
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
-| ClickHouse + PG adapters | Plant wiring (`metricsPlant`, shops, machines) |
+| ClickHouse + PG adapters | Plant wiring (`sokolPlant` / `edgePlant`) |
 
 Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.46"`), not a local path, in downstream packages.
 

@@ -2,21 +2,6 @@ import assert from 'node:assert/strict';
 import { decisionRow, stampPayload } from '../../../../src/infrastructure/http/plant/operationAudit.js';
 
 describe('operationAudit decisionRow', function() {
-    it('uses operation_op even when operation kind is bath', function() {
-        const row = decisionRow(
-            `m-${Math.random().toString(36).slice(2)}`,
-            {
-                key: `k-${Math.random().toString(36).slice(2)}`,
-                kind: 'bath',
-                occurred_at: new Date('2024-06-01T10:00:00.000Z'),
-                payload: {}
-            },
-            { id: 7, displayName: 'Ada Lovelace', decidedAt: new Date('2024-06-01T10:01:00.000Z') },
-            'create'
-        );
-        assert.equal(row.payload.kind, 'operation_op', 'bath kind still produced plant-specific operation_op');
-    });
-
     it('uses operation_op for any operation kind', function() {
         const kind = `kind-${Math.random().toString(36).slice(2)}`;
         const row = decisionRow(

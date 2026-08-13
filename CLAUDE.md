@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
+## Package boundary (hard rule)
+
+`@yarkivaev/scada` is a **generic** SCADA library: plant / shop / machine, timeline, alerts, operations ports, ingest, and storage adapters.
+
+**Do not** put factory/Sokol melting domain here: bath sensors, bath prefix / `weight_after` fold, chem analysis UI, HMI labels (e.g. Болото), melting cycles product logic, or plant-specific routes/copy. Those belong in `sokol-scada`.
+
+Allowed: opaque `kind` strings and domain-agnostic APIs such as `latestForMachine(machineId, kind, bound)`.
+
+If a change needs bath/melting semantics, implement it in the plant package and call generic operations/timeline ports from here.
+
 ## Commands
 
 ```bash
