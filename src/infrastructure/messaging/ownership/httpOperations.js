@@ -45,7 +45,7 @@ async function readJson(res) {
  *
  * @example
  *   const port = httpOperations({ baseUrl: 'http://edge/api/v1' }, 'm2');
- *   await port.create({ kind: 'bath', payload: {}, operatorId: 2 });
+ *   await port.create({ kind: 'load', payload: {}, operatorId: 2 });
  */
 export default function httpOperations(site, machineId) {
     const base = trimBase(site.baseUrl);

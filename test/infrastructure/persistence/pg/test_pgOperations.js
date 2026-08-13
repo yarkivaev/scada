@@ -79,7 +79,7 @@ describe('pgOperations latestForMachine', function() {
             }
         };
         const store = operationStatePg(pool);
-        await store.latestForMachine('m1', 'chem', { before });
+        await store.latestForMachine('m1', 'sample', { before });
         assert(queries[0].sql.includes('occurred_at <'), 'latest before must be exclusive');
         assert.strictEqual(queries[0].params[2], before, 'latest cannot skip before bound');
     });

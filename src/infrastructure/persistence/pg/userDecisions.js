@@ -12,7 +12,7 @@
  *   const catalog = userDecisionsFromPg(pool);
  *   await catalog.insert({
  *     machine: 'm1', startTime: new Date(), username: 'Ivan',
- *     decidedAt: new Date(), payload: { kind: 'operation_op', verb: 'create', key: 'bath:m1:1' }
+ *     decidedAt: new Date(), payload: { kind: 'operation_op', verb: 'create', key: 'op:m1:1' }
  *   });
  */
 function mapRow(row) {

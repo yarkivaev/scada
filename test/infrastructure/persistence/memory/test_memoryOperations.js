@@ -48,6 +48,32 @@ describe('memoryOperations listForMachine', function() {
     });
 });
 
+describe('memoryOperations latestForMachine', function() {
+    it('returns the newest row strictly before the bound', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const machineId = `печь-${Math.floor(Math.random() * 90) + 10}`;
+        const earlyKey = `early-${Math.random().toString(36).slice(2)}`;
+        const edgeKey = `edge-${Math.random().toString(36).slice(2)}`;
+        const before = new Date('2024-06-01T12:00:00.000Z');
+        store.operations.push({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+            kind: 'bath',
+            key: earlyKey,
+            payload: { action: 'set', amount: 7 }
+        }, {
+            machine: machineId,
+            occurred_at: before,
+            kind: 'bath',
+            key: edgeKey,
+            payload: { action: 'charge', amount: 2 }
+        });
+        const latest = await port.latestForMachine(machineId, 'bath', { before });
+        assert.strictEqual(latest.key, earlyKey, 'latestForMachine did not exclude the before bound');
+    });
+});
+
 describe('memoryOperations get', function() {
     it('returns row scoped to machine and key', async function() {
         const store = { operations: [] };

@@ -121,7 +121,7 @@ function deleteRequest(request, key, fields) {
  *
  * @example
  *   const ops = machineOperationsClient(baseUrl, request, EventSource, logger);
- *   await ops.createOperation({ kind: 'bath', payload: {}, operatorId: 2 });
+ *   await ops.createOperation({ kind: 'load', payload: {}, operatorId: 2 });
  *   await ops.operationDecisions(key);
  */
 export default function machineOperationsClient(baseUrl, request, eventSource, logger) {
