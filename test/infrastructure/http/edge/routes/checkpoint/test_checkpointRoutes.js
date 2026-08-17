@@ -138,4 +138,31 @@ describe('checkpointRoutes', function() {
         const body = JSON.parse(res.body);
         assert.strictEqual(body.cursor, end.getTime() / 1000, 'should return cursor from checkpoint layer');
     });
+
+    it('returns readings for every repeated topic query key', async function() {
+        const from = 1_700_000_000 + Math.floor(Math.random() * 1000);
+        const voltage = `MX210/icht-\u03b1-${10 + Math.floor(Math.random() * 90)}/GET/AI1/VALUE`;
+        const cosphi = `MX210/icht-\u03b1-${10 + Math.floor(Math.random() * 90)}/GET/AI4/VALUE`;
+        const data = stateDataFake({
+            metrics: [
+                { topic: voltage, ts: new Date((from + 1) * 1000), value: 380 + Math.random() },
+                { topic: cosphi, ts: new Date((from + 2) * 1000), value: 0.82 + Math.random() * 0.1 }
+            ]
+        });
+        const api = routes(checkpointRoutes(null, data.checkpoints));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/v1/checkpoint/readings?from=${from}&topic=${encodeURIComponent(voltage)}&topic=${encodeURIComponent(cosphi)}`,
+            headers: {}
+        }, res);
+        const body = JSON.parse(res.body);
+        assert.deepStrictEqual(
+            (body.items || []).map((item) => {
+                return item.topic;
+            }).sort(),
+            [voltage, cosphi].sort(),
+            'repeated topic query keys did not return both voltage and cosphi readings'
+        );
+    });
 });
