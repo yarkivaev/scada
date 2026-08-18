@@ -63,6 +63,11 @@ function buildScene(requireOperator) {
         stream: () => {
             return { cancel() {} };
         },
+        async rowAt(start) {
+            return captured.row
+                ? { ...captured.row, start_time: start }
+                : null;
+        },
         async retag(start, tags, properties, audit) {
             captured.push({ start, tags, properties, audit });
         },
@@ -114,5 +119,24 @@ describe('timelineRoute operator audit', function() {
             res
         );
         assert.strictEqual(scene.captured[0].audit.displayName, 'Elena Volkov', 'timeline route did not resolve operator display name');
+    });
+
+    it('returns 400 when PATCH tags are outside published options', async function() {
+        const scene = buildScene(true);
+        scene.captured.row = {
+            name: 'off',
+            options: ['load'],
+            tags: []
+        };
+        const res = mockRes();
+        const start = new Date().toISOString();
+        await scene.api.handle(
+            mockReq(JSON.stringify({ start, tags: ['pour'], properties: {}, operatorId: 3 }), {
+                method: 'PATCH',
+                url: `/api/v1/machines/${scene.machineId}/segments`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 400, 'timeline route accepted a tag outside options');
     });
 });
