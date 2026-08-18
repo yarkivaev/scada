@@ -1,4 +1,5 @@
 import machineInPlant from '../../../../application/machineInPlant.js';
+import allowedSegmentTags from '../allowedSegmentTags.js';
 import segmentJson from '../json/segmentJson.js';
 import timelineOperator from '../timelineOperator.js';
 import { errorResponse, jsonResponse, readBody, route, sendRouteError } from '@yarkivaev/simple-server';
@@ -6,6 +7,18 @@ import { errorResponse, jsonResponse, readBody, route, sendRouteError } from '@y
 async function handleOperatorWrite(gate, parsed, write) {
     const audit = await gate.resolve(parsed);
     await write(audit);
+}
+
+async function rejectUnknownTags(timeline, parsed, machineId, res) {
+    if (typeof timeline.rowAt !== 'function') {
+        return false;
+    }
+    const row = await timeline.rowAt(new Date(parsed.start));
+    if (!row || allowedSegmentTags(row.options, row.tags, parsed.tags)) {
+        return false;
+    }
+    errorResponse('BAD_REQUEST', `Tag is not in segment options for ${machineId}`, 400).send(res);
+    return true;
 }
 
 async function respondToRequest(gate, timeline, requestId, req, res) {
@@ -61,6 +74,9 @@ export default function timelineRoute(basePath, plant, operatorOptions) {
             try {
                 const raw = await readBody(req);
                 const parsed = JSON.parse(raw);
+                if (await rejectUnknownTags(result.machine.timeline, parsed, params.machineId, res)) {
+                    return;
+                }
                 await handleOperatorWrite(gate, parsed, async (audit) => {
                     await result.machine.timeline.retag(new Date(parsed.start), parsed.tags, parsed.properties, audit);
                 });
