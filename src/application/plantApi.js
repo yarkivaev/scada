@@ -12,12 +12,16 @@ import simulationRoute from '../infrastructure/http/plant/routes/simulationRoute
 import catalogRoute from '../infrastructure/http/plant/routes/catalogRoute.js';
 import { routes } from '@yarkivaev/simple-server';
 
+function pass(_id, rows) {
+    return rows;
+}
+
 /**
  * Composable plant HTTP API factory.
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object with operations (optional kindSources at construction)
- * @param {object} [config] - clock, extraRoutes, requestTimeoutMs, heartbeat
+ * @param {object} [config] - clock, extraRoutes, requestTimeoutMs, heartbeat, decorateTimeline
  * @returns {object} routes with list() and handle()
  *
  * @example
@@ -30,6 +34,7 @@ export default function plantApi(basePath, plant, config) {
         return new Date();
     });
     const extra = opts.extraRoutes || [];
+    const decorate = opts.decorateTimeline || pass;
     const routeList = [
         ...catalogRoute(basePath, opts.tagCatalog),
         ...machineRoute(basePath, plant),
@@ -37,8 +42,8 @@ export default function plantApi(basePath, plant, config) {
         ...measurementRoute(basePath, plant, time),
         ...alertStream(basePath, plant, time),
         ...alertRoute(basePath, plant),
-        ...timelineRoute(basePath, plant, opts.timelineOperator),
-        ...timelineStream(basePath, plant, time),
+        ...timelineRoute(basePath, plant, opts.timelineOperator, decorate),
+        ...timelineStream(basePath, plant, time, decorate),
         ...operationRoute(basePath, plant, opts.timelineOperator, opts.operationDecisions, opts.owners),
         ...operationStream(basePath, plant, time),
         ...heartbeatStream(basePath, time, opts.heartbeat),
