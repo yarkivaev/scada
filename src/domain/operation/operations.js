@@ -27,6 +27,34 @@ function resolveKinds(kinds, sources) {
     return [kinds];
 }
 
+function announce(bus, result, row) {
+    bus.emit({
+        type: result.created ? 'created' : 'updated',
+        operation: row
+    });
+}
+
+function writeOne(persistence, bus, item) {
+    const row = stampRow(item, new Date());
+    return persistence.upsert(row).then((result) => {
+        announce(bus, result, row);
+    });
+}
+
+function writeMany(persistence, bus, items) {
+    if (typeof persistence.upsertMany !== 'function') {
+        throw new Error('Operations persistence must have an upsertMany() method');
+    }
+    const rows = items.map((item) => {
+        return stampRow(item, new Date());
+    });
+    return persistence.upsertMany(rows).then((results) => {
+        rows.forEach((row, index) => {
+            announce(bus, results[index], row);
+        });
+    });
+}
+
 /**
  * Operations wired to persistence, pubsub, and optional non-PG kind sources.
  *
@@ -37,7 +65,7 @@ function resolveKinds(kinds, sources) {
  * @param {object} persistence - store with upsert, get, remove, listForMachine, latestForMachine
  * @param {object} bus - pubsub instance with stream and emit methods
  * @param {object} [kindSources] - map of kind to { list(machineId, range) }
- * @returns {object} operations with listForMachine, latestForMachine, upsert, get, remove, stream
+ * @returns {object} operations with listForMachine, latestForMachine, upsert, upsertMany, get, remove, stream
  *
  * @example
  *   const ops = operations(store, bus, { temp: temperaturePort });
@@ -65,12 +93,10 @@ export default function operations(persistence, bus, kindSources) {
             return persistence.latestForMachine(machineId, kind, bound);
         },
         upsert(item) {
-            const updatedAt = new Date();
-            const row = stampRow(item, updatedAt);
-            return persistence.upsert(row).then((result) => {
-                const type = result.created ? 'created' : 'updated';
-                bus.emit({ type, operation: row });
-            });
+            return writeOne(persistence, bus, item);
+        },
+        upsertMany(items) {
+            return writeMany(persistence, bus, items);
         },
         get(machineId, key) {
             return persistence.get(machineId, key);

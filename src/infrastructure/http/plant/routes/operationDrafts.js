@@ -77,3 +77,30 @@ export function draftFromUpdate(machineId, key, existing, parsed) {
         payload: parsed.payload
     };
 }
+
+const BATCH_LIMIT = 50;
+
+/**
+ * Builds create drafts from a batch POST body.
+ *
+ * @param {string} machineId - machine id
+ * @param {object} parsed - JSON body with items array
+ * @returns {Array<object>} operation drafts in request order
+ */
+export function draftsFromBatch(machineId, parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw reject('BAD_REQUEST', 'operation body must be a JSON object', 400);
+    }
+    if (!Array.isArray(parsed.items)) {
+        throw reject('BAD_REQUEST', 'items must be an array', 400);
+    }
+    if (parsed.items.length === 0) {
+        throw reject('BAD_REQUEST', 'items must not be empty', 400);
+    }
+    if (parsed.items.length > BATCH_LIMIT) {
+        throw reject('BAD_REQUEST', `items cannot exceed ${BATCH_LIMIT} operations`, 400);
+    }
+    return parsed.items.map((item) => {
+        return draftFromBody(machineId, item);
+    });
+}

@@ -70,6 +70,9 @@ export default function operationRoute(basePath, plant, operatorOptions, decisio
         route('POST', `${basePath}/machines/:machineId/operations`, async (req, res, params) => {
             await writes.writeCreate(params.machineId, req, res);
         }),
+        route('POST', `${basePath}/machines/:machineId/operations/batch`, async (req, res, params) => {
+            await writes.writeCreateMany(params.machineId, req, res);
+        }),
         route('PUT', `${basePath}/machines/:machineId/operations/:key`, async (req, res, params) => {
             await writes.writeUpdate(params.machineId, decodeURIComponent(params.key), req, res);
         }),

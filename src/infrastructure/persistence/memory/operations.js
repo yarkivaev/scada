@@ -18,6 +18,29 @@ function missing(machineId, key) {
     return new Error(`operation '${key}' not found for machine '${machineId}'`);
 }
 
+/**
+ * Inserts or replaces one in-memory operation row.
+ *
+ * @param {object} store - shared mutable store with operations array
+ * @param {object} item - operation row
+ * @returns {{created: boolean}} whether the key was new
+ */
+function putRow(store, item) {
+    const row = findRow(store, item.key);
+    if (row) {
+        row.machine = item.machine;
+        row.occurred_at = item.occurred_at;
+        row.kind = item.kind;
+        row.payload = item.payload;
+        if (item.source_updated_at) {
+            row.source_updated_at = item.source_updated_at;
+        }
+        return { created: false };
+    }
+    store.operations.push({ ...item });
+    return { created: true };
+}
+
 function filterList(store, machineId, kind, range) {
     const from = range.from ?? null;
     const to = range.to ?? null;
@@ -84,19 +107,7 @@ export default function operationStateMemory(store) {
     }
     return {
         upsert(item) {
-            const row = findRow(store, item.key);
-            if (row) {
-                row.machine = item.machine;
-                row.occurred_at = item.occurred_at;
-                row.kind = item.kind;
-                row.payload = item.payload;
-                if (item.source_updated_at) {
-                    row.source_updated_at = item.source_updated_at;
-                }
-                return Promise.resolve({ created: false });
-            }
-            store.operations.push({ ...item });
-            return Promise.resolve({ created: true });
+            return Promise.resolve(putRow(store, item));
         },
         get(machineId, key) {
             const row = findScoped(store, machineId, key);
@@ -120,6 +131,11 @@ export default function operationStateMemory(store) {
         },
         latestForMachine(machineId, kind, bound) {
             return Promise.resolve(filterLatest(store, machineId, kind, bound));
+        },
+        upsertMany(items) {
+            return Promise.resolve(items.map((item) => {
+                return putRow(store, item);
+            }));
         }
     };
 }

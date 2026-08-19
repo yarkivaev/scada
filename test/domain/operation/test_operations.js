@@ -25,6 +25,44 @@ describe('operations upsert', function() {
     });
 });
 
+describe('operations upsertMany', function() {
+    it('emits created for each inserted row in request order', async function() {
+        const store = { operations: [] };
+        const persistence = operationStateMemory(store);
+        const bus = pubsub();
+        const events = [];
+        bus.stream((event) => {
+            events.push(event);
+        });
+        const ops = operations(persistence, bus);
+        const first = `first-${Math.random()}`;
+        const second = `second-${Math.random()}`;
+        await ops.upsertMany([
+            {
+                machine: 'm1',
+                occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+                kind: 'load',
+                key: first,
+                payload: { lot: 'α' }
+            },
+            {
+                machine: 'm1',
+                occurred_at: new Date('2024-06-01T10:00:00.001Z'),
+                kind: 'load',
+                key: second,
+                payload: { lot: 'β' }
+            }
+        ]);
+        assert.deepStrictEqual(
+            events.map((event) => {
+                return event.operation.key;
+            }),
+            [first, second],
+            'upsertMany did not emit created events in request order'
+        );
+    });
+});
+
 describe('operations remove', function() {
     it('emits deleted with removed operation', async function() {
         const store = { operations: [] };
