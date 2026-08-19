@@ -766,6 +766,70 @@ describe('operationRoute', function() {
         );
     });
 
+    it('proxies GET operations to owning edge', async function() {
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `bath:${machineId}:ξ-${Math.floor(Math.random() * 90 + 10)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const calls = [];
+        const api = plantApi('/api/v1', p, {
+            clock: virtualClock(() => {
+                return new Date();
+            }),
+            owners: {
+                resolve() {
+                    return {
+                        kind: 'edge',
+                        baseUrl: 'http://edge.test/api/v1',
+                        async fetch(url, options) {
+                            calls.push({ url, options });
+                            return {
+                                ok: true,
+                                status: 200,
+                                async text() {
+                                    return JSON.stringify({
+                                        items: [{
+                                            external_key: key,
+                                            kind: 'bath',
+                                            machine: machineId,
+                                            occurred_at: '2026-08-19T07:35:51.000Z',
+                                            payload: { action: 'set', amount: 5, unit: 't' }
+                                        }]
+                                    });
+                                }
+                            };
+                        }
+                    };
+                }
+            }
+        });
+        const res = mockRes();
+        await api.handle(
+            mockReq('', {
+                method: 'GET',
+                url: `/api/v1/machines/${machineId}/operations?kinds=bath`
+            }),
+            res
+        );
+        assert.deepStrictEqual(
+            {
+                status: res.statusCode,
+                method: calls[0] && calls[0].options.method,
+                url: calls[0] && calls[0].url,
+                keys: JSON.parse(res.body).items.map((row) => {
+                    return row.external_key;
+                })
+            },
+            {
+                status: 200,
+                method: 'GET',
+                url: `http://edge.test/api/v1/machines/${encodeURIComponent(machineId)}/operations?kinds=bath`,
+                keys: [key]
+            },
+            'GET operations did not return the owning edge list'
+        );
+    });
+
     it('returns 400 when POST batch items is empty', async function() {
         const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
         const data = stateDataFake({});
