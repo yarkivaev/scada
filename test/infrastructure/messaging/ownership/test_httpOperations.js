@@ -173,6 +173,36 @@ describe('httpOperations', function() {
         );
     });
 
+    it('GETs list from owner operations path with kinds query', async function() {
+        const machine = `m-ξ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const calls = [];
+        const port = httpOperations({
+            baseUrl: 'http://edge.test/api/v1',
+            async fetch(url, options) {
+                calls.push({ url, options });
+                return {
+                    ok: true,
+                    status: 200,
+                    async text() {
+                        return JSON.stringify({ items: [] });
+                    }
+                };
+            }
+        }, machine);
+        await port.list({ kinds: 'bath', from: '2026-08-19T06:00:00.000Z' });
+        assert.deepStrictEqual(
+            {
+                url: calls[0].url,
+                method: calls[0].options.method
+            },
+            {
+                url: `http://edge.test/api/v1/machines/${encodeURIComponent(machine)}/operations?kinds=bath&from=2026-08-19T06%3A00%3A00.000Z`,
+                method: 'GET'
+            },
+            'httpOperations did not GET owner operations list'
+        );
+    });
+
     it('POSTs createMany body to owner operations batch path', async function() {
         const machine = `m-ζ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const calls = [];

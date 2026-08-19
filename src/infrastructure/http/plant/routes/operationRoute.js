@@ -2,7 +2,8 @@ import machineInPlant from '../../../../application/machineInPlant.js';
 import operationJson from '../json/operationJson.js';
 import timelineOperator from '../timelineOperator.js';
 import operationWrites from './operationWrites.js';
-import { jsonResponse, route } from '@yarkivaev/simple-server';
+import httpOperations from '../../../messaging/ownership/httpOperations.js';
+import { jsonResponse, route, sendRouteError } from '@yarkivaev/simple-server';
 
 function parseRange(query) {
     const range = {};
@@ -29,11 +30,31 @@ function resolveKinds(query) {
     return undefined;
 }
 
+function edgePort(owners, machineId) {
+    if (!owners || typeof owners.resolve !== 'function') {
+        return undefined;
+    }
+    const owner = owners.resolve(machineId);
+    if (!owner || owner.kind !== 'edge') {
+        return undefined;
+    }
+    return httpOperations(owner, machineId);
+}
+
+async function listLocal(plant, machineId, query) {
+    const rows = await plant.operations.listForMachine(
+        machineId,
+        resolveKinds(query),
+        parseRange(query)
+    );
+    return { items: rows.map(operationJson) };
+}
+
 /**
  * Operations REST routes for machine-scoped reads and writes.
  *
  * Writes resolve operator via timelineOperator and stamp payload.operator.
- * Edge-owned machines proxy create/update/delete to the owning plant API
+ * Edge-owned machines proxy list/create/update/delete to the owning plant API
  * (no local upsert or decision insert). Optional owners registry mirrors timeline.
  *
  * @param {string} basePath - base URL path
@@ -60,12 +81,16 @@ export default function operationRoute(basePath, plant, operatorOptions, decisio
                 jsonResponse({ items: [] }).send(res);
                 return;
             }
-            const rows = await plant.operations.listForMachine(
-                params.machineId,
-                resolveKinds(query),
-                parseRange(query)
-            );
-            jsonResponse({ items: rows.map(operationJson) }).send(res);
+            try {
+                const port = edgePort(owners, params.machineId);
+                const listed = port
+                    ? await port.list(query)
+                    : await listLocal(plant, params.machineId, query);
+                const items = Array.isArray(listed && listed.items) ? listed.items : [];
+                jsonResponse({ items }).send(res);
+            } catch (err) {
+                sendRouteError(res, err);
+            }
         }),
         route('POST', `${basePath}/machines/:machineId/operations`, async (req, res, params) => {
             await writes.writeCreate(params.machineId, req, res);
