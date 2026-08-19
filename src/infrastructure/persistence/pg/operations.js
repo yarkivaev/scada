@@ -20,6 +20,33 @@ async function upsertOperation(pool, item) {
     return { created: existing.rows.length === 0 };
 }
 
+/**
+ * Inserts or updates operations in one PostgreSQL transaction.
+ *
+ * @param {object} pool - pg pool with connect()
+ * @param {Array<object>} items - operations in write order
+ * @returns {Promise<Array<{created: boolean}>>} per-row insert flags
+ */
+async function upsertMany(pool, items) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const results = [];
+        await items.reduce((chain, item) => {
+            return chain.then(async () => {
+                results.push(await upsertOperation(client, item));
+            });
+        }, Promise.resolve());
+        await client.query('COMMIT');
+        return results;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
 function listForMachine(pool, machineId, kind, range) {
     let sql = `SELECT machine, occurred_at, kind, key, payload
         FROM operations WHERE machine = $1 AND kind = $2`;
@@ -121,6 +148,9 @@ export default function operationStatePg(pool) {
         },
         latestForMachine(machineId, kind, bound) {
             return latestForMachine(pool, machineId, kind, bound);
+        },
+        upsertMany(items) {
+            return upsertMany(pool, items);
         }
     };
 }

@@ -182,3 +182,97 @@ describe('pgOperations remove', function() {
         );
     });
 });
+
+describe('pgOperations upsertMany', function() {
+    it('writes rows inside one begin commit transaction', async function() {
+        const calls = [];
+        const client = {
+            async query(sql) {
+                calls.push(sql);
+                return { rows: [] };
+            },
+            release() {
+                calls.push('release');
+            }
+        };
+        const pool = {
+            async connect() {
+                return client;
+            }
+        };
+        const store = operationStatePg(pool);
+        const kind = `load-${Math.floor(Math.random() * 900 + 100)}`;
+        await store.upsertMany([
+            {
+                machine: 'm1',
+                occurred_at: new Date('2024-06-01T10:00:00.000Z'),
+                kind,
+                key: `a-${Math.random()}`,
+                payload: { lot: 'α' }
+            },
+            {
+                machine: 'm1',
+                occurred_at: new Date('2024-06-01T10:00:00.001Z'),
+                kind,
+                key: `b-${Math.random()}`,
+                payload: { lot: 'β' }
+            }
+        ]);
+        assert.deepStrictEqual(
+            [calls[0], calls.filter((sql) => {
+                return typeof sql === 'string' && sql.includes('INSERT');
+            }).length, calls.includes('COMMIT'), calls.includes('release')],
+            ['BEGIN', 2, true, true],
+            'upsertMany did not commit both inserts in one transaction'
+        );
+    });
+
+    it('rolls back when a later insert fails', async function() {
+        const calls = [];
+        const client = {
+            async query(sql) {
+                calls.push(sql);
+                if (sql.includes('INSERT') && calls.filter((entry) => {
+                    return typeof entry === 'string' && entry.includes('INSERT');
+                }).length > 1) {
+                    throw new Error('insert failed');
+                }
+                return { rows: [] };
+            },
+            release() {
+                calls.push('release');
+            }
+        };
+        const store = operationStatePg({
+            async connect() {
+                return client;
+            }
+        });
+        let thrown = false;
+        try {
+            await store.upsertMany([
+                {
+                    machine: 'm1',
+                    occurred_at: new Date(),
+                    kind: 'sample',
+                    key: `ok-${Math.random()}`,
+                    payload: { lot: 'α' }
+                },
+                {
+                    machine: 'm1',
+                    occurred_at: new Date(),
+                    kind: 'sample',
+                    key: `bad-${Math.random()}`,
+                    payload: { lot: 'β' }
+                }
+            ]);
+        } catch {
+            thrown = true;
+        }
+        assert.strictEqual(
+            thrown && calls.includes('ROLLBACK') && calls.includes('release'),
+            true,
+            'failed upsertMany did not roll back the transaction'
+        );
+    });
+});

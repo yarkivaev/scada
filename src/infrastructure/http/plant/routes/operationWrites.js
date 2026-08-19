@@ -2,6 +2,7 @@ import machineInPlant from '../../../../application/machineInPlant.js';
 import operationJson from '../json/operationJson.js';
 import { decisionRow, stampPayload } from '../operationAudit.js';
 import { draftFromBody, draftFromUpdate } from './operationDrafts.js';
+import createMany from './operationBatchWrites.js';
 import httpOperations from '../../../messaging/ownership/httpOperations.js';
 import { errorResponse, jsonResponse, readBody, sendRouteError } from '@yarkivaev/simple-server';
 
@@ -169,12 +170,15 @@ async function writeDelete(ctx, machineId, key, req, res) {
  * Edge-owned machines proxy to the owning plant API without local upsert.
  *
  * @param {object} ctx - plant, gate, decisions, owners
- * @returns {object} writeCreate, writeUpdate, writeDelete
+ * @returns {object} writeCreate, writeCreateMany, writeUpdate, writeDelete
  */
 export default function operationWrites(ctx) {
     return {
         writeCreate(machineId, req, res) {
             return writeCreate(ctx, machineId, req, res);
+        },
+        writeCreateMany(machineId, req, res) {
+            return createMany(ctx, machineId, req, res);
         },
         writeUpdate(machineId, key, req, res) {
             return writeUpdate(ctx, machineId, key, req, res);

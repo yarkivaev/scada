@@ -275,6 +275,32 @@ describe('machineClient', function() {
         );
     });
 
+    it('posts createOperations to the batch path with items', async function() {
+        let fetchedUrl;
+        let body;
+        const kind = `load-${Math.floor(Math.random() * 900 + 100)}`;
+        const key = `key-${Math.random().toString(36).slice(2)}`;
+        const fakeFetch = async (url, options) => {
+            fetchedUrl = url;
+            body = options.body;
+            return { ok: true, json: async () => {
+                return { items: [] };
+            } };
+        };
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
+        await client.createOperations([
+            { kind, payload: { lot: 'α' }, key, occurredAt: '2024-06-01T12:00:00.000Z' }
+        ]);
+        const parsed = JSON.parse(body);
+        assert.strictEqual(
+            fetchedUrl.includes('/operations/batch')
+                && parsed.items[0].kind === kind
+                && parsed.items[0].key === key,
+            true,
+            'createOperations cannot skip batch path or item fields'
+        );
+    });
+
     it('puts updateOperation with payload and optional fields', async function() {
         let method;
         let fetchedUrl;

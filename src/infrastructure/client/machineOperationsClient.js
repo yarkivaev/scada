@@ -134,6 +134,14 @@ export default function machineOperationsClient(baseUrl, request, eventSource, l
         createOperation(fields) {
             return request('/operations', payload('POST', createBody(fields)));
         },
+        createOperations(list) {
+            const items = (list || []).map(createBody);
+            const data = { items };
+            if (list && list.length > 0) {
+                attachAudit(data, list[0]);
+            }
+            return request('/operations/batch', payload('POST', data));
+        },
         updateOperation(key, fields) {
             return request(
                 `/operations/${encodeURIComponent(key)}`,

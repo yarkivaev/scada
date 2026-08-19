@@ -172,4 +172,40 @@ describe('httpOperations', function() {
             'non-ok owner did not fail with BAD_GATEWAY'
         );
     });
+
+    it('POSTs createMany body to owner operations batch path', async function() {
+        const machine = `m-ζ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const calls = [];
+        const port = httpOperations({
+            baseUrl: 'http://edge.test/api/v1',
+            async fetch(url, options) {
+                calls.push({ url, options });
+                return {
+                    ok: true,
+                    status: 200,
+                    async text() {
+                        return JSON.stringify({ items: [] });
+                    }
+                };
+            }
+        }, machine);
+        const body = {
+            items: [{ kind: 'load', payload: { lot: 'η' } }],
+            operatorId: 4
+        };
+        await port.createMany(body);
+        assert.deepStrictEqual(
+            {
+                url: calls[0].url,
+                method: calls[0].options.method,
+                sent: JSON.parse(calls[0].options.body)
+            },
+            {
+                url: `http://edge.test/api/v1/machines/${encodeURIComponent(machine)}/operations/batch`,
+                method: 'POST',
+                sent: body
+            },
+            'httpOperations did not POST createMany to owner batch path'
+        );
+    });
 });

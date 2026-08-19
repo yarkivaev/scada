@@ -718,4 +718,67 @@ describe('operationRoute', function() {
             'owner proxy create did not insert central user_decisions row'
         );
     });
+
+    it('creates many operations via POST batch and lists them in occurred_at order', async function() {
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const early = `early-${Math.random().toString(36).slice(2)}`;
+        const late = `late-${Math.random().toString(36).slice(2)}`;
+        const kind = `load-${Math.floor(Math.random() * 900 + 100)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const write = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({
+                items: [
+                    {
+                        kind,
+                        key: early,
+                        occurred_at: '2024-06-01T12:00:00.000Z',
+                        payload: { lot: 'α' }
+                    },
+                    {
+                        kind,
+                        key: late,
+                        occurred_at: '2024-06-01T12:00:00.001Z',
+                        payload: { lot: 'β' }
+                    }
+                ]
+            }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations/batch`
+            }),
+            write
+        );
+        const read = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: `/api/v1/machines/${machineId}/operations?kind=${kind}&from=2024-06-01T00:00:00.000Z&to=2024-06-02T00:00:00.000Z`,
+            headers: {}
+        }, read);
+        const body = JSON.parse(read.body);
+        assert.deepStrictEqual(
+            body.items.map((row) => {
+                return row.external_key;
+            }),
+            [early, late],
+            'batch POST did not persist both operations in occurred_at order'
+        );
+    });
+
+    it('returns 400 when POST batch items is empty', async function() {
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const data = stateDataFake({});
+        const { plant: p } = buildPlant(data, machineId);
+        const api = apiFor(p);
+        const res = mockRes();
+        await api.handle(
+            mockReq(JSON.stringify({ items: [] }), {
+                method: 'POST',
+                url: `/api/v1/machines/${machineId}/operations/batch`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 400, 'empty batch POST cannot succeed');
+    });
 });

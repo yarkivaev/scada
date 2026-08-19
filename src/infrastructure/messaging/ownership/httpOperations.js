@@ -81,6 +81,9 @@ export default function httpOperations(site, machineId) {
         create(body) {
             return send('POST', root, body);
         },
+        createMany(body) {
+            return send('POST', `${root}/batch`, body);
+        },
         update(key, body) {
             return send('PUT', `${root}/${encodeURIComponent(key)}`, body);
         },
