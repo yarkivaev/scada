@@ -72,7 +72,7 @@ async function initStomp(stomp, translations, requirePool) {
  * Multi-kind operations come from plant.operations built with kindSources
  * (e.g. plantOperations(persistence, { temp })).
  *
- * @param {object} config - port, basePath, plantFactory, extraRoutes, translations, stomp, requirePool
+ * @param {object} config - port, basePath, plantFactory, extraRoutes, translations, stomp, requirePool, decorateTimeline
  * @returns {Promise<object>} server, plant, api, segments
  *
  * @example
@@ -95,7 +95,8 @@ export default async function plantServer(config) {
         extraRoutes: extra,
         timelineOperator: config.timelineOperator,
         operationDecisions: config.operationDecisions,
-        owners: config.owners
+        owners: config.owners,
+        decorateTimeline: config.decorateTimeline
     });
     const server = http.createServer((req, res) => {
         return api.handle(req, res);

@@ -22,18 +22,53 @@ function segmentPayload(segment) {
     return data;
 }
 
+async function emitSegment(sse, event, decorate, machineId) {
+    if (event.type === 'created' && event.segment) {
+        const [row] = await decorate(machineId, [event.segment]);
+        sse.emit('segment_created', segmentPayload(row));
+        return;
+    }
+    if (event.type === 'resolved' && event.segment) {
+        const [row] = await decorate(machineId, [event.segment]);
+        sse.emit('segment_resolved', segmentPayload(row));
+    }
+}
+
+async function emitRequest(sse, event, decorate, machineId) {
+    if (event.type === 'created' && event.request) {
+        const [row] = await decorate(machineId, [event.request]);
+        const start = row.start_time || row.startTime;
+        const end = row.end_time || row.endTime;
+        sse.emit('request_created', {
+            id: row.id,
+            segment: {
+                name: row.name,
+                start: start.toISOString(),
+                end: end.toISOString(),
+                duration: row.duration
+            },
+            options: row.options
+        });
+        return;
+    }
+    if (event.type === 'resolved' && event.request) {
+        sse.emit('request_resolved', { id: event.request.id });
+    }
+}
+
 /**
  * Timeline SSE routes for segments and label requests.
  *
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
  * @param {function} clock - time provider
+ * @param {function} decorate - (machineId, rows) => rows
  * @returns {array} route objects
  *
  * @example
  *   timelineStream('/api/v1', plant, clock);
  */
-export default function timelineStream(basePath, plant, clock) {
+export default function timelineStream(basePath, plant, clock, decorate) {
     return [
         route('GET', `${basePath}/machines/:machineId/segments/stream`, (req, res, params) => {
             const sse = sseResponse(res, clock);
@@ -44,11 +79,7 @@ export default function timelineStream(basePath, plant, clock) {
                 return;
             }
             const subscription = result.machine.timeline.stream((event) => {
-                if (event.type === 'created' && event.segment) {
-                    sse.emit('segment_created', segmentPayload(event.segment));
-                } else if (event.type === 'resolved' && event.segment) {
-                    sse.emit('segment_resolved', segmentPayload(event.segment));
-                }
+                return emitSegment(sse, event, decorate, params.machineId);
             });
             const heartbeat = setInterval(() => {
                 sse.heartbeat();
@@ -67,23 +98,7 @@ export default function timelineStream(basePath, plant, clock) {
                 return;
             }
             const subscription = result.machine.timeline.stream((event) => {
-                if (event.type === 'created' && event.request) {
-                    const reqItem = event.request;
-                    const start = reqItem.start_time || reqItem.startTime;
-                    const end = reqItem.end_time || reqItem.endTime;
-                    sse.emit('request_created', {
-                        id: reqItem.id,
-                        segment: {
-                            name: reqItem.name,
-                            start: start.toISOString(),
-                            end: end.toISOString(),
-                            duration: reqItem.duration
-                        },
-                        options: reqItem.options
-                    });
-                } else if (event.type === 'resolved' && event.request) {
-                    sse.emit('request_resolved', { id: event.request.id });
-                }
+                return emitRequest(sse, event, decorate, params.machineId);
             });
             const heartbeat = setInterval(() => {
                 sse.heartbeat();

@@ -43,7 +43,8 @@ function mockReq(bodyText, meta) {
     return req;
 }
 
-function buildScene(requireOperator) {
+function buildScene(requireOperator, extras) {
+    const extra = extras || {};
     const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
     const uid = `route-${Math.random()}`;
     const captured = [];
@@ -55,10 +56,10 @@ function buildScene(requireOperator) {
     const history = alerts(alert, acknowledgedAlert);
     const timeline = {
         list: async () => {
-            return [];
+            return extra.listed || [];
         },
         pending: async () => {
-            return [];
+            return extra.waiting || [];
         },
         stream: () => {
             return { cancel() {} };
@@ -87,9 +88,28 @@ function buildScene(requireOperator) {
             provider,
             requireOperator,
             defaultUser: 'hmi-kiosk'
-        }
+        },
+        decorateTimeline: extra.decorate
     });
     return { api, machineId, captured };
+}
+
+function staleOff(start) {
+    const begin = start || new Date();
+    return {
+        name: 'off',
+        start_time: begin,
+        end_time: new Date(begin.getTime() + 60000),
+        duration: 60,
+        options: ['repair'],
+        tags: []
+    };
+}
+
+function paintEmergency(_id, rows) {
+    return rows.map((row) => {
+        return { ...row, options: ['repair_emergency'] };
+    });
 }
 
 describe('timelineRoute operator audit', function() {
@@ -138,5 +158,69 @@ describe('timelineRoute operator audit', function() {
             res
         );
         assert.strictEqual(res.statusCode, 400, 'timeline route accepted a tag outside options');
+    });
+});
+
+describe('timelineRoute decorateTimeline', function() {
+    it('returns decorated options on GET segments', async function() {
+        const scene = buildScene(false, { listed: [staleOff()], decorate: paintEmergency });
+        const res = mockRes();
+        await scene.api.handle(
+            mockReq('', { method: 'GET', url: `/api/v1/machines/${scene.machineId}/segments` }),
+            res
+        );
+        assert.deepStrictEqual(
+            JSON.parse(res.body).items[0].options,
+            ['repair_emergency'],
+            'GET segments kept stored options'
+        );
+    });
+
+    it('returns decorated options on GET pending requests', async function() {
+        const begin = new Date();
+        const scene = buildScene(false, {
+            waiting: [{ id: `req-${Math.random()}`, ...staleOff(begin) }],
+            decorate: paintEmergency
+        });
+        const res = mockRes();
+        await scene.api.handle(
+            mockReq('', { method: 'GET', url: `/api/v1/machines/${scene.machineId}/requests` }),
+            res
+        );
+        assert.deepStrictEqual(
+            JSON.parse(res.body).items[0].options,
+            ['repair_emergency'],
+            'GET requests kept stored options'
+        );
+    });
+
+    it('accepts a PATCH tag that decorate publishes over stale stored options', async function() {
+        const scene = buildScene(true, { decorate: paintEmergency });
+        scene.captured.row = staleOff();
+        const res = mockRes();
+        const start = new Date().toISOString();
+        await scene.api.handle(
+            mockReq(JSON.stringify({ start, tags: ['repair_emergency'], properties: {}, operatorId: 3 }), {
+                method: 'PATCH',
+                url: `/api/v1/machines/${scene.machineId}/segments`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 200, 'PATCH rejected a tag that decorate allowed');
+    });
+
+    it('rejects a PATCH tag that decorate dropped even when stored options are empty', async function() {
+        const scene = buildScene(true, { decorate: paintEmergency });
+        scene.captured.row = { name: 'off', options: null, tags: [] };
+        const res = mockRes();
+        const start = new Date().toISOString();
+        await scene.api.handle(
+            mockReq(JSON.stringify({ start, tags: ['to_ladle'], properties: {}, operatorId: 3 }), {
+                method: 'PATCH',
+                url: `/api/v1/machines/${scene.machineId}/segments`
+            }),
+            res
+        );
+        assert.strictEqual(res.statusCode, 400, 'PATCH accepted a tag decorate did not publish');
     });
 });

@@ -142,7 +142,7 @@ function siteExtraRoutes(catalog, extraRoutes) {
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
- * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, operatorCatalog, kindSources, streams, env
+ * @param {object} config - port, basePath, translations, requirePool, plantFactory, extraRoutes, operatorCatalog, kindSources, streams, env, decorateTimeline
  * @returns {Promise<object>} sink, plant, mqtt pipeline
  *
  * @example
@@ -185,7 +185,8 @@ export default async function siteServer(config) {
         extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
         timelineOperator: timelineOperatorFromEnv(catalog, env, config),
         operationDecisions: catalog.decisions,
-        owners: config.owners
+        owners: config.owners,
+        decorateTimeline: config.decorateTimeline
     });
     return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
 }

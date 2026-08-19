@@ -9,12 +9,16 @@ async function handleOperatorWrite(gate, parsed, write) {
     await write(audit);
 }
 
-async function rejectUnknownTags(timeline, parsed, machineId, res) {
+async function rejectUnknownTags(timeline, parsed, machineId, res, decorate) {
     if (typeof timeline.rowAt !== 'function') {
         return false;
     }
     const row = await timeline.rowAt(new Date(parsed.start));
-    if (!row || allowedSegmentTags(row.options, row.tags, parsed.tags)) {
+    if (!row) {
+        return false;
+    }
+    const [gated] = await decorate(machineId, [row]);
+    if (allowedSegmentTags(gated.options, gated.tags, parsed.tags)) {
         return false;
     }
     errorResponse('BAD_REQUEST', `Tag is not in segment options for ${machineId}`, 400).send(res);
@@ -41,12 +45,13 @@ async function respondToRequest(gate, timeline, requestId, req, res) {
  * @param {string} basePath - base URL path
  * @param {object} plant - plant domain object
  * @param {object} [operatorOptions] - provider, requireOperator, defaultUser
+ * @param {function} decorate - (machineId, rows) => rows, applied before JSON and PATCH gate
  * @returns {array} route objects
  *
  * @example
  *   timelineRoute('/api/v1', plant, { provider, requireOperator: true, defaultUser: 'hmi-kiosk' });
  */
-export default function timelineRoute(basePath, plant, operatorOptions) {
+export default function timelineRoute(basePath, plant, operatorOptions, decorate) {
     const gate = timelineOperator(operatorOptions);
     return [
         route('GET', `${basePath}/machines/:machineId/segments`, async (req, res, params, query) => {
@@ -62,7 +67,7 @@ export default function timelineRoute(basePath, plant, operatorOptions) {
             if (query.to) {
                 options.to = query.to;
             }
-            const rows = await result.machine.timeline.list(options);
+            const rows = await decorate(params.machineId, await result.machine.timeline.list(options));
             jsonResponse({ items: rows.map(segmentJson) }).send(res);
         }),
         route('PATCH', `${basePath}/machines/:machineId/segments`, async (req, res, params) => {
@@ -74,7 +79,7 @@ export default function timelineRoute(basePath, plant, operatorOptions) {
             try {
                 const raw = await readBody(req);
                 const parsed = JSON.parse(raw);
-                if (await rejectUnknownTags(result.machine.timeline, parsed, params.machineId, res)) {
+                if (await rejectUnknownTags(result.machine.timeline, parsed, params.machineId, res, decorate)) {
                     return;
                 }
                 await handleOperatorWrite(gate, parsed, async (audit) => {
@@ -94,7 +99,7 @@ export default function timelineRoute(basePath, plant, operatorOptions) {
                 jsonResponse({ items: [] }).send(res);
                 return;
             }
-            const rows = await result.machine.timeline.pending();
+            const rows = await decorate(params.machineId, await result.machine.timeline.pending());
             const items = rows.map(({ id, name, start_time: startTime, end_time: endTime, duration, options }) => {
                 return {
                     id,
