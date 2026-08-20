@@ -6,6 +6,7 @@ import postgresPool from '../infrastructure/persistence/postgresPool.js';
 import stompAlerts from '../infrastructure/messaging/stomp/alerts/stompAlerts.js';
 import stompTimelineSegments from '../infrastructure/messaging/stomp/stompTimelineSegments.js';
 import userDecisions from '../infrastructure/messaging/stomp/userDecisions.js';
+import segmentRetags from '../infrastructure/messaging/stomp/segmentRetags.js';
 import { parseRequestTimeoutMs, virtualClock } from '@yarkivaev/simple-server';
 
 function stompCollectorFactory(stompUrl, destination, credentials) {
@@ -63,7 +64,13 @@ async function initStomp(stomp, translations, requirePool) {
         passcode: stomp.passcode,
         host: stomp.host
     });
-    return { alerts, userDecisions: decisions };
+    const segments = segmentRetags({
+        stompUrl: stomp.url,
+        login: stomp.login,
+        passcode: stomp.passcode,
+        host: stomp.host
+    });
+    return { alerts, userDecisions: decisions, segments };
 }
 
 /**
@@ -79,8 +86,8 @@ async function initStomp(stomp, translations, requirePool) {
  *   await plantServer({ port: 3000, basePath: '/api/v1', plantFactory, extraRoutes });
  */
 export default async function plantServer(config) {
-    const { alerts, userDecisions: decisions } = await initStomp(config.stomp, config.translations, config.requirePool);
-    const p = await config.plantFactory({ alerts, userDecisions: decisions });
+    const { alerts, userDecisions: decisions, segments: retags } = await initStomp(config.stomp, config.translations, config.requirePool);
+    const p = await config.plantFactory({ alerts, userDecisions: decisions, segments: retags });
     const segments = wireTimelineSegments(config.stomp, p);
     const clock = virtualClock(() => {
         return new Date();

@@ -165,4 +165,65 @@ describe('checkpointRoutes', function() {
             'repeated topic query keys did not return both voltage and cosphi readings'
         );
     });
+
+    it('returns 400 when cycle-prior is called without machineId', async function() {
+        const data = stateDataFake({});
+        const api = routes(checkpointRoutes(null, data.checkpoints));
+        const res = mockRes();
+        await api.handle({
+            method: 'GET',
+            url: '/v1/checkpoint/cycle-prior?before=1700000000&reset=lining_inspection',
+            headers: {}
+        }, res);
+        assert.strictEqual(res.statusCode, 400, 'should require machineId');
+    });
+
+    it('returns prior items until the reset tag', async function() {
+        const reset = `якорь-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const start = new Date('2026-08-20T04:16:06.589Z');
+        const end = new Date('2026-08-20T04:33:22.543Z');
+        const later = new Date('2026-08-20T10:10:21.277Z');
+        const laterEnd = new Date('2026-08-20T10:33:52.644Z');
+        const data = stateDataFake({
+            segments: [{
+                machine: 'mx',
+                name: 'off',
+                start_time: later,
+                end_time: laterEnd,
+                duration: 1411,
+                options: '[]',
+                tags: '["to_ladle"]',
+                properties: '{}',
+                resolved: true,
+                consumed: false
+            }, {
+                machine: 'mx',
+                name: 'off',
+                start_time: start,
+                end_time: end,
+                duration: 1035,
+                options: '[]',
+                tags: JSON.stringify([reset]),
+                properties: '{}',
+                resolved: true,
+                consumed: false
+            }]
+        });
+        const api = routes(checkpointRoutes(null, data.checkpoints));
+        const res = mockRes();
+        const before = Date.parse('2026-08-20T12:29:24.318Z') / 1000;
+        await api.handle({
+            method: 'GET',
+            url: `/v1/checkpoint/cycle-prior?machineId=mx&before=${before}&reset=${encodeURIComponent(reset)}`,
+            headers: {}
+        }, res);
+        const body = JSON.parse(res.body);
+        assert.deepStrictEqual(
+            (body.items || []).map((item) => {
+                return item.tags;
+            }),
+            [[reset], ['to_ladle']],
+            'cycle-prior did not stop at the reset tag'
+        );
+    });
 });
