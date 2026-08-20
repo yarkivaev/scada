@@ -1,3 +1,5 @@
+import cycleLookback from '../../../domain/timeline/cycleLookback.js';
+
 function parseJsonField(raw) {
     if (!raw) {
         return null;
@@ -93,6 +95,17 @@ export default function checkpointStateMemory(store) {
         },
         segment(machineId, startEpoch) {
             return segmentAt(store, machineId, startEpoch);
+        },
+        cyclePrior(machineId, beforeEpoch, resetTags) {
+            const beforeMs = Number(beforeEpoch) * 1000;
+            const rows = store.segments.filter((row) => {
+                return row.machine === machineId && new Date(row.start_time).getTime() < beforeMs;
+            }).sort((a, b) => {
+                return new Date(b.start_time) - new Date(a.start_time);
+            });
+            return cycleLookback(rows, resetTags).map((row) => {
+                return segmentItem(row);
+            });
         }
     };
 }

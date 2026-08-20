@@ -1,4 +1,5 @@
 import segmentStatePg from './segments.js';
+import cycleLookback from '../../../domain/timeline/cycleLookback.js';
 
 function parseJsonField(raw) {
     if (!raw) {
@@ -110,6 +111,19 @@ export default function checkpointStatePg(pool, metricsEnabled = true) {
         },
         segment(machineId, startEpoch) {
             return segmentAt(pool, machineId, startEpoch);
+        },
+        cyclePrior(machineId, beforeEpoch, resetTags) {
+            return pool.query(
+                `SELECT name, start_time, end_time, duration, tags, options, properties
+                 FROM segments
+                 WHERE machine = $1 AND start_time < $2
+                 ORDER BY start_time DESC`,
+                [machineId, new Date(beforeEpoch * 1000)]
+            ).then((result) => {
+                return cycleLookback(result.rows, resetTags).map((row) => {
+                    return segmentItem(row, machineId);
+                });
+            });
         }
     };
 }

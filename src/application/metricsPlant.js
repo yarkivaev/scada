@@ -29,6 +29,7 @@ export default async function metricsPlant(machines, options) {
         pool,
         alerts: options.alerts,
         userDecisions: options.userDecisions,
+        segments: options.segments,
         shopName: options.shopName
     });
     return plant(initialized({ [shop.name()]: shop }, Object.values));

@@ -33,16 +33,18 @@ export default function segmentStatePg(pool) {
             return result.rows;
         },
         async retag(machineId, start, tagsJson, propertiesJson) {
-            await pool.query(
+            const result = await pool.query(
                 'UPDATE segments SET tags = $1, properties = $2 WHERE machine = $3 AND start_time = $4',
                 [tagsJson, propertiesJson, machineId, start]
             );
+            return result.rowCount;
         },
         async resolveRequest(machineId, startKey, tagsJson, propertiesJson) {
-            await pool.query(
+            const result = await pool.query(
                 'UPDATE segments SET tags = $1, properties = $2, resolved = TRUE, consumed = FALSE WHERE machine = $3 AND start_time = $4',
                 [tagsJson, propertiesJson, machineId, startKey]
             );
+            return result.rowCount;
         }
     };
 }

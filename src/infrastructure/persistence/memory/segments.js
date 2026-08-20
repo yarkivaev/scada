@@ -65,19 +65,23 @@ export default function segmentStateMemory(store) {
         },
         retag(machineId, start, tagsJson, propertiesJson) {
             const row = findRow(store, machineId, start);
-            if (row) {
-                row.tags = tagsJson;
-                row.properties = propertiesJson;
+            if (!row) {
+                return 0;
             }
+            row.tags = tagsJson;
+            row.properties = propertiesJson;
+            return 1;
         },
         resolveRequest(machineId, startKey, tagsJson, propertiesJson) {
             const row = findRow(store, machineId, startKey);
-            if (row) {
-                row.tags = tagsJson;
-                row.properties = propertiesJson;
-                row.resolved = true;
-                row.consumed = false;
+            if (!row) {
+                return 0;
             }
+            row.tags = tagsJson;
+            row.properties = propertiesJson;
+            row.resolved = true;
+            row.consumed = false;
+            return 1;
         }
     };
 }

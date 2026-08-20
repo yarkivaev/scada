@@ -37,6 +37,38 @@ function segmentRoute(token, checkpointState) {
     });
 }
 
+function cyclePriorQuery(query) {
+    if (!query.machineId) {
+        return { error: 'machineId is required' };
+    }
+    const before = parseFrom(query.before);
+    if (before === null) {
+        return { error: 'before must be a number' };
+    }
+    const reset = toTopicList(query.reset);
+    if (reset.length === 0) {
+        return { error: 'reset is required' };
+    }
+    return { machineId: query.machineId, before, reset };
+}
+
+function cyclePriorRoute(token, checkpointState) {
+    return route('GET', '/v1/checkpoint/cycle-prior', async (req, res, params, query) => {
+        void params;
+        if (!hasAccess(req, token)) {
+            sendForbidden(res);
+            return;
+        }
+        const parsed = cyclePriorQuery(query);
+        if (parsed.error) {
+            errorResponse('BAD_REQUEST', parsed.error, 400).send(res);
+            return;
+        }
+        const items = await checkpointState.cyclePrior(parsed.machineId, parsed.before, parsed.reset);
+        jsonResponse({ items }).send(res);
+    });
+}
+
 export default function checkpointRoutes(token, checkpointState) {
     return [
         route('GET', '/v1/checkpoint/replay-cursor', async (req, res, params, query) => {
@@ -53,6 +85,7 @@ export default function checkpointRoutes(token, checkpointState) {
             jsonResponse({ machineId: query.machineId, cursor }).send(res);
         }),
         segmentRoute(token, checkpointState),
+        cyclePriorRoute(token, checkpointState),
         route('GET', '/v1/checkpoint/pending-segments', async (req, res) => {
             if (!hasAccess(req, token)) {
                 sendForbidden(res);
