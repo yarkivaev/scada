@@ -192,6 +192,38 @@ describe('segmentCodec', function() {
         assert.strictEqual(received[0].type, type, 'should pass through type field');
     });
 
+    it('defaults kind to phase when absent', async function() {
+        const received = [];
+        const collector = { accept: (record) => { return received.push(record); } };
+        const codec = segmentCodec(collector);
+        const payload = JSON.stringify({
+            machine: `m${Math.floor(Math.random() * 9000 + 1000)}`,
+            name: 'on',
+            start: 1700000000000,
+            end: 1700003600000,
+            duration: 3600
+        });
+        await codec.accept({ destination: '/exchange/scada.segments', payload });
+        assert.strictEqual(received[0].kind, 'phase', 'missing kind must default to phase');
+    });
+
+    it('preserves a supplied kind', async function() {
+        const received = [];
+        const collector = { accept: (record) => { return received.push(record); } };
+        const codec = segmentCodec(collector);
+        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const payload = JSON.stringify({
+            machine: `m${Math.floor(Math.random() * 9000 + 1000)}`,
+            name: '1',
+            kind,
+            start: 1700000000000,
+            end: 1700003600000,
+            duration: 0
+        });
+        await codec.accept({ destination: '/exchange/scada.segments', payload });
+        assert.strictEqual(received[0].kind, kind, 'supplied kind was dropped');
+    });
+
     it('throws on missing collector', function() {
         assert.throws(
             () => { segmentCodec(null); },

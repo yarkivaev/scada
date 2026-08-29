@@ -14,6 +14,9 @@ export default function segmentJson(row) {
         end: row.duration === 0 ? new Date().toISOString() : row.end_time.toISOString(),
         duration: row.duration
     };
+    if (row.kind) {
+        mapped.kind = row.kind;
+    }
     if (row.options) {
         mapped.options = row.options;
     }

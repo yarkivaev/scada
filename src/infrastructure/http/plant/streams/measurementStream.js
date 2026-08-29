@@ -13,8 +13,6 @@ import { route, sseResponse, timeExpression } from '@yarkivaev/simple-server';
  * @example
  *   const routes = measurementStream('/api/v1', plant, clock);
  */
-const RETAIN_MS = 10000;
-
 export default function measurementStream(basePath, plant, clock) {
     function beginning() {
         return new Date(clock().getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -47,7 +45,7 @@ export default function measurementStream(basePath, plant, clock) {
             if (machine.sensors[key]) {
                 // eslint-disable-next-line no-await-in-loop
                 const reading = await machine.sensors[key].current();
-                if (reading.found && clock().getTime() - reading.timestamp.getTime() < RETAIN_MS) {
+                if (reading.found) {
                     sse.emit('measurement', {
                         key,
                         timestamp: reading.timestamp.toISOString(),

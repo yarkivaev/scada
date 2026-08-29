@@ -33,6 +33,7 @@ function memoryTimelinePort(store, bus) {
         list: port.list,
         rowAt: port.rowAt,
         pending: port.pending,
+        latest: port.latest,
         stream: port.stream,
         bus,
         retag(start, tags, properties, audit) {
@@ -122,6 +123,7 @@ export default function shopWithTimeline(name, options) {
             list: port.list,
             rowAt: port.rowAt,
             pending: port.pending,
+            latest: port.latest,
             stream: port.stream,
             bus,
             async retag(start, tags, properties, audit) {

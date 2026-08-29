@@ -55,7 +55,8 @@ function buildScene(requireOperator, extras) {
     };
     const history = alerts(alert, acknowledgedAlert);
     const timeline = {
-        list: async () => {
+        list: async (options) => {
+            captured.listed = options;
             return extra.listed || [];
         },
         pending: async () => {
@@ -222,5 +223,41 @@ describe('timelineRoute decorateTimeline', function() {
             res
         );
         assert.strictEqual(res.statusCode, 400, 'PATCH accepted a tag decorate did not publish');
+    });
+});
+
+describe('timelineRoute kinds query', function() {
+    it('forwards kinds to timeline list', async function() {
+        const scene = buildScene(false, { listed: [] });
+        const res = mockRes();
+        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        await scene.api.handle(
+            mockReq('', {
+                method: 'GET',
+                url: `/api/v1/machines/${scene.machineId}/segments?kinds=${kind}`
+            }),
+            res
+        );
+        assert.deepStrictEqual(scene.captured.listed.kinds, [kind], 'GET segments dropped kinds query');
+    });
+
+    it('includes kind on GET segment JSON', async function() {
+        const begin = new Date();
+        const kind = `body_${Math.random().toString(36).slice(2, 8)}`;
+        const scene = buildScene(false, {
+            listed: [{
+                name: '1',
+                kind,
+                start_time: begin,
+                end_time: new Date(begin.getTime() + 1000),
+                duration: 1
+            }]
+        });
+        const res = mockRes();
+        await scene.api.handle(
+            mockReq('', { method: 'GET', url: `/api/v1/machines/${scene.machineId}/segments` }),
+            res
+        );
+        assert.strictEqual(JSON.parse(res.body).items[0].kind, kind, 'GET segments omitted kind');
     });
 });

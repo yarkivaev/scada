@@ -20,7 +20,11 @@ export default function memoryTimelineStore() {
                 if (!range) {
                     return items.slice();
                 }
+                const kinds = Array.isArray(range.kinds) && range.kinds.length > 0 ? range.kinds : ['phase'];
                 return items.filter((item) => {
+                    if (!kinds.includes(item.kind || 'phase')) {
+                        return false;
+                    }
                     if (range.from && item.end_time < new Date(range.from)) {
                         return false;
                     }
@@ -39,6 +43,23 @@ export default function memoryTimelineStore() {
                 return pending.filter((item) => {
                     return !item.resolved;
                 });
+            },
+            latest(kinds) {
+                if (!Array.isArray(kinds) || kinds.length === 0) {
+                    return [];
+                }
+                const found = new Map();
+                items.forEach((item) => {
+                    const track = item.kind || 'phase';
+                    if (!kinds.includes(track)) {
+                        return;
+                    }
+                    const prev = found.get(track);
+                    if (!prev || item.start_time > prev.start_time) {
+                        found.set(track, item);
+                    }
+                });
+                return Array.from(found.values());
             }
         }
     };

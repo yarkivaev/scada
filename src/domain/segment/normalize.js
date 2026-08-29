@@ -20,6 +20,7 @@ export default function segmentNormalize(parsed) {
         type: parsed.type,
         machine: parsed.machine,
         name: parsed.name,
+        kind: typeof parsed.kind === 'string' && parsed.kind.length > 0 ? parsed.kind : 'phase',
         start_time: new Date(parsed.start).toISOString(),
         end_time: new Date(parsed.end).toISOString(),
         duration: parsed.duration,

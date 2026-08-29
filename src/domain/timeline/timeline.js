@@ -20,6 +20,12 @@ export default function timeline(read, bus) {
         pending() {
             return read.pending();
         },
+        latest(kinds) {
+            if (typeof read.latest !== 'function') {
+                return [];
+            }
+            return read.latest(kinds);
+        },
         stream: bus.stream
     };
 }

@@ -67,6 +67,11 @@ export default function timelineRoute(basePath, plant, operatorOptions, decorate
             if (query.to) {
                 options.to = query.to;
             }
+            if (query.kinds) {
+                options.kinds = query.kinds.split(',').filter((kind) => {
+                    return kind.length > 0;
+                });
+            }
             const rows = await decorate(params.machineId, await result.machine.timeline.list(options));
             jsonResponse({ items: rows.map(segmentJson) }).send(res);
         }),

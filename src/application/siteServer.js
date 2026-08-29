@@ -5,10 +5,9 @@ import plantOperations from './plantOperations.js';
 import edgeApi from '../infrastructure/http/edge/edgeApi.js';
 import runRetention from '../infrastructure/ingest/db/runRetention.js';
 import mqttMetrics from '../infrastructure/ingest/mqtt/mqttMetrics.js';
-import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../infrastructure/sync/operationSyncIngest.js';
 import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js';
-import bindSilentStreams from './bindSilentStreams.js';
+import startTelemetryIngest from './siteTelemetry.js';
 import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
 import { buildSiteOperatorCatalog } from './siteOperatorCatalog.js';
 
@@ -70,50 +69,6 @@ function startOperationSync(sink, env) {
     return ingest;
 }
 
-function clickhouseMetricsUrl(env) {
-    return env.CLICKHOUSE_URL
-        || (env.CLICKHOUSE_HOST ? `http://${env.CLICKHOUSE_HOST}:8123` : undefined);
-}
-
-function startAmqpMetrics(env, sink, onSeen) {
-    if (!env.AMQP_URL) {
-        return undefined;
-    }
-    const batchConfig = mqttConfigFromEnv(env);
-    const ingest = amqpMetricsIngest(
-        env.AMQP_URL,
-        env.AMQP_QUEUE || 'scada.telemetry.ingest',
-        sink,
-        {
-            size: batchConfig.size,
-            interval: batchConfig.interval,
-            threshold: batchConfig.threshold,
-            timeout: batchConfig.timeout,
-            prefetch: parseInt(env.AMQP_PREFETCH || '32', 10),
-            onSeen
-        }
-    );
-    ingest.start();
-    return ingest;
-}
-
-function startTelemetryIngest(env, streams) {
-    if (env.SINK_DB_PROFILE === 'edge' || (!env.AMQP_URL && !streams)) {
-        return undefined;
-    }
-    const url = clickhouseMetricsUrl(env);
-    if (!url) {
-        throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for AMQP telemetry ingest');
-    }
-    const sink = clickhouseSink(url, 'scada.metrics');
-    const onSeen = bindSilentStreams(streams, sink);
-    const ingest = startAmqpMetrics(env, sink, onSeen);
-    if (streams) {
-        streams.start();
-    }
-    return { ingest, streams };
-}
-
 function plantFactoryWithOperations(plantFactory, ops, sink) {
     return (ctx) => {
         const built = plantFactory({ ...ctx, operations: ops }, sink);
@@ -168,7 +123,13 @@ export default async function siteServer(config) {
     });
     await sink.run(http);
     const mqtt = startMqtt(sink, env);
-    const telemetry = startTelemetryIngest(env, config.streams);
+    const telemetry = startTelemetryIngest(
+        env,
+        config.streams,
+        mqttConfigFromEnv(env),
+        sink.pool,
+        config.intervalDevices
+    );
     const operationSync = startOperationSync(sink, env);
     const basePath = config.basePath || '/api/v1';
     const catalog = buildSiteOperatorCatalog(config, basePath, sink, env);
