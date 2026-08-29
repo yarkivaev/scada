@@ -21,6 +21,7 @@ export { default as plantOperations } from './src/application/plantOperations.js
 export { default as metricsPlant } from './src/application/metricsPlant.js';
 export { default as plantServer } from './src/application/plantServer.js';
 export { default as siteServer } from './src/application/siteServer.js';
+export { default as foldedMetricsSink } from './src/application/foldedMetricsSink.js';
 export {
     default as siteOperatorCatalog,
     buildSiteOperatorCatalog

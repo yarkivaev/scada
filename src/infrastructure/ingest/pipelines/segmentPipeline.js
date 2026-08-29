@@ -10,9 +10,9 @@ import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import closeSilentOpen from '../sinks/closeSilentOpen.js';
 import retagSink from '../sinks/retagSink.js';
 
-export const segmentColumns = ['machine', 'name', 'start_time', 'end_time', 'duration',
+export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_time', 'duration',
                                'options', 'tags', 'properties', 'resolved'];
-export const segmentConflict = ['machine', 'start_time'];
+export const segmentConflict = ['machine', 'kind', 'start_time'];
 export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'resolved'];
 export const segmentsIngestDestination = '/queue/scada.segments.ingest';

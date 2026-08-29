@@ -30,6 +30,9 @@ function rangeQuery(options) {
     if (options && options.to) {
         params.set('to', options.to);
     }
+    if (options && Array.isArray(options.kinds) && options.kinds.length > 0) {
+        params.set('kinds', options.kinds.join(','));
+    }
     const qs = params.toString();
     return qs ? `?${qs}` : '';
 }
@@ -77,6 +80,9 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
     return {
         info() {
             return request('');
+        },
+        state() {
+            return request('/state');
         },
         measurements(options) {
             const params = new URLSearchParams();

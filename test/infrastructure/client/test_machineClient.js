@@ -131,6 +131,34 @@ describe('machineClient', function() {
         assert.strictEqual(result, payload, 'cycles must return response body');
     });
 
+    it('fetches segments with kinds query params', async function() {
+        let fetchedUrl;
+        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
+        await client.segments({ kinds: [kind], from: 'now-1h', to: 'now' });
+        assert(
+            fetchedUrl.includes(`kinds=${kind}`) && fetchedUrl.includes('from='),
+            'segments GET must include kinds'
+        );
+    });
+
+    it('fetches machine state snapshot', async function() {
+        let fetchedUrl;
+        const payload = { items: [{ key: `k${Math.floor(Math.random() * 90 + 10)}`, found: true, value: 1 }] };
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return payload} };
+        };
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
+        const result = await client.state();
+        assert.strictEqual(fetchedUrl, 'http://localhost/api/machines/m1/state', 'state must hit /state');
+        assert.strictEqual(result, payload, 'state must return response body');
+    });
+
     it('fetches cycles without options', async function() {
         let fetchedUrl;
         const fakeFetch = async (url) => {

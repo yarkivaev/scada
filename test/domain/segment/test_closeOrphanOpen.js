@@ -35,13 +35,32 @@ describe('closeOrphanOpen', function() {
         assert.ok(pool.queries[0].sql.includes('start_time <> $2'), 'close query must exclude current start_time');
     });
 
-    it('binds machine and start_time as query parameters', async function() {
+    it('binds machine start_time and phase kind by default', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
         const machine = `ičt-${Math.random()}`;
         const start = '2024-03-01T12:00:00.000Z';
         await closer.close(machine, start);
-        assert.deepStrictEqual(pool.queries[0].params, [machine, start], 'close query must bind machine and start_time');
+        assert.deepStrictEqual(
+            pool.queries[0].params,
+            [machine, start, 'phase'],
+            'close query must bind machine start_time and default phase kind'
+        );
+    });
+
+    it('scopes orphan close to the supplied kind', async function() {
+        const pool = fakePool();
+        const closer = closeOrphanOpen(pool);
+        const machine = `cm${Math.floor(Math.random() * 90 + 10)}`;
+        const start = '2024-03-01T12:00:00.000Z';
+        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        await closer.close(machine, start, kind);
+        assert.ok(pool.queries[0].sql.includes('kind = $3'), 'close query must filter by kind');
+        assert.deepStrictEqual(
+            pool.queries[0].params,
+            [machine, start, kind],
+            'close query must bind the supplied kind'
+        );
     });
 
     it('throws when pool is missing', function() {

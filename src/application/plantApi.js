@@ -1,5 +1,6 @@
 import machineRoute from '../infrastructure/http/plant/routes/machineRoute.js';
 import measurementRoute from '../infrastructure/http/plant/routes/measurementRoute.js';
+import stateRoute from '../infrastructure/http/plant/routes/stateRoute.js';
 import measurementStream from '../infrastructure/http/plant/streams/measurementStream.js';
 import alertRoute from '../infrastructure/http/plant/routes/alertRoute.js';
 import alertStream from '../infrastructure/http/plant/streams/alertStream.js';
@@ -38,6 +39,7 @@ export default function plantApi(basePath, plant, config) {
     const routeList = [
         ...catalogRoute(basePath, opts.tagCatalog),
         ...machineRoute(basePath, plant),
+        ...stateRoute(basePath, plant),
         ...measurementStream(basePath, plant, time),
         ...measurementRoute(basePath, plant, time),
         ...alertStream(basePath, plant, time),

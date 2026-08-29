@@ -36,6 +36,15 @@ function emptyPool() {
     };
 }
 
+describe('shopWithTimeline latest', function() {
+    it('exposes latest on the in-memory timeline', async function() {
+        const machine = `mem-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const tl = shopWithTimeline(machine, {});
+        const rows = await Promise.resolve(tl.latest(['phase']));
+        assert.deepStrictEqual(rows, [], 'memory timeline dropped latest');
+    });
+});
+
 describe('shopWithTimeline owners', function() {
     it('retags local machine via userDecisions when owners omit it', async function() {
         const machine = `local-ψ-${Math.floor(Math.random() * 9000 + 1000)}`;

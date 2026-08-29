@@ -35,12 +35,12 @@ describe('segmentPipeline regular segment upsert', function() {
         const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
         const operatorTags = JSON.stringify([`heating_${Math.random()}`]);
         const store = upsertStore(segmentConflict, segmentUpdateColumns);
-        await store.write([{ machine, name: 'on', start_time: start, end_time: start,
+        await store.write([{ machine, kind: 'phase', name: 'on', start_time: start, end_time: start,
             duration: 60, options: null, tags: operatorTags, properties: '{}', resolved: true }]);
-        await store.write([{ machine, name: 'on', start_time: start, end_time: start,
+        await store.write([{ machine, kind: 'phase', name: 'on', start_time: start, end_time: start,
             duration: 65, options: null, tags: null, properties: null, resolved: true }]);
         assert.strictEqual(
-            store.rows.get(`${machine}\u0000${start}`).tags,
+            store.rows.get(`${machine}\u0000phase\u0000${start}`).tags,
             operatorTags,
             'regular segment upsert must not clobber operator-applied tags'
         );
@@ -73,6 +73,14 @@ describe('segmentPipeline upsert configuration', function() {
         assert.ok(
             splitUpdateColumns.includes('tags'),
             'split UPSERT must write operator-supplied sub-segment tags'
+        );
+    });
+
+    it('conflicts on machine kind and start_time', function() {
+        assert.deepStrictEqual(
+            segmentConflict,
+            ['machine', 'kind', 'start_time'],
+            'segment upsert must include kind in the conflict key'
         );
     });
 

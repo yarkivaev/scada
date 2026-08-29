@@ -8,11 +8,12 @@ CREATE TABLE IF NOT EXISTS segments (
     tags TEXT,
     properties TEXT,
     resolved BOOLEAN DEFAULT TRUE,
-    consumed BOOLEAN DEFAULT TRUE
+    consumed BOOLEAN DEFAULT TRUE,
+    kind TEXT NOT NULL DEFAULT 'phase'
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_segments_machine_start
-    ON segments (machine, start_time);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_segments_machine_kind_start
+    ON segments (machine, kind, start_time);
 
 CREATE TABLE IF NOT EXISTS alerts (
     id SERIAL PRIMARY KEY,

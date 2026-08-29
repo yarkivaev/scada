@@ -20,7 +20,7 @@ export default function segmentDispatch(segmentSink, retag, splitSink, closer) {
                 await splitSink.write([record]);
             } else if (record.type === 'segment') {
                 if (record.duration === 0) {
-                    await closer.close(record.machine, record.start_time);
+                    await closer.close(record.machine, record.start_time, record.kind || 'phase');
                 }
                 await segmentSink.write([record]);
             } else {

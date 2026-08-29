@@ -4,6 +4,7 @@ function mapRow(item) {
     const tags = item.tags === undefined || item.tags === null ? null : item.tags;
     const properties = item.properties === undefined || item.properties === null ? null : item.properties;
     return {
+        kind: item.kind || 'phase',
         name: item.name,
         start_time: new Date(item.start_time),
         end_time: new Date(item.end_time),
@@ -35,6 +36,10 @@ export default function pgTimeline(pool, machineId) {
         async rowAt(start) {
             const row = await segments.rowAt(machineId, start);
             return row ? mapRow(row) : null;
+        },
+        async latest(kinds) {
+            const rows = await segments.latestForKinds(machineId, kinds || []);
+            return rows.map(mapRow);
         },
         async pending() {
             const rows = await segments.pendingRequestsForMachine(machineId);
