@@ -18,37 +18,37 @@ function isSilent(lastSeen, name, clk, budgetMs) {
 }
 
 /**
- * Stops one active poll if present.
+ * Stops one started poll if present. The poll instance is kept for reuse.
  *
- * @param {Map<string, object>} active - Active polls by name
+ * @param {object} state - Gate mutable state
  * @param {string} name - Stream id
  */
-function stopOne(active, name) {
-    const poll = active.get(name);
-    if (!poll) {
+function stopOne(state, name) {
+    if (!state.live.has(name)) {
         return;
     }
-    poll.stop();
-    active.delete(name);
+    state.held.get(name).stop();
+    state.live.delete(name);
 }
 
 /**
- * Starts one poll when not already active.
+ * Starts one poll, opening the source only the first time.
  *
- * @param {Map<string, object>} active - Active polls by name
+ * @param {object} state - Gate mutable state
  * @param {object} source - Stream source
- * @param {object} collector - Metrics collector
- * @param {object} clk - Clock
- * @param {number} intervalSec - Poll interval seconds
  */
-function startOne(active, source, collector, clk, intervalSec) {
+function startOne(state, source) {
     const name = source.name();
-    if (active.has(name)) {
+    if (state.live.has(name)) {
         return;
     }
-    const poll = source.open(collector, clk, intervalSec);
-    active.set(name, poll);
+    let poll = state.held.get(name);
+    if (!poll) {
+        poll = source.open(state.collector, state.clk, state.intervalSec);
+        state.held.set(name, poll);
+    }
     poll.start();
+    state.live.add(name);
 }
 
 /**
@@ -63,9 +63,9 @@ function pulse(state) {
     for (const source of state.sources) {
         const name = source.name();
         if (isSilent(state.lastSeen, name, state.clk, state.budgetMs)) {
-            startOne(state.active, source, state.collector, state.clk, state.intervalSec);
+            startOne(state, source);
         } else {
-            stopOne(state.active, name);
+            stopOne(state, name);
         }
     }
 }
@@ -88,7 +88,8 @@ function gateState(config) {
         }),
         clear: config.clear || clearInterval,
         lastSeen: new Map(),
-        active: new Map(),
+        held: new Map(),
+        live: new Set(),
         collector: undefined,
         timer: undefined,
         running: false
@@ -143,9 +144,10 @@ export default function silentStreams(config) {
                 state.clear(state.timer);
                 state.timer = undefined;
             }
-            for (const name of [...state.active.keys()]) {
-                stopOne(state.active, name);
+            for (const name of [...state.live]) {
+                stopOne(state, name);
             }
+            state.held.clear();
         },
         pulse: runPulse
     };

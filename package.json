@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.3.56",
+  "version": "2.3.57",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -29,7 +29,7 @@
   "dependencies": {
     "@clickhouse/client": "^1.0.0",
     "@yarkivaev/simple-server": "1.0.1",
-    "@yarkivaev/source-to-sink": "1.3.2",
+    "@yarkivaev/source-to-sink": "1.3.3",
     "amqplib": "^0.10.9",
     "pg": "^8.0.0",
     "stompit": "^1.0.0"
