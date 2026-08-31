@@ -1,6 +1,88 @@
 import assert from 'assert';
+import net from 'node:net';
 import silentStreams from '../../../../src/infrastructure/ingest/modbus/silentStreams.js';
+import mx210Tcp from '../../../../src/infrastructure/ingest/modbus/mx210Tcp.js';
 import fakeClock from '../../../helpers/fakeClock.js';
+
+/**
+ * TCP listener that counts concurrent sockets on an ephemeral port.
+ *
+ * @returns {Promise<object>} Gate with port, live, peak, close
+ */
+function countingListen() {
+    let live = 0;
+    let peak = 0;
+    const sockets = new Set();
+    const server = net.createServer((sock) => {
+        live += 1;
+        if (live > peak) {
+            peak = live;
+        }
+        sockets.add(sock);
+        sock.on('close', () => {
+            sockets.delete(sock);
+            live -= 1;
+        });
+    });
+    return new Promise((resolve) => {
+        server.listen(0, '127.0.0.1', () => {
+            resolve({
+                port: server.address().port,
+                live() {
+                    return live;
+                },
+                peak() {
+                    return peak;
+                },
+                close() {
+                    for (const sock of sockets) {
+                        sock.destroy();
+                    }
+                    return new Promise((done) => {
+                        server.close(done);
+                    });
+                }
+            });
+        });
+    });
+}
+
+/**
+ * Resolves after the given delay.
+ *
+ * @param {number} ms - Delay in milliseconds
+ * @returns {Promise<void>} Timer promise
+ */
+function settle(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
+/**
+ * Waits until probe is true or the timeout elapses.
+ *
+ * @param {Function} probe - Condition
+ * @param {number} limit - Timeout in milliseconds
+ * @returns {Promise<void>} Resolves when probe holds
+ */
+function until(probe, limit) {
+    const deadline = Date.now() + limit;
+    function tick(resolve, reject) {
+        if (probe()) {
+            resolve();
+            return;
+        }
+        if (Date.now() >= deadline) {
+            reject(new Error('condition did not hold before timeout'));
+            return;
+        }
+        setTimeout(() => {
+            tick(resolve, reject);
+        }, 20);
+    }
+    return new Promise(tick);
+}
 
 /**
  * No-op delay so tests drive reconcile via pulse() and fake clock.
@@ -40,6 +122,34 @@ function trackingSource(label, started, stopped = []) {
             return label;
         },
         open() {
+            return {
+                start() {
+                    started.push(label);
+                },
+                stop() {
+                    stopped.push(label);
+                }
+            };
+        }
+    };
+}
+
+/**
+ * Fake source that records each open() separately from start().
+ *
+ * @param {string} label - Stream name
+ * @param {Array<string>} opened - Open log
+ * @param {Array<string>} started - Start log
+ * @param {Array<string>} stopped - Stop log
+ * @returns {object} Stream source
+ */
+function openingSource(label, opened, started, stopped) {
+    return {
+        name() {
+            return label;
+        },
+        open() {
+            opened.push(label);
             return {
                 start() {
                     started.push(label);
@@ -243,5 +353,87 @@ describe('silentStreams', function() {
         streams.pulse();
         assert.deepStrictEqual(started, [label], 'stream was not polled after silence budget elapsed');
         streams.stop();
+    });
+
+    it('does not open a second poll when edge silence returns after seen', function() {
+        const label = `v-${Math.random().toString(36).slice(2)}`;
+        const opened = [];
+        const started = [];
+        const stopped = [];
+        const clk = fakeClock(2000);
+        const budget = 4;
+        const streams = silentStreams({
+            budget,
+            interval: 1,
+            sources: [openingSource(label, opened, started, stopped)],
+            clock: clk,
+            delay: idleDelay
+        });
+        streams.bind(memorySink());
+        streams.start();
+        streams.seen(label, clk.millis());
+        streams.pulse();
+        clk.advance(budget * 1000);
+        streams.pulse();
+        streams.stop();
+        assert.strictEqual(opened.length, 1, 'silence after seen opened another Modbus poll');
+    });
+
+    it('does not hold a TCP socket after edge seen resumes', async function() {
+        const gate = await countingListen();
+        const label = `w-${Math.random().toString(36).slice(2)}`;
+        const clk = fakeClock(3000);
+        const streams = silentStreams({
+            budget: 5,
+            interval: 5,
+            sources: [mx210Tcp(label, '127.0.0.1', gate.port)],
+            clock: clk,
+            delay: idleDelay
+        });
+        streams.bind(memorySink());
+        streams.start();
+        await until(() => {
+            return gate.live() >= 1;
+        }, 2000);
+        streams.seen(label, clk.millis());
+        streams.pulse();
+        await until(() => {
+            return gate.live() === 0;
+        }, 2000);
+        const live = gate.live();
+        streams.stop();
+        await gate.close();
+        assert.strictEqual(live, 0, 'central poll kept a Modbus TCP socket after edge seen');
+    });
+
+    it('does not open a second TCP socket across seen and silence', async function() {
+        const gate = await countingListen();
+        const label = `x-${Math.random().toString(36).slice(2)}`;
+        const clk = fakeClock(4000);
+        const budget = 3;
+        const streams = silentStreams({
+            budget,
+            interval: 5,
+            sources: [mx210Tcp(label, '127.0.0.1', gate.port)],
+            clock: clk,
+            delay: idleDelay
+        });
+        streams.bind(memorySink());
+        streams.start();
+        await until(() => {
+            return gate.live() >= 1;
+        }, 2000);
+        streams.seen(label, clk.millis());
+        streams.pulse();
+        await until(() => {
+            return gate.live() === 0;
+        }, 2000);
+        clk.advance(budget * 1000);
+        streams.pulse();
+        await settle(300);
+        const peak = gate.peak();
+        streams.stop();
+        await gate.close();
+        assert.strictEqual(peak, 1, 'silence flicker opened a second Modbus TCP socket');
     });
 });
