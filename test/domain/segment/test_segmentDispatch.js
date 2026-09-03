@@ -56,6 +56,49 @@ describe('segmentDispatch', function() {
         assert.strictEqual(closer.calls.length, 1, 'open segment write did not close orphan rows first');
     });
 
+    it('runs orphan close and upsert in one transaction when pool is supplied', async function() {
+        const steps = [];
+        const client = {
+            query(sql) {
+                steps.push(String(sql).split(/\s+/u)[0]);
+                return Promise.resolve({});
+            },
+            release() {
+                steps.push('RELEASE');
+            }
+        };
+        const pool = {
+            connect() {
+                return Promise.resolve(client);
+            }
+        };
+        const closer = {
+            calls: [],
+            close(machine, start, kind, runner) {
+                this.calls.push({ machine, start, kind, runner });
+                return runner.query('UPDATE orphans');
+            }
+        };
+        const segment = {
+            written: [],
+            write(records, runner) {
+                this.written.push(...records);
+                return runner.query('INSERT segments');
+            }
+        };
+        const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, fakeSink(), closer, pool);
+        const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
+        await route.accept({
+            type: 'segment',
+            machine: `ičt-${Math.random()}`,
+            start_time: start,
+            duration: 0,
+            kind: 'phase'
+        });
+        assert.deepStrictEqual(steps, ['BEGIN', 'UPDATE', 'INSERT', 'COMMIT', 'RELEASE'],
+            'pending heartbeat did not use a single transaction');
+    });
+
     it('does not close orphan rows before writing a completed segment', async function() {
         const closer = fakeCloser();
         const segment = fakeSink();
