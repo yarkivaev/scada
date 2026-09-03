@@ -60,7 +60,7 @@ describe('segmentDispatch', function() {
         const steps = [];
         const client = {
             query(sql) {
-                steps.push(String(sql).split(/\s+/)[0]);
+                steps.push(String(sql).split(/\s+/u)[0]);
                 return Promise.resolve({});
             },
             release() {

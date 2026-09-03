@@ -71,13 +71,15 @@ describe('segmentCoalesce', function() {
         const machine = `ičt-${Math.random().toString(16).slice(2)}`;
         const start = 1700001000000;
         const settles = [settle(), settle(), settle()];
-        for (let i = 0; i < 3; i += 1) {
-            await coalesce.accept({
-                destination: '/q',
-                payload: heartbeat(machine, start, start + (i + 1) * 1000),
-                settle: settles[i]
+        await settles.reduce((chain, item, index) => {
+            return chain.then(() => {
+                return coalesce.accept({
+                    destination: '/q',
+                    payload: heartbeat(machine, start, start + (index + 1) * 1000),
+                    settle: item
+                });
             });
-        }
+        }, Promise.resolve());
         const acks = settles.reduce((sum, item) => { return sum + item.state.acks; }, 0);
         assert.strictEqual(acks, 3, 'coalesced heartbeats were not all acknowledged');
     });
