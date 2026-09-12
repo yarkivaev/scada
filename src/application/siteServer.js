@@ -55,6 +55,19 @@ function startMqtt(sink, env) {
     return pipeline;
 }
 
+/**
+ * Replaces sink persistence with the domain operations port used by plant HTTP and AMQP sync.
+ *
+ * @param {object} sink - supervisor sink with dataAccess.operations
+ * @param {object} [kindSources] - optional non-PG kind sources
+ * @returns {object} wrapped operations port
+ */
+export function bindSiteOperations(sink, kindSources) {
+    const ops = plantOperations(sink.dataAccess.operations, kindSources);
+    sink.dataAccess.operations = ops;
+    return ops;
+}
+
 function startOperationSync(sink, env) {
     if (env.SINK_DB_PROFILE === 'edge' || !env.AMQP_URL) {
         return undefined;
@@ -106,11 +119,7 @@ function siteExtraRoutes(catalog, extraRoutes) {
 export default async function siteServer(config) {
     const env = config.env || process.env;
     const sink = supervisorSink(env);
-    const ops = plantOperations(
-        sink.dataAccess.operations,
-        config.kindSources || config.operationSources
-    );
-    sink.dataAccess.operations = ops;
+    const ops = bindSiteOperations(sink, config.kindSources || config.operationSources);
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
         token: sink.apiToken,

@@ -62,10 +62,10 @@ function writeMany(persistence, bus, items) {
  * sorted by occurred_at. Omitted kinds default to injectable source keys.
  * latestForMachine reads only from persistence (single kind).
  *
- * @param {object} persistence - store with upsert, get, remove, listForMachine, latestForMachine
+ * @param {object} persistence - store with upsert, get, remove, drop, listForMachine, latestForMachine
  * @param {object} bus - pubsub instance with stream and emit methods
  * @param {object} [kindSources] - map of kind to { list(machineId, range) }
- * @returns {object} operations with listForMachine, latestForMachine, upsert, upsertMany, get, remove, stream
+ * @returns {object} operations with listForMachine, latestForMachine, upsert, upsertMany, get, remove, drop, stream
  *
  * @example
  *   const ops = operations(store, bus, { temp: temperaturePort });
@@ -106,6 +106,9 @@ export default function operations(persistence, bus, kindSources) {
                 bus.emit({ type: 'deleted', operation });
                 return operation;
             });
+        },
+        drop(machineId, key) {
+            return persistence.drop(machineId, key);
         },
         stream: bus.stream
     };

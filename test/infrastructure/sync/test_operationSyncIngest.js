@@ -1,4 +1,5 @@
 import assert from 'assert';
+import plantOperations from '../../../src/application/plantOperations.js';
 import operationStateMemory from '../../../src/infrastructure/persistence/memory/operations.js';
 import {
     acceptOperationDeliver,
@@ -122,6 +123,26 @@ describe('operationSyncConsumer delete', function() {
                 return acceptOperationDeliver(codec, Buffer.from(body));
             },
             'deleted sync cannot reject when central never stored the row'
+        );
+    });
+
+    it('acceptOperationDeliver drops through plantOperations wrap', async function() {
+        const store = { operations: [] };
+        const sink = operationSyncSink(plantOperations(operationStateMemory(store)));
+        const codec = operationCodec(sink);
+        const key = `bath:icht3:${Math.random().toString(36).slice(2)}`;
+        const body = JSON.stringify({
+            type: 'deleted',
+            machine: 'icht3',
+            occurred_at: '2026-09-10T10:29:19.000Z',
+            kind: 'sample',
+            external_key: key
+        });
+        await assert.doesNotReject(
+            () => {
+                return acceptOperationDeliver(codec, Buffer.from(body));
+            },
+            'site-server wrap cannot leave drop missing on federated delete'
         );
     });
 });
