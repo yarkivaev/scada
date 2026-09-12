@@ -80,3 +80,7 @@ export { default as exportQuery } from './src/application/export/exportQuery.js'
 export { default as exportStream } from './src/application/export/exportStream.js';
 export { default as exportSink } from './src/application/export/exportSink.js';
 export { default as exportJob } from './src/application/export/exportJob.js';
+export { default as siteSync } from './src/application/sync/siteSync.js';
+export { default as siteSyncSites } from './src/application/sync/siteSyncSites.js';
+export { default as siteSyncTargets } from './src/application/sync/siteSyncTargets.js';
+export { default as siteSyncBind } from './src/application/sync/siteSyncBind.js';

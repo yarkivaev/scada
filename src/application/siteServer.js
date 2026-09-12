@@ -10,6 +10,7 @@ import { metricsSinkFromPool } from '../infrastructure/persistence/pg/metrics.js
 import startTelemetryIngest from './siteTelemetry.js';
 import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
 import { buildSiteOperatorCatalog } from './siteOperatorCatalog.js';
+import siteSyncBind from './sync/siteSyncBind.js';
 
 function stompFromEnv(env) {
     return {
@@ -100,10 +101,10 @@ function plantFactoryWithOperations(plantFactory, ops, sink) {
     };
 }
 
-function siteExtraRoutes(catalog, extraRoutes) {
+function siteExtraRoutes(catalog, extraRoutes, syncRoutes) {
     return (path, plant, clock) => {
         const userExtra = extraRoutes ? extraRoutes(path, plant, clock) : [];
-        return [...catalog.routes, ...userExtra];
+        return [...catalog.routes, ...syncRoutes, ...userExtra];
     };
 }
 
@@ -145,6 +146,7 @@ export default async function siteServer(config) {
     if (catalog.sync) {
         await catalog.sync.start();
     }
+    const syncRoutes = siteSyncBind(env, sink, ops, { topic: config.topic, basePath });
     const plant = await plantServer({
         port: config.port || parseInt(env.PORT || '3000', 10),
         basePath,
@@ -152,7 +154,7 @@ export default async function siteServer(config) {
         requirePool: config.requirePool,
         stomp: stompFromEnv(env),
         plantFactory: plantFactoryWithOperations(config.plantFactory, ops, sink),
-        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes),
+        extraRoutes: siteExtraRoutes(catalog, config.extraRoutes, syncRoutes),
         timelineOperator: timelineOperatorFromEnv(catalog, env, config),
         operationDecisions: catalog.decisions,
         owners: config.owners,

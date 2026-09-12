@@ -91,6 +91,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `timeline`, `alerts`, `alert`, `acknowledgedAlert` | Timeline and alerting |
 | `plantApi`, `plantServer`, `siteServer` | HTTP composition |
 | `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `@yarkivaev/scada/client` |
+| `siteSync`, `siteSyncSites`, `siteSyncBind` | Pull kinds from an allowlisted remote plantApi into local persistence |
 | `metricsPlant`, `shopWithTimeline`, `machineInPlant` | Plant wiring helpers |
 | `supervisorSink`, `readDeploymentConfig` | STOMP ingest + PG persistence |
 | `edgeApi`, `stateHttpClient`, `metricsSensor` | Edge HTTP read/write |
@@ -123,6 +124,19 @@ const sink = exportSink({
 });
 const job = exportJob({ query, transform: (rows) => rows, sink });
 await job.run({ kind: 'segments', machine: 'furnace-α', from, to });
+```
+
+`POST /api/v1/sync` on any `siteServer` pulls `segments` / `operations` / `measurements` / `alerts` from `SYNC_SITES` / `EDGE_SITES` / `CENTRAL_PLANT_URL`. Body: `{ site, from, to, machines?, kinds? }`. Optional `SYNC_TOKEN`. Does not republish to RabbitMQ.
+
+```javascript
+import { siteSync } from '@yarkivaev/scada';
+
+await siteSync({ sites, queryFor, targets }).run({
+  site: 'edge-icht-1',
+  from,
+  to,
+  kinds: ['segments']
+});
 ```
 
 Downstream plant packages should pin a released tag (e.g. `#v2.3.46`).
