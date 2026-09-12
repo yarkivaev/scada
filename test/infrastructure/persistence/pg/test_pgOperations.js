@@ -183,6 +183,28 @@ describe('pgOperations remove', function() {
     });
 });
 
+describe('pgOperations drop', function() {
+    it('deletes by machine and key without requiring a returned row', async function() {
+        const queries = [];
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `drop-${Math.random().toString(36).slice(2)}`;
+        const pool = {
+            async query(sql, params) {
+                queries.push({ sql, params });
+                return { rows: [] };
+            }
+        };
+        const store = operationStatePg(pool);
+        await store.drop(machineId, key);
+        assert(
+            queries[0].sql.includes('DELETE FROM operations')
+            && queries[0].params[0] === machineId
+            && queries[0].params[1] === key,
+            'drop cannot omit machine-scoped DELETE'
+        );
+    });
+});
+
 describe('pgOperations upsertMany', function() {
     it('writes rows inside one begin commit transaction', async function() {
         const calls = [];

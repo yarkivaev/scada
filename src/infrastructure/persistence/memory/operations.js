@@ -99,7 +99,7 @@ function filterLatest(store, machineId, kind, bound) {
  * In-memory operations state port for tests and local runs.
  *
  * @param {object} store - shared mutable store with operations array
- * @returns {object} operations port matching operationStatePg shape
+ * @returns {object} operations port matching operationStatePg shape including drop
  */
 export default function operationStateMemory(store) {
     if (!store.operations) {
@@ -125,6 +125,15 @@ export default function operationStateMemory(store) {
             }
             const [row] = store.operations.splice(index, 1);
             return Promise.resolve(row);
+        },
+        drop(machineId, key) {
+            const index = store.operations.findIndex((row) => {
+                return row.machine === machineId && row.key === key;
+            });
+            if (index >= 0) {
+                store.operations.splice(index, 1);
+            }
+            return Promise.resolve();
         },
         listForMachine(machineId, kind, range) {
             return Promise.resolve(filterList(store, machineId, kind, range));
