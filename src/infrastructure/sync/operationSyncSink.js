@@ -3,7 +3,9 @@ import processingErrorLog from '../ingest/processingErrorLog.js';
 /**
  * PostgreSQL sink for generic operation sync records.
  *
- * @param {object} operations - Operations port with upsert(item) and remove(machineId, key)
+ * Federated deletes call operations.drop, which is idempotent when the row is absent.
+ *
+ * @param {object} operations - Operations port with upsert(item) and drop(machineId, key)
  * @returns {object} Sink with accept() and remove() methods
  *
  * @example
@@ -26,7 +28,7 @@ export default function operationSyncSink(operations) {
         },
         async remove(record) {
             try {
-                await operations.remove(record.machine, record.key);
+                await operations.drop(record.machine, record.key);
             } catch (error) {
                 processingErrorLog('operation_sync_sink', error, {
                     machine: record.machine,

@@ -83,15 +83,9 @@ describe('operationSyncConsumer delete', function() {
             upsert() {
                 return Promise.resolve();
             },
-            remove(machineId, key) {
+            drop(machineId, key) {
                 removals.push({ machineId, key });
-                return Promise.resolve({
-                    machine: machineId,
-                    key,
-                    kind: 'bath',
-                    occurred_at: new Date('2024-06-01T10:00:00.000Z'),
-                    payload: {}
-                });
+                return Promise.resolve();
             }
         };
         const sink = operationSyncSink(operations);
@@ -101,13 +95,33 @@ describe('operationSyncConsumer delete', function() {
             type: 'deleted',
             machine: 'm1',
             occurred_at: '2024-06-01T10:00:00.000Z',
-            kind: 'bath',
+            kind: 'load',
             external_key: key
         });
         await acceptOperationDeliver(codec, Buffer.from(body));
         assert.deepStrictEqual(removals[0], {
             machineId: 'm1',
             key
-        }, 'deleted deliver must call operations.remove');
+        }, 'deleted deliver must call operations.drop');
+    });
+
+    it('acceptOperationDeliver succeeds when deleted key is absent', async function() {
+        const store = { operations: [] };
+        const sink = operationSyncSink(operationStateMemory(store));
+        const codec = operationCodec(sink);
+        const key = `bath:icht3:${Math.random().toString(36).slice(2)}`;
+        const body = JSON.stringify({
+            type: 'deleted',
+            machine: 'icht3',
+            occurred_at: '2026-09-10T10:29:19.000Z',
+            kind: 'sample',
+            external_key: key
+        });
+        await assert.doesNotReject(
+            () => {
+                return acceptOperationDeliver(codec, Buffer.from(body));
+            },
+            'deleted sync cannot reject when central never stored the row'
+        );
     });
 });

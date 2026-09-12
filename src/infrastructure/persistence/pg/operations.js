@@ -121,16 +121,32 @@ async function removeOperation(pool, machineId, key) {
 }
 
 /**
+ * Deletes an operation when present. Absence is success.
+ *
+ * @param {object} pool - pg pool
+ * @param {string} machineId - machine identifier
+ * @param {string} key - operation storage key
+ * @returns {Promise<void>}
+ */
+function dropOperation(pool, machineId, key) {
+    return pool.query(
+        'DELETE FROM operations WHERE machine = $1 AND key = $2',
+        [machineId, key]
+    );
+}
+
+/**
  * PostgreSQL operations persistence port for generic machine operations.
  *
  * @param {object} pool - pg pool
- * @returns {object} operations port with upsert, get, remove, listForMachine, latestForMachine
+ * @returns {object} operations port with upsert, get, remove, drop, listForMachine, latestForMachine
  *
  * @example
  *   const store = operationStatePg(pool);
  *   await store.upsert({ machine: 'm1', key: 'nb-1', kind: 'sample', ... });
  *   await store.latestForMachine('m1', 'sample', { to: new Date() });
  *   await store.remove('m1', 'nb-1');
+ *   await store.drop('m1', 'nb-1');
  */
 export default function operationStatePg(pool) {
     return {
@@ -142,6 +158,9 @@ export default function operationStatePg(pool) {
         },
         remove(machineId, key) {
             return removeOperation(pool, machineId, key);
+        },
+        drop(machineId, key) {
+            return dropOperation(pool, machineId, key);
         },
         listForMachine(machineId, kind, range) {
             return listForMachine(pool, machineId, kind, range);

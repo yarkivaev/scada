@@ -151,3 +151,33 @@ describe('memoryOperations remove', function() {
         );
     });
 });
+
+describe('memoryOperations drop', function() {
+    it('deletes row scoped to machine and key', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const key = `drop-${Math.random().toString(36).slice(2)}`;
+        store.operations.push({
+            machine: machineId,
+            occurred_at: new Date('2024-06-01T12:00:00.000Z'),
+            kind: 'sample',
+            key,
+            payload: { action: 'load' }
+        });
+        await port.drop(machineId, key);
+        assert.strictEqual(store.operations.length, 0, 'drop cannot leave deleted row');
+    });
+
+    it('resolves when key is absent for machine', async function() {
+        const store = { operations: [] };
+        const port = operationStateMemory(store);
+        const key = `miss-${Math.random().toString(36).slice(2)}`;
+        await assert.doesNotReject(
+            () => {
+                return port.drop(`icht${Math.floor(Math.random() * 9) + 1}`, key);
+            },
+            'drop cannot reject when row is already absent'
+        );
+    });
+});
