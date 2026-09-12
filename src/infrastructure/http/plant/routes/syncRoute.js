@@ -4,12 +4,13 @@ import { errorResponse, jsonResponse, readBody, route } from '@yarkivaev/simple-
  * POST /sync — pull selected kinds from an allowlisted remote plantApi.
  *
  * @param {string} basePath - API prefix
- * @param {object} sync - siteSync port with run(request)
+ * @param {object} sync - siteSync port with run(request, ports)
  * @param {string} [token] - optional Bearer token
+ * @param {object} board - jobs board
  * @returns {object[]} routes
  *
  * @example
- *   syncRoute('/api/v1', sync, process.env.SYNC_TOKEN);
+ *   syncRoute('/api/v1', sync, process.env.SYNC_TOKEN, board);
  */
 function rejectAuth(token, req, res) {
     if (!token) {
@@ -30,7 +31,7 @@ function rejectScope(parsed, res) {
     return true;
 }
 
-export default function syncRoute(basePath, sync, token) {
+export default function syncRoute(basePath, sync, token, board) {
     return [
         route('POST', `${basePath}/sync`, async (req, res) => {
             if (rejectAuth(token, req, res)) {
@@ -40,11 +41,10 @@ export default function syncRoute(basePath, sync, token) {
             if (rejectScope(parsed, res)) {
                 return;
             }
-            try {
-                jsonResponse(await sync.run(parsed)).send(res);
-            } catch (error) {
-                errorResponse('BAD_REQUEST', error.message, 400).send(res);
-            }
+            const { id } = board.start(({ signal, report }) => {
+                return sync.run(parsed, { signal, report });
+            });
+            jsonResponse({ id }, 202).send(res);
         })
     ];
 }

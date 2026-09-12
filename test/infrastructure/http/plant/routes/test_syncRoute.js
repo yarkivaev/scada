@@ -1,6 +1,6 @@
 import assert from 'assert';
 import syncRoute from '../../../../../src/infrastructure/http/plant/routes/syncRoute.js';
-import { routes } from '@yarkivaev/simple-server';
+import { jobs, jobRoutes, routes } from '@yarkivaev/simple-server';
 
 function mockRes() {
     return {
@@ -38,16 +38,18 @@ function mockReq(bodyText, headers) {
 }
 
 describe('syncRoute', function() {
-    it('returns counts from siteSync.run', async function() {
-        const api = routes(syncRoute('/api/v1', {
-            run(request) {
-                return Promise.resolve({
-                    site: request.site,
-                    machines: request.machines,
-                    counts: { segments: 3 }
-                });
-            }
-        }));
+    it('starts a job and returns its id', async function() {
+        const board = jobs(() => {
+            return new Date();
+        });
+        const api = routes([
+            ...syncRoute('/api/v1', {
+                run() {
+                    return new Promise(() => {});
+                }
+            }, undefined, board),
+            ...jobRoutes('/api/v1', board)
+        ], { requestTimeoutMs: 1000 });
         const res = mockRes();
         await api.handle(mockReq(JSON.stringify({
             site: 'edge-icht-1',
@@ -57,10 +59,13 @@ describe('syncRoute', function() {
             kinds: ['segments']
         })), res);
         const body = JSON.parse(res.body);
+        if (body.id) {
+            board.stop(body.id);
+        }
         assert.strictEqual(
-            body.counts.segments === 3 && body.site === 'edge-icht-1',
+            res.statusCode === 202 && typeof body.id === 'string',
             true,
-            'syncRoute did not return siteSync counts'
+            'syncRoute did not start a job'
         );
     });
 

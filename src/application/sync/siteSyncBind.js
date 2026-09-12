@@ -1,4 +1,5 @@
 import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import { jobRoutes, jobs } from '@yarkivaev/simple-server';
 import exportQuery from '../export/exportQuery.js';
 import scadaClient from '../../infrastructure/client/scadaClient.js';
 import { metricsSinkFromPool } from '../../infrastructure/persistence/pg/metrics.js';
@@ -13,7 +14,7 @@ import syncRoute from '../../infrastructure/http/plant/routes/syncRoute.js';
  * @param {object} env - process environment
  * @param {object} sink - supervisor sink with pool and dataAccess
  * @param {object} operations - operations port
- * @param {object} [extras] - topic(machine, key), basePath
+ * @param {object} [extras] - topic(machine, key), basePath, board
  * @returns {object[]} plant extra routes, empty when no sites are configured
  *
  * @example
@@ -60,5 +61,12 @@ export default function siteSyncBind(env, sink, operations, extras) {
         topic: extra.topic
     });
     const sync = siteSync({ sites, queryFor, targets });
-    return syncRoute(extra.basePath || '/api/v1', sync, env.SYNC_TOKEN);
+    const board = extra.board || jobs(() => {
+        return new Date();
+    });
+    const base = extra.basePath || '/api/v1';
+    return [
+        ...syncRoute(base, sync, env.SYNC_TOKEN, board),
+        ...jobRoutes(base, board)
+    ];
 }
