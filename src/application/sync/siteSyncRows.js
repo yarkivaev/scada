@@ -56,6 +56,9 @@ export function measurementRows(machine, body, topic) {
     const items = body.items || [];
     return items.flatMap((series) => {
         const dest = topic(machine, series.key);
+        if (!dest) {
+            return [];
+        }
         return (series.values || []).map((point) => {
             return { topic: dest, ts: point.timestamp, value: point.value };
         });

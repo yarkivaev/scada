@@ -5,7 +5,7 @@ import { siteById } from './siteSyncSites.js';
  * Pulls selected kinds from a remote plantApi into local targets.
  *
  * @param {object} ports - { sites, queryFor, targets }
- * @returns {object} frozen sync with run(request)
+ * @returns {object} frozen sync with run(request, ports)
  *
  * @example
  *   const sync = siteSync({ sites, queryFor, targets });
@@ -75,19 +75,45 @@ function writeKind(query, targets, job, range) {
     });
 }
 
-function fill(query, targets, kinds, machines, range) {
+function stopped() {
+    const error = new Error('job stopped');
+    error.code = 'STOPPED';
+    throw error;
+}
+
+function ignore(progress) {
+    return progress;
+}
+
+function extrasOf(ports) {
+    return {
+        signal: ports && ports.signal ? ports.signal : { aborted: false },
+        report: ports && ports.report ? ports.report : ignore
+    };
+}
+
+function step(query, targets, job, ctx) {
+    if (ctx.extras.signal.aborted) {
+        stopped();
+    }
+    return writeKind(query, targets, job, ctx.range).then((added) => {
+        const next = add(ctx.counts, job.kind, added);
+        ctx.extras.report({ machine: job.machine, kind: job.kind, counts: next });
+        return next;
+    });
+}
+
+function fill(query, targets, kinds, machines, ctx) {
     return jobsOf(machines, kinds).reduce((chain, job) => {
         return chain.then((counts) => {
-            return writeKind(query, targets, job, range).then((added) => {
-                return add(counts, job.kind, added);
-            });
+            return step(query, targets, job, { ...ctx, counts });
         });
     }, Promise.resolve(zero(kinds)));
 }
 
 export default function siteSync(ports) {
     return Object.freeze({
-        async run(request) {
+        async run(request, extras) {
             if (!request.from || !request.to) {
                 throw new Error('site sync requires from and to');
             }
@@ -95,7 +121,11 @@ export default function siteSync(ports) {
             const query = ports.queryFor(site);
             const kinds = kindsOf(request, ports.targets);
             const machines = await machinesOf(request, site, query);
-            const counts = await fill(query, ports.targets, kinds, machines, request);
+            const range = { from: request.from, to: request.to };
+            const counts = await fill(query, ports.targets, kinds, machines, {
+                range,
+                extras: extrasOf(extras)
+            });
             return { site: site.id, machines, counts };
         }
     });
