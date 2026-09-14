@@ -21,4 +21,12 @@ describe('plant', function() {
         p.init();
         assert.strictEqual(shops.initialized, true);
     });
+
+    it('keeps an injected topology function', function() {
+        const graph = { plant: { id: 'plant-a', title: 'Plant A' }, nodes: [], links: [] };
+        const p = plant(fakeShops(), { topology() {
+            return graph;
+        } });
+        assert.strictEqual(p.topology().plant.id, 'plant-a', 'plant dropped the topology function');
+    });
 });

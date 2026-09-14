@@ -11,6 +11,9 @@ import operationStream from '../infrastructure/http/plant/streams/operationStrea
 import heartbeatStream from '../infrastructure/http/plant/streams/heartbeatStream.js';
 import simulationRoute from '../infrastructure/http/plant/routes/simulationRoute.js';
 import catalogRoute from '../infrastructure/http/plant/routes/catalogRoute.js';
+import topologyRoute from '../infrastructure/http/plant/routes/topologyRoute.js';
+import infraRoute from '../infrastructure/http/plant/routes/infraRoute.js';
+import inspectRoute from '../infrastructure/http/plant/routes/inspectRoute.js';
 import { routes } from '@yarkivaev/simple-server';
 
 function pass(_id, rows) {
@@ -38,6 +41,7 @@ export default function plantApi(basePath, plant, config) {
     const decorate = opts.decorateTimeline || pass;
     const routeList = [
         ...catalogRoute(basePath, opts.tagCatalog),
+        ...topologyRoute(basePath, plant),
         ...machineRoute(basePath, plant),
         ...stateRoute(basePath, plant),
         ...measurementStream(basePath, plant, time),
@@ -50,6 +54,8 @@ export default function plantApi(basePath, plant, config) {
         ...operationStream(basePath, plant, time),
         ...heartbeatStream(basePath, time, opts.heartbeat),
         ...(time.jump ? simulationRoute(basePath, time) : []),
+        ...infraRoute(),
+        ...inspectRoute(plant),
         ...extra
     ];
     return routes(routeList, { requestTimeoutMs: opts.requestTimeoutMs });

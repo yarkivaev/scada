@@ -9,7 +9,8 @@ export default [
             sourceType: 'module',
             globals: {
                 ...globals.node,
-                ...globals.mocha
+                ...globals.mocha,
+                ...globals.browser
             }
         },
         rules: {
@@ -198,9 +199,7 @@ export default [
             'func-style': 'off',
             'no-invalid-this': 'off',
             'require-await': 'off',
-            'camelcase': 'off',
-            'prefer-destructuring': 'off',
-            'sort-imports': 'off'
+            'camelcase': 'off', 'prefer-destructuring': 'off', 'sort-imports': 'off'
         }
     }
 ];

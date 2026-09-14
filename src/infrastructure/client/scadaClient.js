@@ -9,7 +9,7 @@ import sseConnection from './sseConnection.js';
  * @param {function} fetcher - fetch function
  * @param {function} eventSource - EventSource constructor
  * @param {object} [logger] - optional logger with error(tag, detail)
- * @returns {object} client with machines, machine, jump, reset, simulation methods
+ * @returns {object} client with machines, topology, machine, jump, reset, simulation methods
  *
  * @example
  *   const client = scadaClient('http://localhost:3000/api/v1', fetch, EventSource, logger);
@@ -44,6 +44,9 @@ export default function scadaClient(baseUrl, fetcher, eventSource, logger) {
     return {
         machines() {
             return requestJson('/machines');
+        },
+        topology() {
+            return requestJson('/topology');
         },
         tagCatalog() {
             return requestJson('/tag-catalog');

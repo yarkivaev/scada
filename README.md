@@ -71,6 +71,8 @@ PostgreSQL ← STOMP alerts (via plantServer)
 plantApi → REST + SSE → frontend / @yarkivaev/scada/client
 ```
 
+`GET /api/v1/topology` returns `{ plant, nodes, links }` from `plant.topology()` or a shop/machine/sensor walk. `GET /infra` serves a generic SVG of that graph. Optional node `inspect: { host, port }` is reached same-origin at `/infra/inspect/:id` (CDP `Host` is loopback).
+
 **Supervisor-sink** (write path):
 
 ```
@@ -89,7 +91,8 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 |--------|---------|
 | `plant`, `shop`, `machine` | Domain hierarchy |
 | `timeline`, `alerts`, `alert`, `acknowledgedAlert` | Timeline and alerting |
-| `plantApi`, `plantServer`, `siteServer` | HTTP composition |
+| `plantApi`, `plantServer`, `siteServer`, `topologyFromPlant` | HTTP composition and topology graph |
+
 | `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `@yarkivaev/scada/client` |
 | `siteSync`, `siteSyncSites`, `siteSyncBind` | Pull kinds from an allowlisted remote plantApi into local persistence |
 | `metricsPlant`, `shopWithTimeline`, `machineInPlant` | Plant wiring helpers |
