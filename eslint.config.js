@@ -153,10 +153,11 @@ export default [
     {
         files: [
             'src/infrastructure/ingest/telemetry/amqpMetricsIngest.js',
-            'src/infrastructure/ingest/telemetry/amqpMqttRelay.js'
+            'src/infrastructure/ingest/telemetry/amqpMqttRelay.js', 'src/infrastructure/http/plant/inspect/cdpShot.js'
         ],
         rules: {
-            'require-atomic-updates': 'off'
+            'require-atomic-updates': 'off',
+            'no-bitwise': 'off'
         }
     },
     {
