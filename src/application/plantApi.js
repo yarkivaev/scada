@@ -41,7 +41,7 @@ export default function plantApi(basePath, plant, config) {
     const decorate = opts.decorateTimeline || pass;
     const routeList = [
         ...catalogRoute(basePath, opts.tagCatalog),
-        ...topologyRoute(basePath, plant),
+        ...topologyRoute(basePath, plant, time),
         ...machineRoute(basePath, plant),
         ...stateRoute(basePath, plant),
         ...measurementStream(basePath, plant, time),

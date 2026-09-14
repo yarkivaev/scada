@@ -71,7 +71,7 @@ PostgreSQL ← STOMP alerts (via plantServer)
 plantApi → REST + SSE → frontend / @yarkivaev/scada/client
 ```
 
-`GET /api/v1/topology` returns `{ plant, nodes, links }` from `plant.topology()` or a shop/machine/sensor walk. `GET /infra` serves a generic SVG of that graph. Optional node `inspect: { host, port }` is reached same-origin at `/infra/inspect/:id` (CDP `Host` is loopback).
+`GET /api/v1/topology` returns `{ plant, nodes, links }` from `plant.topology()` or a shop/machine/sensor walk, then paints `status` from live `sensor.current()` freshness (`ok` / `degraded` / `down`). Nodes without a matching sensor stay `unknown`. `GET /infra` serves a generic SVG of that graph. Optional node `inspect: { host, port }` is reached same-origin at `/infra/inspect/:id` (CDP `Host` is loopback).
 
 **Supervisor-sink** (write path):
 
@@ -91,7 +91,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 |--------|---------|
 | `plant`, `shop`, `machine` | Domain hierarchy |
 | `timeline`, `alerts`, `alert`, `acknowledgedAlert` | Timeline and alerting |
-| `plantApi`, `plantServer`, `siteServer`, `topologyFromPlant` | HTTP composition and topology graph |
+| `plantApi`, `plantServer`, `siteServer`, `topologyFromPlant`, `topologyHealth` | HTTP composition and topology graph |
 
 | `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `@yarkivaev/scada/client` |
 | `siteSync`, `siteSyncSites`, `siteSyncBind` | Pull kinds from an allowlisted remote plantApi into local persistence |

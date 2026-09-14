@@ -15,6 +15,7 @@ export { default as pubsub } from './src/domain/shared/pubsub.js';
 
 export { default as plantApi } from './src/application/plantApi.js';
 export { default as topologyFromPlant } from './src/application/topologyFromPlant.js';
+export { default as topologyHealth } from './src/application/topologyHealth.js';
 export { default as tagCatalog } from './src/infrastructure/catalog/tagCatalog.js';
 export { default as machineInPlant } from './src/application/machineInPlant.js';
 export { default as shopWithTimeline } from './src/application/shopWithTimeline.js';
