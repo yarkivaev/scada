@@ -43,6 +43,9 @@ export default function infraRoute() {
         route('GET', '/infra/graph.js', (req, res) => {
             sendFile(res, 'infra/graph.js', 'text/javascript; charset=utf-8');
         }),
+        route('GET', '/infra/graphLayout.js', (req, res) => {
+            sendFile(res, 'infra/graphLayout.js', 'text/javascript; charset=utf-8');
+        }),
         route('GET', '/infra/panel.js', (req, res) => {
             sendFile(res, 'infra/panel.js', 'text/javascript; charset=utf-8');
         })

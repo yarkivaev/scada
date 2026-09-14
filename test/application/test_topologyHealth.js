@@ -117,4 +117,32 @@ describe('topologyHealth', function() {
             'grouped collector did not inherit the machine status'
         );
     });
+
+    it('paints a shop collector from its shop status', async function() {
+        const key = `load-\u041d${Math.floor(Math.random() * 90 + 10)}`;
+        const id = `bay-\u041d${Math.floor(Math.random() * 90 + 10)}`;
+        const layout = graph(key);
+        layout.nodes.push({
+            id,
+            kind: 'collector',
+            title: id,
+            parent: 'area-1',
+            status: 'unknown'
+        });
+        const painted = await topologyHealth(
+            layout,
+            site(key, { found: true, timestamp: new Date('2026-09-14T11:59:00.000Z') }),
+            () => {
+                return new Date('2026-09-14T12:00:00.000Z');
+            }
+        );
+        assert.strictEqual(
+            painted.nodes.find((node) => {
+                return node.id === id;
+            }).status,
+            'ok',
+            'shop collector did not inherit the shop status'
+        );
+    });
 });
+

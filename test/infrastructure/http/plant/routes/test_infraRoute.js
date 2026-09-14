@@ -51,7 +51,7 @@ describe('infraRoute', function() {
 
     it('keeps factory names out of the generic topology page', async function() {
         const dir = join(dirname(fileURLToPath(import.meta.url)), '../../../../../src/infrastructure/http/plant/ui');
-        const text = ['infra.html', 'infra/app.js', 'infra/app.css', 'infra/graph.js', 'infra/panel.js']
+        const text = ['infra.html', 'infra/app.js', 'infra/app.css', 'infra/graph.js', 'infra/graphLayout.js', 'infra/panel.js']
             .map((name) => {
                 return readFileSync(join(dir, name), 'utf8');
             })
@@ -60,6 +60,16 @@ describe('infraRoute', function() {
             /icht|ИЧТ|киоск|kiosk/iu.test(text),
             false,
             'infra UI still contains factory or kiosk copy'
+        );
+    });
+
+    it('serves the graph layout module next to graph.js', async function() {
+        const res = mockRes();
+        await api().handle(mockReq('/infra/graphLayout.js'), res);
+        assert.strictEqual(
+            res.statusCode === 200 && String(res.body).includes('export default function positions'),
+            true,
+            'GET /infra/graphLayout.js did not serve the layout module'
         );
     });
 });
