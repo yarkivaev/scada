@@ -94,6 +94,7 @@ body {
     fill: none;
     stroke: #3a5166;
     stroke-width: 1.4;
+    pointer-events: none;
 }
 
 .link--feeds {

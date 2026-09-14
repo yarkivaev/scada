@@ -26,18 +26,21 @@ function machines(nodes, area, x, base, placed) {
 
 function extras(nodes, area, x, placed) {
     const items = children(nodes, area.id, 'collector');
+    if (items.length === 0) {
+        return 150;
+    }
+    const pitch = 64;
+    const head = 124;
     items.forEach((col, k) => {
-        placed[col.id] = { x, y: 108 + k * 28 };
+        placed[col.id] = { x, y: head + k * pitch };
     });
-    return items.length;
+    return head + items.length * pitch + 48;
 }
 
 function column(area, index, nodes, placed) {
     const x = 170 + index * 280;
     placed[area.id] = { x, y: 56 };
-    const count = extras(nodes, area, x, placed);
-    const base = count === 0 ? 150 : 108 + count * 28 + 50;
-    machines(nodes, area, x, base, placed);
+    machines(nodes, area, x, extras(nodes, area, x, placed), placed);
 }
 
 function leftovers(nodes, placed) {
