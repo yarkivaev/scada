@@ -1,4 +1,5 @@
 import http from 'node:http';
+import capturePng from './cdpShot.js';
 
 /**
  * Loopback Host Chromium accepts for HTTP CDP.
@@ -20,27 +21,53 @@ export function cdpRequest(target, path) {
 }
 
 /**
+ * Chooses ws or wss from Host and X-Forwarded-Proto.
+ *
+ * @param {string} hostHeader - incoming Host
+ * @param {string} [proto] - forwarded proto
+ * @returns {string} ws or wss
+ *
+ * @example
+ *   schemeOf('scada.example');
+ */
+export function schemeOf(hostHeader, proto) {
+    if (proto === 'https') {
+        return 'wss';
+    }
+    if (proto === 'http') {
+        return 'ws';
+    }
+    if (hostHeader.endsWith(':443')) {
+        return 'wss';
+    }
+    return hostHeader.includes(':') ? 'ws' : 'wss';
+}
+
+/**
  * Rewrites CDP debugger URLs onto the same-origin inspect prefix.
  *
  * @param {string} text - upstream JSON or HTML
  * @param {string} hostHeader - incoming Host
  * @param {string} nodeId - topology node id
+ * @param {string} [proto] - forwarded proto
  * @returns {string} rewritten body
  *
  * @example
  *   rewriteDebugger(body, 'example.test:443', 'm1');
  */
-export function rewriteDebugger(text, hostHeader, nodeId) {
-    const secure = hostHeader.endsWith(':443');
-    const scheme = secure ? 'wss' : 'ws';
+export function rewriteDebugger(text, hostHeader, nodeId, proto) {
+    const scheme = schemeOf(hostHeader, proto);
+    const httpScheme = scheme === 'wss' ? 'https' : 'http';
     const host = hostHeader.replace(/:443$/u, '').replace(/:80$/u, '');
     const prefix = `/infra/inspect/${nodeId}`;
     const origin = `${scheme}://${host}${prefix}`;
-    const query = `$<scheme>=${host}${prefix}`;
+    const query = `${scheme}=${host}${prefix}`;
+    const frontend = `${httpScheme}://${host}${prefix}/devtools/inspector.html`;
     return text
+        .replace(/https:\/\/chrome-devtools-frontend\.appspot\.com\/serve_rev\/@[^"'?\s]+\/inspector\.html/gu, frontend)
         .replace(/"\/devtools\//gu, `"${prefix}/devtools/`)
         .replace(/wss?:\/\/127\.0\.0\.1:\d+/gu, origin)
-        .replace(/(?<scheme>wss?)=127\.0\.0\.1:\d+/gu, query);
+        .replace(/(?:wss?)=127\.0\.0\.1:\d+/gu, query);
 }
 
 function readBody(res) {
@@ -68,43 +95,6 @@ function requestCdp(target, path) {
     });
 }
 
-function capturePng(wsUrl) {
-    return new Promise((resolve, reject) => {
-        const socket = new globalThis.WebSocket(wsUrl);
-        const timer = setTimeout(() => {
-            socket.close();
-            reject(new Error(`cdp screenshot timed out for ${wsUrl}`));
-        }, 10000);
-        socket.addEventListener('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
-        });
-        socket.addEventListener('open', () => {
-            socket.send(JSON.stringify({ id: 1, method: 'Page.captureScreenshot', params: { format: 'png' } }));
-        });
-        socket.addEventListener('message', (event) => {
-            const message = JSON.parse(String(event.data));
-            if (message.id !== 1) {
-                return;
-            }
-            clearTimeout(timer);
-            socket.close();
-            resolve(Buffer.from(message.result.data, 'base64'));
-        });
-    });
-}
-
-async function defaultShot(target, requestImpl) {
-    const listed = await requestImpl(target, '/json/list');
-    const pages = JSON.parse(listed.body.toString('utf8'));
-    const page = Array.isArray(pages) ? pages[0] : pages;
-    if (!page || !page.webSocketDebuggerUrl) {
-        throw new Error(`cdp page websocket is missing on ${target.host}:${target.port}`);
-    }
-    const wsUrl = page.webSocketDebuggerUrl.replace(/wss?:\/\/127\.0\.0\.1:\d+/u, `ws://${target.host}:${target.port}`);
-    return capturePng(wsUrl);
-}
-
 /**
  * HTTP CDP client that forces a loopback Host and rewrites debugger URLs.
  *
@@ -118,12 +108,12 @@ async function defaultShot(target, requestImpl) {
 export default function cdpGateway(requestImpl, shotImpl) {
     const request = requestImpl || requestCdp;
     const shot = shotImpl || ((target) => {
-        return defaultShot(target, request);
+        return capturePng(target, request);
     });
     return {
-        async json(target, path, hostHeader, nodeId) {
+        async json(target, path, hostHeader, nodeId, proto) {
             const result = await request(target, path);
-            return rewriteDebugger(result.body.toString('utf8'), hostHeader, nodeId);
+            return rewriteDebugger(result.body.toString('utf8'), hostHeader, nodeId, proto);
         },
         shot(target) {
             return shot(target);

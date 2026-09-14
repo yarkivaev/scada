@@ -16,6 +16,10 @@ function hostOf(req) {
     return req.headers.host || req.headers.Host || 'localhost';
 }
 
+function protoOf(req) {
+    return req.headers['x-forwarded-proto'] || req.headers['X-Forwarded-Proto'];
+}
+
 function cdpPath(rest) {
     if (rest === '/json' || rest === '/json/list') {
         return '/json/list';
@@ -39,7 +43,7 @@ function queryOf(url) {
 
 async function sendJson(cdp, target, req, res, nodeId) {
     const path = cdpPath(inspectUrl(req.url).path);
-    const body = await cdp.json(target, path, hostOf(req), nodeId);
+    const body = await cdp.json(target, path, hostOf(req), nodeId, protoOf(req));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(body);
 }
