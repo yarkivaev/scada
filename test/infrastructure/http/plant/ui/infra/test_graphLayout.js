@@ -31,4 +31,20 @@ describe('graphLayout', function() {
             'machine column y moved without shop collectors'
         );
     });
+
+    it('keeps a shop collector below the previous collector label', function() {
+        const first = `load-\u041d${Math.floor(Math.random() * 90 + 10)}`;
+        const second = `bay-\u041d${Math.floor(Math.random() * 90 + 10)}`;
+        const layout = positions({
+            nodes: [
+                { id: 'area-1', kind: 'shop', title: 'Area 1' },
+                { id: first, kind: 'collector', title: first, parent: 'area-1' },
+                { id: second, kind: 'collector', title: second, parent: 'area-1' }
+            ]
+        });
+        assert.ok(
+            layout[second].y - layout[first].y > 46,
+            'shop collector sat on the previous collector label'
+        );
+    });
 });
