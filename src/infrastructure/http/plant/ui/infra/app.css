@@ -1,0 +1,154 @@
+:root {
+    --ink: #d7e0ea;
+    --muted: #8ea0b3;
+    --bg: #0b1118;
+    --panel: #121a24;
+    --line: #243140;
+    --ok: #3f9d6a;
+    --degraded: #c9a227;
+    --down: #c24b3a;
+    --unknown: #5d6d7e;
+    --accent: #7eb1c9;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+    background: radial-gradient(circle at 12% 0, #152033 0, var(--bg) 42%);
+    color: var(--ink);
+    font: 14px/1.4 "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+.mast {
+    padding: 20px 28px 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.mast__kicker {
+    margin: 0;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-size: 11px;
+}
+
+.mast h1 {
+    margin: 4px 0 0;
+    font-size: 28px;
+    font-weight: 560;
+}
+
+.mast__meta {
+    margin: 4px 0 0;
+    color: var(--muted);
+}
+
+.stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    min-height: calc(100vh - 92px);
+}
+
+.stage__graph {
+    width: 100%;
+    height: calc(100vh - 92px);
+}
+
+.stage__panel {
+    border-left: 1px solid var(--line);
+    background: var(--panel);
+    padding: 20px;
+    overflow: auto;
+}
+
+.stage__panel[hidden] {
+    display: none;
+}
+
+.node {
+    cursor: pointer;
+}
+
+.node__shape {
+    stroke: #0b1118;
+    stroke-width: 2;
+}
+
+.node--ok .node__shape { fill: var(--ok); }
+.node--degraded .node__shape { fill: var(--degraded); }
+.node--down .node__shape { fill: var(--down); }
+.node--unknown .node__shape { fill: var(--unknown); }
+
+.node__label,
+.node__version {
+    fill: var(--ink);
+    font-size: 12px;
+}
+
+.link {
+    fill: none;
+    stroke: #3a5166;
+    stroke-width: 1.4;
+}
+
+.link--feeds {
+    stroke-dasharray: 5 4;
+    stroke: #7eb1c9;
+}
+
+.panel__kind {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+}
+
+.panel__title {
+    margin: 6px 0 16px;
+    font-size: 22px;
+}
+
+.panel__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.panel__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.panel__actions button {
+    background: #1b2836;
+    color: var(--ink);
+    border: 1px solid #314559;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.panel__preview,
+.panel__tools {
+    width: 100%;
+    margin-top: 16px;
+    background: #0b1118;
+    border: 1px solid var(--line);
+}
+
+.panel__preview {
+    min-height: 140px;
+}
+
+.panel__tools {
+    min-height: 280px;
+    border: 0;
+}

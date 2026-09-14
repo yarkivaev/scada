@@ -8,6 +8,7 @@ import stompTimelineSegments from '../infrastructure/messaging/stomp/stompTimeli
 import userDecisions from '../infrastructure/messaging/stomp/userDecisions.js';
 import segmentRetags from '../infrastructure/messaging/stomp/segmentRetags.js';
 import { parseRequestTimeoutMs, virtualClock } from '@yarkivaev/simple-server';
+import inspectUpgrade from '../infrastructure/http/plant/inspect/inspectUpgrade.js';
 
 function stompCollectorFactory(stompUrl, destination, credentials) {
     return (collector) => {
@@ -107,6 +108,9 @@ export default async function plantServer(config) {
     });
     const server = http.createServer((req, res) => {
         return api.handle(req, res);
+    });
+    server.on('upgrade', (req, socket, head) => {
+        inspectUpgrade(p, req, socket, head);
     });
     await new Promise((resolve) => {
         server.listen(config.port, resolve);
