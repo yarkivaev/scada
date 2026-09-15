@@ -2,9 +2,14 @@ import assert from 'assert';
 import {
     segmentConflict,
     segmentUpdateColumns,
+    segmentUpdateWhere,
     segmentsIngestDestination,
     splitUpdateColumns
 } from '../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js';
+
+function allows(existing, incoming) {
+    return existing.duration === 0 || incoming.duration > 0;
+}
 
 function upsertStore(conflict, update) {
     const rows = new Map();
@@ -14,14 +19,14 @@ function upsertStore(conflict, update) {
             for (const record of records) {
                 const key = conflict.map((col) => { return record[col]; }).join('\u0000');
                 const existing = rows.get(key);
-                if (existing) {
+                if (!existing) {
+                    rows.set(key, { ...record });
+                } else if (allows(existing, record)) {
                     const merged = { ...existing };
                     for (const col of update) {
                         merged[col] = record[col];
                     }
                     rows.set(key, merged);
-                } else {
-                    rows.set(key, { ...record });
                 }
             }
             return Promise.resolve();
@@ -89,6 +94,61 @@ describe('segmentPipeline upsert configuration', function() {
             segmentsIngestDestination,
             '/queue/scada.segments.ingest',
             'segment ingest must not use an ephemeral exchange subscription'
+        );
+    });
+
+    it('guards conflict update so pending cannot reopen a completed span', function() {
+        assert.strictEqual(
+            segmentUpdateWhere,
+            'segments.duration = 0 OR EXCLUDED.duration > 0',
+            'segment upsert must keep completed duration against a late pending'
+        );
+    });
+});
+
+describe('segmentPipeline monotonic upsert', function() {
+    it('does not let a late pending reopen a completed segment', async function() {
+        const machine = `ičt-${Math.random()}`;
+        const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
+        const store = upsertStore(segmentConflict, segmentUpdateColumns);
+        const span = 3000 + Math.floor(Math.random() * 800);
+        await store.write([{
+            machine, kind: 'phase', name: 'on', start_time: start,
+            end_time: start, duration: span, options: null, tags: null,
+            properties: '{}', resolved: true
+        }]);
+        await store.write([{
+            machine, kind: 'phase', name: 'on', start_time: start,
+            end_time: start, duration: 0, options: null, tags: null,
+            properties: '{}', resolved: true
+        }]);
+        assert.strictEqual(
+            store.rows.get(`${machine}\u0000phase\u0000${start}`).duration,
+            span,
+            'pending heartbeat reopened a completed segment'
+        );
+    });
+
+    it('lets a late close replace an orphan one-second stub', async function() {
+        const machine = `ičt-${Math.random()}`;
+        const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
+        const store = upsertStore(segmentConflict, segmentUpdateColumns);
+        const span = 2000 + Math.floor(Math.random() * 900);
+        const ended = new Date(Date.parse(start) + span * 1000).toISOString();
+        await store.write([{
+            machine, kind: 'phase', name: 'on', start_time: start,
+            end_time: new Date(Date.parse(start) + 1000).toISOString(),
+            duration: 1, options: null, tags: null, properties: '{}', resolved: true
+        }]);
+        await store.write([{
+            machine, kind: 'phase', name: 'on', start_time: start,
+            end_time: ended, duration: span, options: null, tags: null,
+            properties: '{}', resolved: true
+        }]);
+        assert.strictEqual(
+            store.rows.get(`${machine}\u0000phase\u0000${start}`).duration,
+            span,
+            'completed close did not overwrite the orphan one-second stub'
         );
     });
 });
