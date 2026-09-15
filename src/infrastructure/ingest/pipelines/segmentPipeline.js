@@ -16,6 +16,7 @@ export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_tim
 export const segmentConflict = ['machine', 'kind', 'start_time'];
 export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'resolved'];
+export const segmentUpdateWhere = 'segments.duration = 0 OR EXCLUDED.duration > 0';
 export const segmentsIngestDestination = '/queue/scada.segments.ingest';
 
 export { default as segmentDispatch } from '../../../domain/segment/dispatch.js';
@@ -28,7 +29,7 @@ export { default as segmentDispatch } from '../../../domain/segment/dispatch.js'
  * @returns {{ segmentSink: object, splitSink: object }}
  */
 function segmentSinks(postgres, pool) {
-    const shared = { pool, conflict: segmentConflict };
+    const shared = { pool, conflict: segmentConflict, updateWhere: segmentUpdateWhere };
     return {
         segmentSink: postgresSink(postgres, 'segments', segmentColumns,
             { ...shared, update: segmentUpdateColumns }),
@@ -40,7 +41,8 @@ function segmentSinks(postgres, pool) {
 /**
  * Pipeline for streaming STOMP segment data to PostgreSQL segments table.
  * Subscribes to the durable ingest queue so shovel traffic survives consumer gaps.
- * Pending heartbeats are coalesced per machine; machines run in parallel lanes.
+ * Pending heartbeats are coalesced per machine; machines persist in
+ * parallel lanes. Arrivals enqueue in broker FIFO before coalesce.
  *
  * @param {string} stomp - STOMP broker URL
  * @param {string} postgres - PostgreSQL connection URL

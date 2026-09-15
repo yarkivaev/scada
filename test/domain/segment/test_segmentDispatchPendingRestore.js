@@ -2,7 +2,8 @@ import assert from 'assert';
 import segmentDispatch from '../../../src/domain/segment/dispatch.js';
 
 /**
- * Fake UPSERT sink keyed by (machine, start_time), mirroring postgresSink conflict behavior.
+ * Fake UPSERT sink keyed by (machine, start_time).
+ * Mirrors postgresSink conflict plus the monotonic duration guard.
  */
 function upsertSink() {
     const rows = new Map();
@@ -11,8 +12,10 @@ function upsertSink() {
         write(records) {
             for (const record of records) {
                 const key = `${record.machine}|${record.start_time}`;
-                const prior = rows.get(key) || {};
-                rows.set(key, { ...prior, ...record });
+                const prior = rows.get(key);
+                if (!(prior && prior.duration > 0 && record.duration === 0)) {
+                    rows.set(key, { ...prior, ...record });
+                }
             }
             return Promise.resolve();
         }
@@ -20,7 +23,7 @@ function upsertSink() {
 }
 
 describe('segmentDispatch pending restore', function() {
-    it('restores a silence-closed row when a pending heartbeat arrives for the same start', async function() {
+    it('does not let a pending heartbeat reopen a completed segment', async function() {
         const sink = upsertSink();
         const closer = { close() { return Promise.resolve(); } };
         const route = segmentDispatch(sink, { accept() { return Promise.resolve(); } }, upsertSink(), closer);
@@ -28,14 +31,15 @@ describe('segmentDispatch pending restore', function() {
         const start = new Date(1_700_000_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const mid = new Date(Date.parse(start) + 45_000).toISOString();
         const later = new Date(Date.parse(start) + 90_000).toISOString();
+        const span = 40 + Math.floor(Math.random() * 20);
         await route.accept({
-            type: 'segment', machine, name: 'on', start_time: start, end_time: mid, duration: 45
+            type: 'segment', machine, name: 'on', start_time: start, end_time: mid, duration: span
         });
         await route.accept({
             type: 'segment', machine, name: 'on', start_time: start, end_time: later, duration: 0
         });
         const row = sink.rows.get(`${machine}|${start}`);
-        assert.strictEqual(row.duration, 0, 'pending heartbeat did not reopen the silence-closed segment');
+        assert.strictEqual(row.duration, span, 'pending heartbeat reopened a completed segment');
     });
 
     it('advances pending end_time on heartbeat without inventing a new start', async function() {
