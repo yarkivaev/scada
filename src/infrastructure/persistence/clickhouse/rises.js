@@ -37,7 +37,7 @@ const RISES_SQL = `WITH prior AS (
         lagInFrame(toNullable(value), 1) OVER (ORDER BY ts) AS prev
     FROM series
 )
-SELECT ts, sum(1) OVER (ORDER BY ts) AS value
+SELECT ts, sum(1) OVER (ORDER BY ts) AS prefix
 FROM lagged
 WHERE ts >= {start:DateTime64(3)} AND prev = 0 AND value = 1
 ORDER BY ts`;
@@ -49,7 +49,7 @@ export default async function clickhouseRises(connection, topic, range, unit) {
         end: formatDateTime(range.end)
     });
     return rows.map((row) => {
-        return { timestamp: new Date(`${row.ts}Z`), value: row.value, unit };
+        return { timestamp: new Date(`${row.ts}Z`), value: Number(row.prefix), unit };
     });
 }
 
