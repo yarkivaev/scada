@@ -98,6 +98,9 @@ export default function machineClient(baseUrl, machineId, fetcher, eventSource, 
             if (options && options.step) {
                 params.set('step', String(options.step));
             }
+            if (options && options.mode) {
+                params.set('mode', options.mode);
+            }
             const qs = params.toString();
             return request(`/measurements${qs ? `?${qs}` : ''}`);
         },

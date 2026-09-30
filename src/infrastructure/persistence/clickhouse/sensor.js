@@ -11,7 +11,7 @@
  * @param {string} topic - Metric topic in format '{machine}/{sensor}'
  * @param {string} displayName - Human-readable sensor name
  * @param {string} unit - Measurement unit (e.g., 'V', 'cos(φ)')
- * @returns {object} sensor with name, current, measurements and stream methods
+ * @returns {object} sensor with name, current, measurements, rises, changes and stream methods
  *
  * @example
  *   const sensor = clickhouseSensor(conn, 'm1/voltage', 'Voltage', 'V');
@@ -21,49 +21,27 @@
  *   sensor.stream(since, 1000, callback); // live stream
  */
 import clickhouseStreamHub from './streamHub.js';
-
-function formatDateTime(date) {
-    return date.toISOString().replace('Z', '').replace('T', ' ');
-}
+import clickhouseRises from './rises.js';
+import clickhouseChanges from './changes.js';
+import clickhouseSeries from './series.js';
+import clickhouseLatest from './latest.js';
 
 export default function clickhouseSensor(connection, topic, displayName, unit) {
     return {
         name() {
             return displayName;
         },
-        async current() {
-            const rows = await connection.query(
-                `SELECT ts, value FROM scada.metrics
-                 WHERE topic = {topic:String}
-                 ORDER BY ts DESC LIMIT 1`,
-                { topic }
-            );
-            if (rows.length === 0) {
-                return { found: false };
-            }
-            return { found: true, timestamp: new Date(`${rows[0].ts}Z`), value: rows[0].value, unit };
+        current() {
+            return clickhouseLatest(connection, topic, unit);
         },
-        async measurements(range, step) {
-            const seconds = Math.max(1, Math.floor(step / 1000));
-            const rows = await connection.query(
-                `SELECT
-                    toStartOfInterval(ts, INTERVAL ${seconds} SECOND) as ts,
-                    anyLast(value) as value
-                FROM scada.metrics
-                WHERE topic = {topic:String}
-                  AND ts >= toStartOfInterval({start:DateTime64(3)}, INTERVAL ${seconds} SECOND)
-                  AND ts <= {end:DateTime64(3)}
-                GROUP BY ts
-                ORDER BY ts`,
-                {
-                    topic,
-                    start: formatDateTime(range.start),
-                    end: formatDateTime(range.end)
-                }
-            );
-            return rows.map((row) => {
-                return { timestamp: new Date(`${row.ts}Z`), value: row.value, unit };
-            });
+        measurements(range, step) {
+            return clickhouseSeries(connection, topic, range, step, unit);
+        },
+        rises(range) {
+            return clickhouseRises(connection, topic, range, unit);
+        },
+        changes(range) {
+            return clickhouseChanges(connection, topic, range, unit);
         },
         stream(since, step, callback, clock) {
             return clickhouseStreamHub(connection).watch(topic, since, step, callback, {

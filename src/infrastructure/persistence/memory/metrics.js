@@ -1,3 +1,7 @@
+import risingPrefixes from '../risingPrefixes.js';
+import levelChanges from '../levelChanges.js';
+import { seriesWindow, topicRows } from '../topicWindow.js';
+
 function bucketKey(tsMs, originMs, stepMs) {
     const slot = Math.floor((tsMs - originMs) / stepMs);
     return originMs + slot * stepMs;
@@ -23,6 +27,28 @@ function rowsForRange(store, topic, startMs, endMs, stepMs) {
     });
 }
 
+function risesOf(rows, topic, startIso, endIso) {
+    const start = new Date(startIso).getTime();
+    const end = new Date(endIso).getTime();
+    const series = seriesWindow(topicRows(rows, topic), start, end, false);
+    return risingPrefixes(series).filter((row) => {
+        const ts = new Date(row.ts).getTime();
+        return ts >= start && ts < end;
+    });
+}
+
+function changesOf(rows, topic, startIso, endIso) {
+    const start = new Date(startIso).getTime();
+    const end = new Date(endIso).getTime();
+    const series = seriesWindow(topicRows(rows, topic), start, end, true);
+    return levelChanges(series).map((row, index) => {
+        if (index === 0 && new Date(row.ts).getTime() < start) {
+            return { ts: new Date(start), value: row.value };
+        }
+        return { ts: row.ts, value: row.value };
+    });
+}
+
 /**
  * In-memory metrics state port for tests and local runs.
  *
@@ -44,6 +70,12 @@ export default function metricsStateMemory(store) {
             const end = new Date(endIso).getTime();
             const stepSec = Math.max(1, Math.floor(stepMs / 1000));
             return rowsForRange(store, topic, start, end, stepSec * 1000);
+        },
+        risesForTopic(topic, startIso, endIso) {
+            return risesOf(store.metrics, topic, startIso, endIso);
+        },
+        changesForTopic(topic, startIso, endIso) {
+            return changesOf(store.metrics, topic, startIso, endIso);
         },
         pollTopic(topic, afterIso, untilIso) {
             const after = new Date(afterIso).getTime();

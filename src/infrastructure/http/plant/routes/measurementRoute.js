@@ -1,5 +1,6 @@
 import machineInPlant from '../../../../application/machineInPlant.js';
 import { jsonResponse, route, timeExpression } from '@yarkivaev/simple-server';
+import measurementRead, { measurementItem } from './measurementRead.js';
 
 /**
  * Measurement routes factory.
@@ -13,6 +14,31 @@ import { jsonResponse, route, timeExpression } from '@yarkivaev/simple-server';
  * @example
  *   const routes = measurementRoute('/api/v1', plant, clock);
  */
+/**
+ * Collects measurement items for the requested keys and mode.
+ *
+ * @param {object} machine - plant machine
+ * @param {object} query - HTTP query
+ * @param {function} clock - time provider
+ * @param {function} beginning - range floor
+ * @returns {Promise<Array>} items
+ */
+async function measure(machine, query, clock, beginning) {
+    const requested = query.keys ? query.keys.split(',') : Object.keys(machine.sensors);
+    const keys = requested.filter((key) => {
+        return machine.sensors[key];
+    });
+    const from = timeExpression(query.from || 'now-1M', clock, beginning).resolve();
+    const to = timeExpression(query.to || 'now', clock, beginning).resolve();
+    const step = query.step ? parseInt(query.step, 10) * 1000 : 1000;
+    const range = { start: from, end: to };
+    return await Promise.all(keys.map(async (key) => {
+        const sensor = machine.sensors[key];
+        const rows = await measurementRead(sensor, range, step, query.mode);
+        return measurementItem(key, sensor, rows);
+    }));
+}
+
 export default function measurementRoute(basePath, plant, clock) {
     function beginning() {
         return new Date(clock().getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -34,25 +60,7 @@ export default function measurementRoute(basePath, plant, clock) {
                     jsonResponse({ items: [] }).send(res);
                     return;
                 }
-                const requested = query.keys ? query.keys.split(',') : Object.keys(machine.sensors);
-                const keys = requested.filter((key) => {return machine.sensors[key]});
-                const fromExpr = query.from || 'now-1M';
-                const toExpr = query.to || 'now';
-                const from = timeExpression(fromExpr, clock, beginning).resolve();
-                const to = timeExpression(toExpr, clock, beginning).resolve();
-                const step = query.step ? parseInt(query.step, 10) * 1000 : 1000;
-                const range = { start: from, end: to };
-                const promises = keys.map(async (key) => {
-                    const sensor = machine.sensors[key];
-                    const measurements = await sensor.measurements(range, step);
-                    const unit = measurements.length > 0 ? measurements[0].unit : '';
-                    const values = measurements.map((row) => {return {
-                        timestamp: row.timestamp.toISOString(),
-                        value: row.value
-                    }});
-                    return { key, name: sensor.name(), unit, values };
-                });
-                const items = await Promise.all(promises);
+                const items = await measure(machine, query, clock, beginning);
                 jsonResponse({ items }).send(res);
             }
         )
