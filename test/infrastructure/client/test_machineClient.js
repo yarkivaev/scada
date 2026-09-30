@@ -32,6 +32,17 @@ describe('machineClient', function() {
         assert(fetchedUrl.includes('keys=voltage') && fetchedUrl.includes('step=60'));
     });
 
+    it('fetches rising prefixes with a mode query', async function() {
+        let fetchedUrl;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
+        await client.measurements({ keys: ['flag'], from: 'now-8h', to: 'now', mode: 'rises' });
+        assert(fetchedUrl.includes('mode=rises'), 'measurements omitted the rises mode');
+    });
+
     it('fetches measurements without options', async function() {
         let fetchedUrl;
         const fakeFetch = async (url) => {

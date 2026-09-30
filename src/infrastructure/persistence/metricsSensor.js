@@ -1,6 +1,4 @@
-function parseTimestamp(ts) {
-    return ts instanceof Date ? ts : new Date(ts);
-}
+import seriesRows, { parseTimestamp } from './seriesRows.js';
 
 function pollStream(spec) {
     const { read, topic, since, step, callback, clock, unit } = spec;
@@ -45,6 +43,12 @@ export function pgMetricsRead(metrics) {
         range(topic, startIso, endIso, stepMs) {
             return metrics.rangeForTopic(topic, startIso, endIso, stepMs);
         },
+        rises(topic, startIso, endIso) {
+            return metrics.risesForTopic(topic, startIso, endIso);
+        },
+        changes(topic, startIso, endIso) {
+            return metrics.changesForTopic(topic, startIso, endIso);
+        },
         poll(topic, afterIso, untilIso) {
             return metrics.pollTopic(topic, afterIso, untilIso);
         }
@@ -84,13 +88,23 @@ export default function metricsSensor(read, topic, displayName, unit) {
                 range.end.toISOString(),
                 step
             );
-            return rows.map((row) => {
-                return {
-                    timestamp: parseTimestamp(row.ts),
-                    value: row.value,
-                    unit
-                };
-            });
+            return seriesRows(rows, unit);
+        },
+        async rises(range) {
+            const rows = await read.rises(
+                topic,
+                range.start.toISOString(),
+                range.end.toISOString()
+            );
+            return seriesRows(rows, unit);
+        },
+        async changes(range) {
+            const rows = await read.changes(
+                topic,
+                range.start.toISOString(),
+                range.end.toISOString()
+            );
+            return seriesRows(rows, unit);
         },
         stream(since, step, callback, clock) {
             return pollStream({ read, topic, since, step, callback, clock, unit });

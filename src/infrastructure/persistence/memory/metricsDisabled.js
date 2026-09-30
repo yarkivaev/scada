@@ -9,6 +9,12 @@ export default function metricsStateDisabled() {
         rangeForTopic() {
             return Promise.resolve([]);
         },
+        risesForTopic() {
+            return Promise.resolve([]);
+        },
+        changesForTopic() {
+            return Promise.resolve([]);
+        },
         pollTopic() {
             return Promise.resolve([]);
         },

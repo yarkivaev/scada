@@ -1,3 +1,8 @@
+import risesSql from './risesSql.js';
+import changesSql from './changesSql.js';
+import queryTopic from './queryTopic.js';
+import rangeSql from './rangeSql.js';
+
 export default function metricsStatePg(pool) {
     return {
         async latestForTopic(topic) {
@@ -7,18 +12,15 @@ export default function metricsStatePg(pool) {
             );
             return result.rows[0] ?? null;
         },
-        async rangeForTopic(topic, startIso, endIso, stepMs) {
+        rangeForTopic(topic, startIso, endIso, stepMs) {
             const seconds = Math.max(1, Math.floor(stepMs / 1000));
-            const sql = `SELECT bucket AS ts, value FROM (
-            SELECT date_bin($1::interval, ts, '1970-01-01'::timestamptz) AS bucket, value,
-                   ROW_NUMBER() OVER (PARTITION BY date_bin($1::interval, ts, '1970-01-01'::timestamptz) ORDER BY ts DESC) AS rn
-            FROM metrics WHERE topic = $2 AND ts >= $3 AND ts <= $4
-        ) sub WHERE rn = 1 ORDER BY ts`;
-            const prm = [`${seconds} seconds`, topic, startIso, endIso];
-            const result = await pool.query(sql, prm);
-            return result.rows.map((row) => {
-                return { ts: row.ts, value: row.value };
-            });
+            return queryTopic(pool, rangeSql(), [`${seconds} seconds`, topic, startIso, endIso]);
+        },
+        risesForTopic(topic, startIso, endIso) {
+            return queryTopic(pool, risesSql(), [topic, startIso, endIso]);
+        },
+        changesForTopic(topic, startIso, endIso) {
+            return queryTopic(pool, changesSql(), [topic, startIso, endIso]);
         },
         async pollTopic(topic, afterIso, untilIso) {
             const result = await pool.query(
