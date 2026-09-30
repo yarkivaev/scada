@@ -23,4 +23,25 @@ describe('clickhouseSensor rises', function() {
             'rises query did not use a ClickHouse lag prefix'
         );
     });
+
+    it('gives lagInFrame a typed null default for Float64 values', async function() {
+        let sql = '';
+        const connection = {
+            url() {
+                return 'http://rises-null';
+            },
+            async query(text) {
+                sql = text;
+                return [];
+            }
+        };
+        await clickhouseSensor(connection, `OPCUA/dev-${Math.random()}/GET/flag/VALUE`, 'Flag', '').rises({
+            start: new Date('2026-09-30T04:00:00.000Z'),
+            end: new Date('2026-09-30T12:00:00.000Z')
+        });
+        assert.ok(
+            sql.includes('CAST(NULL AS Nullable(Float64))'),
+            'rises query used an untyped NULL lag default'
+        );
+    });
 });

@@ -37,7 +37,7 @@ const CHANGES_SQL = `WITH prior AS (
         ts,
         value,
         row_number() OVER (ORDER BY ts) AS n,
-        lagInFrame(value, 1, NULL) OVER (ORDER BY ts) AS prev
+        lagInFrame(value, 1, CAST(NULL AS Nullable(Float64))) OVER (ORDER BY ts) AS prev
     FROM series
 )
 SELECT if(ts < {start:DateTime64(3)}, {start:DateTime64(3)}, ts) AS ts, value
