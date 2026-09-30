@@ -18,8 +18,8 @@ describe('clickhouseSensor changes', function() {
             end: new Date('2026-09-30T12:00:00.000Z')
         });
         assert.ok(
-            sql.includes('CAST(NULL AS Nullable(Float64))'),
-            'changes query used an untyped NULL lag default'
+            sql.includes('lagInFrame(toNullable(value), 1)'),
+            'changes query lagged a non-nullable Float64 value'
         );
     });
 });

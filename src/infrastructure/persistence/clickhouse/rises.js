@@ -34,7 +34,7 @@ const RISES_SQL = `WITH prior AS (
     SELECT
         ts,
         value,
-        lagInFrame(value, 1, CAST(NULL AS Nullable(Float64))) OVER (ORDER BY ts) AS prev
+        lagInFrame(toNullable(value), 1) OVER (ORDER BY ts) AS prev
     FROM series
 )
 SELECT ts, sum(1) OVER (ORDER BY ts) AS value
