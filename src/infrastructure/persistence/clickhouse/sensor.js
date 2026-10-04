@@ -23,6 +23,7 @@
 import clickhouseStreamHub from './streamHub.js';
 import clickhouseRises from './rises.js';
 import clickhouseChanges from './changes.js';
+import clickhouseHolds from './holds.js';
 import clickhouseSeries from './series.js';
 import clickhouseLatest from './latest.js';
 
@@ -42,6 +43,9 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
         },
         changes(range) {
             return clickhouseChanges(connection, topic, range, unit);
+        },
+        holds(range, step) {
+            return clickhouseHolds(connection, topic, range, step, unit);
         },
         stream(since, step, callback, clock) {
             return clickhouseStreamHub(connection).watch(topic, since, step, callback, {

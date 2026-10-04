@@ -1,5 +1,6 @@
 import risingPrefixes from '../risingPrefixes.js';
 import levelChanges from '../levelChanges.js';
+import coverageHolds from '../coverageHolds.js';
 import { seriesWindow, topicRows } from '../topicWindow.js';
 
 function bucketKey(tsMs, originMs, stepMs) {
@@ -49,6 +50,15 @@ function changesOf(rows, topic, startIso, endIso) {
     });
 }
 
+function holdsOf(rows, topic, startIso, endIso, stepMs) {
+    const start = new Date(startIso).getTime();
+    const end = new Date(endIso).getTime();
+    const hits = rows.filter((row) => {
+        return row.topic === topic;
+    });
+    return coverageHolds(hits, start, end, Math.max(1, Number(stepMs) || 1000));
+}
+
 /**
  * In-memory metrics state port for tests and local runs.
  *
@@ -76,6 +86,9 @@ export default function metricsStateMemory(store) {
         },
         changesForTopic(topic, startIso, endIso) {
             return changesOf(store.metrics, topic, startIso, endIso);
+        },
+        holdsForTopic(topic, startIso, endIso, stepMs) {
+            return holdsOf(store.metrics, topic, startIso, endIso, stepMs);
         },
         pollTopic(topic, afterIso, untilIso) {
             const after = new Date(afterIso).getTime();

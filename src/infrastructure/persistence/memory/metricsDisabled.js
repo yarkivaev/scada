@@ -15,6 +15,9 @@ export default function metricsStateDisabled() {
         changesForTopic() {
             return Promise.resolve([]);
         },
+        holdsForTopic() {
+            return Promise.resolve([]);
+        },
         pollTopic() {
             return Promise.resolve([]);
         },

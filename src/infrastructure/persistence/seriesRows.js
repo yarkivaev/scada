@@ -11,11 +11,15 @@ function parseTimestamp(ts) {
  */
 export default function seriesRows(rows, unit) {
     return rows.map((row) => {
-        return {
+        const point = {
             timestamp: parseTimestamp(row.ts),
             value: row.value,
             unit
         };
+        if (row.until) {
+            point.until = parseTimestamp(row.until);
+        }
+        return point;
     });
 }
 

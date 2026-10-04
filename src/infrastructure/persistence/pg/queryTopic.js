@@ -9,6 +9,10 @@
 export default async function queryTopic(pool, sql, params) {
     const result = await pool.query(sql, params);
     return result.rows.map((row) => {
-        return { ts: row.ts, value: Number(row.value) };
+        const item = { ts: row.ts, value: Number(row.value) };
+        if (row.until) {
+            item.until = row.until;
+        }
+        return item;
     });
 }
