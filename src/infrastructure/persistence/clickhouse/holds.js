@@ -50,10 +50,10 @@ const HOLDS_SQL = `WITH windowed AS (
         sum(fresh) OVER (ORDER BY ts) AS grp
     FROM flagged
 )
-SELECT min(ts) AS ts, max(ts) AS until, any(value) AS value
+SELECT min(ts) AS started, max(ts) AS until, any(value) AS value
 FROM grouped
 GROUP BY grp
-ORDER BY ts`;
+ORDER BY started`;
 
 export default async function clickhouseHolds(connection, topic, range, gap, unit) {
     const rows = await connection.query(HOLDS_SQL, {
@@ -64,7 +64,7 @@ export default async function clickhouseHolds(connection, topic, range, gap, uni
     });
     return rows.map((row) => {
         return {
-            timestamp: new Date(`${row.ts}Z`),
+            timestamp: new Date(`${row.started}Z`),
             value: row.value,
             until: new Date(`${row.until}Z`),
             unit
