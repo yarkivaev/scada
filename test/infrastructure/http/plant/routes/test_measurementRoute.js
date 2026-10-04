@@ -52,6 +52,9 @@ function flagSensor(prefixes) {
         },
         async changes() {
             return [];
+        },
+        async holds() {
+            return [];
         }
     };
 }
@@ -83,6 +86,53 @@ describe('measurementRoute', function() {
             item0.values,
             [{ timestamp: at.toISOString(), value: 1 }],
             'rises mode returned a downsampled series'
+        );
+    });
+
+    it('returns hold spans with until when mode is holds', async function() {
+        const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
+        const start = new Date('2026-10-03T13:32:37.000Z');
+        const until = new Date('2026-10-04T08:14:12.000Z');
+        const size = 700 + Math.floor(Math.random() * 4) * 100;
+        const history = alerts(alert, acknowledgedAlert);
+        const item = machine(machineId, {
+            sensors: {
+                diameter: {
+                    name() {
+                        return 'diameter';
+                    },
+                    async measurements() {
+                        return [];
+                    },
+                    async rises() {
+                        return [];
+                    },
+                    async changes() {
+                        return [];
+                    },
+                    async holds() {
+                        return [{ timestamp: start, value: size, until, unit: 'mm' }];
+                    }
+                }
+            },
+            alerts: history
+        });
+        const area = shop('area', initialized({ [machineId]: item }, Object.values), history);
+        const api = plantApi('/api/v1', plantDomain(initialized({ area }, Object.values)), {
+            clock: virtualClock(() => {
+                return new Date('2026-10-04T08:54:00.000Z');
+            })
+        });
+        const res = mockRes();
+        await api.handle(
+            mockReq(`/api/v1/machines/${machineId}/measurements?keys=diameter&from=now-60d&to=now&mode=holds&step=3`),
+            res
+        );
+        const item0 = JSON.parse(res.body).items[0];
+        assert.deepStrictEqual(
+            item0.values,
+            [{ timestamp: start.toISOString(), value: size, until: until.toISOString() }],
+            'holds mode dropped the coverage until stamp'
         );
     });
 });

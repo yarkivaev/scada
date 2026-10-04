@@ -4,7 +4,7 @@
  * @param {object} sensor - machine sensor
  * @param {{start: Date, end: Date}} range - query window
  * @param {number} step - downsample step in ms
- * @param {string} [mode] - rises or changes
+ * @param {string} [mode] - rises, changes, or holds
  * @returns {Promise<Array>} series rows
  */
 export default function measurementRead(sensor, range, step, mode) {
@@ -13,6 +13,9 @@ export default function measurementRead(sensor, range, step, mode) {
     }
     if (mode === 'changes') {
         return sensor.changes(range);
+    }
+    if (mode === 'holds') {
+        return sensor.holds(range, step);
     }
     return sensor.measurements(range, step);
 }
@@ -28,10 +31,14 @@ export default function measurementRead(sensor, range, step, mode) {
 export function measurementItem(key, sensor, rows) {
     const unit = rows.length > 0 ? rows[0].unit : '';
     const values = rows.map((row) => {
-        return {
+        const point = {
             timestamp: row.timestamp.toISOString(),
             value: row.value
         };
+        if (row.until) {
+            point.until = row.until.toISOString();
+        }
+        return point;
     });
     return { key, name: sensor.name(), unit, values };
 }

@@ -49,6 +49,9 @@ export function pgMetricsRead(metrics) {
         changes(topic, startIso, endIso) {
             return metrics.changesForTopic(topic, startIso, endIso);
         },
+        holds(topic, startIso, endIso, stepMs) {
+            return metrics.holdsForTopic(topic, startIso, endIso, stepMs);
+        },
         poll(topic, afterIso, untilIso) {
             return metrics.pollTopic(topic, afterIso, untilIso);
         }
@@ -64,6 +67,13 @@ export function pgMetricsRead(metrics) {
  * @param {string} unit - unit string
  * @returns {object} sensor with name current measurements stream
  */
+async function windowed(read, spec) {
+    const rows = spec.extra === undefined
+        ? await read[spec.method](spec.topic, spec.range.start.toISOString(), spec.range.end.toISOString())
+        : await read[spec.method](spec.topic, spec.range.start.toISOString(), spec.range.end.toISOString(), spec.extra);
+    return seriesRows(rows, spec.unit);
+}
+
 export default function metricsSensor(read, topic, displayName, unit) {
     return {
         name() {
@@ -81,30 +91,17 @@ export default function metricsSensor(read, topic, displayName, unit) {
                 unit
             };
         },
-        async measurements(range, step) {
-            const rows = await read.range(
-                topic,
-                range.start.toISOString(),
-                range.end.toISOString(),
-                step
-            );
-            return seriesRows(rows, unit);
+        measurements(range, step) {
+            return windowed(read, { method: 'range', topic, range, extra: step, unit });
         },
-        async rises(range) {
-            const rows = await read.rises(
-                topic,
-                range.start.toISOString(),
-                range.end.toISOString()
-            );
-            return seriesRows(rows, unit);
+        rises(range) {
+            return windowed(read, { method: 'rises', topic, range, extra: undefined, unit });
         },
-        async changes(range) {
-            const rows = await read.changes(
-                topic,
-                range.start.toISOString(),
-                range.end.toISOString()
-            );
-            return seriesRows(rows, unit);
+        changes(range) {
+            return windowed(read, { method: 'changes', topic, range, extra: undefined, unit });
+        },
+        holds(range, step) {
+            return windowed(read, { method: 'holds', topic, range, extra: step, unit });
         },
         stream(since, step, callback, clock) {
             return pollStream({ read, topic, since, step, callback, clock, unit });

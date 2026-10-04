@@ -43,6 +43,26 @@ describe('machineClient', function() {
         assert(fetchedUrl.includes('mode=rises'), 'measurements omitted the rises mode');
     });
 
+    it('fetches hold spans with a mode query', async function() {
+        let fetchedUrl;
+        const fakeFetch = async (url) => {
+            fetchedUrl = url;
+            return { ok: true, json: async () => {return { items: [] }} };
+        };
+        const client = machineClient('http://localhost/api', 'm1', fakeFetch, function() {});
+        await client.measurements({
+            keys: ['diameter'],
+            from: 'now-60d',
+            to: 'now',
+            mode: 'holds',
+            step: 3
+        });
+        assert(
+            fetchedUrl.includes('mode=holds') && fetchedUrl.includes('step=3'),
+            'measurements omitted the holds mode'
+        );
+    });
+
     it('fetches measurements without options', async function() {
         let fetchedUrl;
         const fakeFetch = async (url) => {

@@ -1,7 +1,18 @@
 import risesSql from './risesSql.js';
 import changesSql from './changesSql.js';
+import holdsSql from './holdsSql.js';
 import queryTopic from './queryTopic.js';
 import rangeSql from './rangeSql.js';
+
+async function pollRows(pool, topic, afterIso, untilIso) {
+    const result = await pool.query(
+        'SELECT ts, value FROM metrics WHERE topic = $1 AND ts > $2 AND ts <= $3 ORDER BY ts LIMIT 100',
+        [topic, afterIso, untilIso]
+    );
+    return result.rows.map((row) => {
+        return { ts: row.ts, value: row.value };
+    });
+}
 
 export default function metricsStatePg(pool) {
     return {
@@ -22,14 +33,16 @@ export default function metricsStatePg(pool) {
         changesForTopic(topic, startIso, endIso) {
             return queryTopic(pool, changesSql(), [topic, startIso, endIso]);
         },
-        async pollTopic(topic, afterIso, untilIso) {
-            const result = await pool.query(
-                'SELECT ts, value FROM metrics WHERE topic = $1 AND ts > $2 AND ts <= $3 ORDER BY ts LIMIT 100',
-                [topic, afterIso, untilIso]
-            );
-            return result.rows.map((row) => {
-                return { ts: row.ts, value: row.value };
-            });
+        holdsForTopic(topic, startIso, endIso, stepMs) {
+            return queryTopic(pool, holdsSql(), [
+                topic,
+                startIso,
+                endIso,
+                Math.max(1, Number(stepMs) || 1000)
+            ]);
+        },
+        pollTopic(topic, afterIso, untilIso) {
+            return pollRows(pool, topic, afterIso, untilIso);
         },
         async insertRows(items) {
             const topics = items.map((row) => {
