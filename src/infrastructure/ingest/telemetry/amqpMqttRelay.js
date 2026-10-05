@@ -1,4 +1,4 @@
-import amqp from 'amqplib';
+import durableConsume from '../durableConsume.js';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 
 /**
@@ -34,37 +34,34 @@ export function relayConsumer(sink, channel) {
  * @param {object} [options] - prefetch count
  * @returns {object} Relay with start and stop
  */
+function subscribeRelay(queue, prefetch, sink) {
+    return async (channel) => {
+        await channel.assertQueue(queue, { durable: true });
+        channel.prefetch(prefetch);
+        const onMessage = relayConsumer(sink, channel);
+        const tag = await channel.consume(queue, onMessage, { noAck: false });
+        return tag.consumerTag;
+    };
+}
+
 export default function amqpMqttRelay(amqpUrl, queue, sink, options = {}) {
     const prefetch = options.prefetch || 32;
-    let session;
+    let opened = false;
+    const session = durableConsume(
+        amqpUrl,
+        subscribeRelay(queue, prefetch, sink),
+        options
+    );
     return {
-        async start() {
-            if (session) {
-                return;
+        start() {
+            if (!opened) {
+                opened = true;
+                sink.start();
             }
-            const conn = await amqp.connect(amqpUrl);
-            const ch = await conn.createChannel();
-            if (session) {
-                await ch.close();
-                await conn.close();
-                return;
-            }
-            await ch.assertQueue(queue, { durable: true });
-            ch.prefetch(prefetch);
-            sink.start();
-            const onMessage = relayConsumer(sink, ch);
-            const tag = await ch.consume(queue, onMessage, { noAck: false });
-            session = { conn, channel: ch, tag: tag.consumerTag };
+            return session.start();
         },
         async stop() {
-            const active = session;
-            if (!active) {
-                return;
-            }
-            session = undefined;
-            await active.channel.cancel(active.tag);
-            await active.channel.close();
-            await active.conn.close();
+            await session.stop();
             sink.stop();
         }
     };

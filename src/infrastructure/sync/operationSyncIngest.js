@@ -1,4 +1,4 @@
-import amqp from 'amqplib';
+import durableConsume from '../ingest/durableConsume.js';
 import operationCodec from './operationCodec.js';
 import operationSyncSink from './operationSyncSink.js';
 
@@ -43,40 +43,31 @@ export function operationConsumer(codec, channel) {
  *   const ingest = operationSyncIngest(amqpUrl, 'scada.operations.ingest', dataAccess.operations);
  *   await ingest.start();
  */
+function subscribeOperations(queue, prefetch, codec) {
+    return async (channel) => {
+        await channel.assertQueue(queue, { durable: true });
+        channel.prefetch(prefetch);
+        const onMessage = operationConsumer(codec, channel);
+        const tag = await channel.consume(queue, onMessage, { noAck: false });
+        return tag.consumerTag;
+    };
+}
+
 export default function operationSyncIngest(amqpUrl, queue, operations, options = {}) {
     const prefetch = options.prefetch || 32;
     const sink = operationSyncSink(operations);
     const codec = operationCodec(sink);
-    let session;
+    const session = durableConsume(
+        amqpUrl,
+        subscribeOperations(queue, prefetch, codec),
+        options
+    );
     return {
-        async start() {
-            if (session) {
-                return;
-            }
-            const conn = await amqp.connect(amqpUrl);
-            const ch = await conn.createChannel();
-            await ch.assertQueue(queue, { durable: true });
-            ch.prefetch(prefetch);
-            const onMessage = operationConsumer(codec, ch);
-            const tag = await ch.consume(queue, onMessage, { noAck: false });
-            const started = { conn, channel: ch, tag: tag.consumerTag };
-            if (session) {
-                await ch.cancel(tag.consumerTag);
-                await ch.close();
-                await conn.close();
-                return;
-            }
-            session = started;
+        start() {
+            return session.start();
         },
-        async stop() {
-            const active = session;
-            if (!active) {
-                return;
-            }
-            session = undefined;
-            await active.channel.cancel(active.tag);
-            await active.channel.close();
-            await active.conn.close();
+        stop() {
+            return session.stop();
         }
     };
 }

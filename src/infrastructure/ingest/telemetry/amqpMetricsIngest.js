@@ -1,5 +1,5 @@
-import amqp from 'amqplib';
 import { batch, circuit, clock, timedBatch } from '@yarkivaev/source-to-sink';
+import durableConsume from '../durableConsume.js';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 import metricsCodec from '../mqtt/metricsTransformer.js';
 import streamNameFromTopic from './streamNameFromTopic.js';
@@ -50,44 +50,37 @@ export function telemetryConsumer(codec, channel, onSeen) {
  * @param {object} [options] - batch and prefetch options
  * @returns {object} ingest with start and stop
  */
+function subscribeMetrics(queue, prefetch, codec, onSeen) {
+    return async (channel) => {
+        await channel.assertQueue(queue, { durable: true });
+        channel.prefetch(prefetch);
+        const onMessage = telemetryConsumer(codec, channel, onSeen);
+        const tag = await channel.consume(queue, onMessage, { noAck: false });
+        return tag.consumerTag;
+    };
+}
+
 export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
     const prefetch = options.prefetch || 32;
     const size = options.size || 100;
     const interval = options.interval || 5;
     const threshold = options.threshold || 5;
     const timeout = options.timeout || 60;
-    let session;
     const clk = clock();
     const breaker = circuit(threshold, timeout, clk);
     const collector = timedBatch(batch(sink, size, breaker), interval);
     const codec = metricsCodec(collector);
+    const session = durableConsume(
+        amqpUrl,
+        subscribeMetrics(queue, prefetch, codec, options.onSeen),
+        options
+    );
     return {
-        async start() {
-            if (session) {
-                return;
-            }
-            const conn = await amqp.connect(amqpUrl);
-            const ch = await conn.createChannel();
-            if (session) {
-                await ch.close();
-                await conn.close();
-                return;
-            }
-            await ch.assertQueue(queue, { durable: true });
-            ch.prefetch(prefetch);
-            const onMessage = telemetryConsumer(codec, ch, options.onSeen);
-            const tag = await ch.consume(queue, onMessage, { noAck: false });
-            session = { conn, channel: ch, tag: tag.consumerTag };
+        start() {
+            return session.start();
         },
         async stop() {
-            const active = session;
-            if (!active) {
-                return;
-            }
-            session = undefined;
-            await active.channel.cancel(active.tag);
-            await active.channel.close();
-            await active.conn.close();
+            await session.stop();
             collector.stop();
         }
     };
