@@ -152,8 +152,8 @@ export default [
     },
     {
         files: [
-            'src/infrastructure/ingest/telemetry/amqpMetricsIngest.js',
-            'src/infrastructure/ingest/telemetry/amqpMqttRelay.js', 'src/infrastructure/http/plant/inspect/cdpShot.js'
+            'src/infrastructure/ingest/durableConsume.js', 'src/infrastructure/ingest/telemetry/amqpMetricsIngest.js',
+            'src/infrastructure/ingest/telemetry/amqpMqttRelay.js', 'src/infrastructure/http/plant/inspect/cdpShot.js', 'src/infrastructure/sync/operationSyncIngest.js'
         ],
         rules: {
             'require-atomic-updates': 'off',
