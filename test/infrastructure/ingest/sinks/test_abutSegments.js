@@ -15,9 +15,11 @@ describe('abutSegments', function() {
         const sql = queries[0].sql.replace(/\s+/gu, ' ');
         assert.ok(
             sql.includes('SET end_time = right_row.start_time') &&
+                sql.includes('ORDER BY next.start_time') &&
+                sql.includes('LIMIT 1') &&
                 sql.includes('left_row.name = right_row.name') &&
                 queries[0].params[0] === budget,
-            'startup repair did not close gaps between continuous same-name segments'
+            'startup repair did not stop at the immediate next segment inside the budget'
         );
     });
 });

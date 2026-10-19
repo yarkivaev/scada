@@ -18,6 +18,25 @@ describe('silentOpenWatch', function() {
         assert.ok(closed.length >= 1, 'open segment was not closed after wall-clock silence');
     });
 
+    it('does not start another close while one close is still running', async function() {
+        let calls = 0;
+        const budget = Math.floor(Math.random() * 40) + 10;
+        const closer = {
+            close() {
+                calls += 1;
+                if (calls === 1) {
+                    return Promise.resolve();
+                }
+                return new Promise(() => {});
+            }
+        };
+        const watch = silentOpenWatch(closer, budget, { intervalMs: 20 });
+        await watch.start();
+        await new Promise((resolve) => { setTimeout(resolve, 100); });
+        watch.stop();
+        assert.strictEqual(calls, 2, 'silence watch started another close while one was running');
+    });
+
     it('passes the silence budget into each close call', async function() {
         const closed = [];
         const budget = Math.floor(Math.random() * 40) + 10;
