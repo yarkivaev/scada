@@ -31,6 +31,28 @@ describe('closeSilentOpen', function() {
         );
     });
 
+    it('measures silence from the last write, not from a historical data end', async function() {
+        const pool = fakePool();
+        const closer = closeSilentOpen(pool);
+        await closer.close(30);
+        const sql = pool.queries[0].sql.replace(/\s+/gu, ' ');
+        assert.ok(
+            /updated_at\s*<\s*NOW\(\)/u.test(sql),
+            'silence close treated a replayed past end as idle wall-clock time'
+        );
+    });
+
+    it('does not compare segment end_time to wall-clock now', async function() {
+        const pool = fakePool();
+        const closer = closeSilentOpen(pool);
+        await closer.close(30);
+        const sql = pool.queries[0].sql.replace(/\s+/gu, ' ');
+        assert.ok(
+            !/end_time\s*<\s*NOW\(\)/u.test(sql),
+            'silence close still closes historical replay while heartbeats continue'
+        );
+    });
+
     it('does not treat Started rows with end equal to start as stale activity', async function() {
         const pool = fakePool();
         const closer = closeSilentOpen(pool);

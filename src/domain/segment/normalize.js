@@ -27,6 +27,7 @@ export default function segmentNormalize(parsed) {
         options: parsed.options ? JSON.stringify(parsed.options) : null,
         tags: parsed.tags ? JSON.stringify(parsed.tags) : null,
         properties: parsed.properties ? JSON.stringify(parsed.properties) : null,
-        resolved
+        resolved,
+        updated_at: new Date().toISOString()
     };
 }

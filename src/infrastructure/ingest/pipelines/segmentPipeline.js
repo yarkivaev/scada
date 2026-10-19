@@ -7,16 +7,18 @@ import segmentCoalesce from '../../../domain/segment/segmentCoalesce.js';
 import silenceBudget from '../../../domain/segment/silenceBudget.js';
 import segmentCodec from '../codecs/segmentCodec.js';
 import silentOpenWatch from '../silentOpenWatch.js';
+import abutSegments from '../sinks/abutSegments.js';
 import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import closeSilentOpen from '../sinks/closeSilentOpen.js';
+import continuedSegments from '../sinks/continuedSegments.js';
 import retagSink from '../sinks/retagSink.js';
 
 export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_time', 'duration',
-                               'options', 'tags', 'properties', 'resolved'];
+                               'options', 'tags', 'properties', 'resolved', 'updated_at'];
 export const segmentConflict = ['machine', 'kind', 'start_time'];
-export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved'];
+export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved', 'updated_at'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'resolved'];
-export const segmentUpdateWhere = 'segments.duration = 0 OR EXCLUDED.duration > 0';
+export const segmentUpdateWhere = 'segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time';
 export const segmentsIngestDestination = '/queue/scada.segments.ingest';
 
 export { default as segmentDispatch } from '../../../domain/segment/dispatch.js';
@@ -51,8 +53,10 @@ function segmentSinks(postgres, pool) {
  * @returns {object} Pipeline with start() and stop() methods
  */
 export default function segmentPipeline(stomp, postgres, pool, config) {
+    const budget = silenceBudget(config.segmentWindow || 15);
     const { segmentSink, splitSink } = segmentSinks(postgres, pool);
-    const dispatch = segmentDispatch(segmentSink, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
+    const continued = continuedSegments(segmentSink, pool, budget);
+    const dispatch = segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
     const coalesce = segmentCoalesce(segmentCodec(dispatch), {
         size: config.size,
         interval: config.interval
@@ -65,15 +69,15 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         serial: false,
         manualAck: true
     });
-    const budget = silenceBudget(config.segmentWindow || 15);
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
         intervalMs: (config.poll || 5) * 1000
     });
     return {
         destination,
-        start() {
+        async start() {
+            await abutSegments(pool, budget);
             source.start();
-            void silence.start();
+            await silence.start();
         },
         stop() {
             silence.stop();
