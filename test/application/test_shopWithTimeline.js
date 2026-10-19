@@ -196,4 +196,49 @@ describe('shopWithTimeline postgres confirm', function() {
             'missing segment still published a user decision'
         );
     });
+
+    it('publishes a split and deletes the stale family start', async function() {
+        const machine = `ичт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const start = new Date('2026-10-19T06:02:18.000Z');
+        const cut = new Date('2026-10-19T06:25:00.000Z');
+        const end = new Date('2026-10-19T06:47:06.000Z');
+        const sql = [];
+        const sent = [];
+        const client = {
+            query(text) {
+                sql.push(String(text));
+                return Promise.resolve({});
+            },
+            release() {}
+        };
+        const pool = {
+            connect() {
+                return Promise.resolve(client);
+            },
+            async query(text) {
+                if (String(text).includes('SELECT')) {
+                    return { rows: [{ name: 'off', start_time: start, end_time: end, duration: 2690 }] };
+                }
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        const tl = shopWithTimeline(machine, {
+            pool,
+            userDecisions: {
+                async publishSplit(_machine, _start, splits) {
+                    sent.push(splits);
+                }
+            }
+        });
+        await tl.respond(start.toISOString(), {
+            splits: [
+                { start, end: cut, tag: 'шлак' },
+                { start: cut, end, tag: '' }
+            ]
+        }, audit(41));
+        assert.deepStrictEqual({
+            tail: sent[0][1].tag,
+            deleted: sql.some((row) => row.includes('DELETE'))
+        }, { tail: '', deleted: true }, 'split respond did not publish the untagged tail and delete the stale start');
+    });
 });

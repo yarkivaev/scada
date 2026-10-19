@@ -10,6 +10,30 @@ function authHeaders(token) {
     return headers;
 }
 
+function operatorId(body, audit) {
+    if (audit && audit.id !== undefined && audit.id !== null) {
+        body.operatorId = audit.id;
+    }
+    return body;
+}
+
+function splitBody(splits, audit) {
+    return operatorId({
+        splits: (splits || []).map((piece) => {
+            return {
+                start: piece.start.toISOString(),
+                end: piece.end.toISOString(),
+                tag: piece.tag || '',
+                open: Boolean(piece.open)
+            };
+        })
+    }, audit);
+}
+
+function respondBody(tags, properties, audit) {
+    return operatorId({ tags: tags || [], properties: properties || {} }, audit);
+}
+
 function writeBody(start, tags, properties, audit) {
     const body = {
         start: start.toISOString(),
@@ -86,14 +110,11 @@ export default function httpTimeline(site, machineId) {
         },
         async respond(start, tags, properties, audit) {
             const requestId = encodeURIComponent(start.toISOString());
-            const body = {
-                tags: tags || [],
-                properties: properties || {}
-            };
-            if (audit && audit.id !== undefined && audit.id !== null) {
-                body.operatorId = audit.id;
-            }
-            await send('POST', `/machines/${encodeURIComponent(machineId)}/requests/${requestId}/respond`, body);
+            await send('POST', `/machines/${encodeURIComponent(machineId)}/requests/${requestId}/respond`, respondBody(tags, properties, audit));
+        },
+        async respondSplit(start, splits, audit) {
+            const requestId = encodeURIComponent(start.toISOString());
+            await send('POST', `/machines/${encodeURIComponent(machineId)}/requests/${requestId}/respond`, splitBody(splits, audit));
         }
     });
 }

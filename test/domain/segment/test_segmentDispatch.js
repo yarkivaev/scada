@@ -32,6 +32,27 @@ describe('segmentDispatch', function() {
         assert.strictEqual(retagged.length, 1, 'retag record was not routed to retag sink');
     });
 
+    it('replaces a split family through the pool', async function() {
+        const seen = [];
+        const client = {
+            query(text) {
+                seen.push(text);
+                return Promise.resolve({});
+            },
+            release() {}
+        };
+        const route = segmentDispatch(fakeSink(), { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser(), {
+            connect() { return Promise.resolve(client); }
+        });
+        await route.accept({
+            type: 'split-family',
+            machine: `ičt-${Math.random()}`,
+            origin: Date.now(),
+            pieces: [{ start_time: new Date().toISOString(), machine: 'm', kind: 'phase', name: 'off' }]
+        });
+        assert.ok(seen.some(function (row) { return String(row).includes('DELETE'); }), 'family replace did not delete');
+    });
+
     it('routes split records to split sink', async function() {
         const split = fakeSink();
         const route = segmentDispatch(fakeSink(), { accept() { return Promise.resolve(); } }, split, fakeCloser());

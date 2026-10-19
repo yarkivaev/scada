@@ -6,6 +6,7 @@ import memoryTimelineStore, { memoryTimelineRead } from '../infrastructure/persi
 import ownerTimeline from '../infrastructure/messaging/ownership/ownerTimeline.js';
 import stompTimeline from '../infrastructure/messaging/stomp/timeline.js';
 import retagBody from '../infrastructure/messaging/stomp/retagBody.js';
+import { checkSplit, replaceSplit, splitRows } from '../domain/segment/splitFamily.js';
 
 function parseStart(requestId) {
     const raw = decodeURIComponent(String(requestId));
@@ -92,12 +93,64 @@ async function persistTags(pool, patch) {
     return state.rowAt(patch.machine, patch.start);
 }
 
+function asPiece(piece) {
+    return {
+        start: new Date(piece.start),
+        end: new Date(piece.end),
+        tag: piece.tag || '',
+        open: Boolean(piece.open)
+    };
+}
+
+async function applySplit(scope) {
+    if (ownsLocal(scope.owners, scope.machine)) {
+        const parent = await segmentStatePg(scope.pool).rowAt(scope.machine, scope.start);
+        const ordered = checkSplit(parent, scope.splits);
+        const pieces = splitRows(scope.machine, ordered);
+        await replaceSplit(scope.pool, {
+            machine: scope.machine,
+            origin: ordered[0].start.getTime(),
+            pieces
+        });
+    }
+    await scope.write.respondSplit(scope.start, scope.splits.map(asPiece), scope.audit);
+}
+
 async function confirm(pool, patch, segments) {
     const row = await persistTags(pool, patch);
     if (segments) {
         await segments.publish(retagBody(patch.machine, row, patch.tags, patch.properties || {}));
     }
     return row;
+}
+
+async function answer(scope, requestId, body, audit) {
+    const start = parseStart(requestId);
+    if (Array.isArray(body.splits)) {
+        await applySplit({
+            pool: scope.pool,
+            owners: scope.owners,
+            machine: scope.name,
+            start,
+            splits: body.splits,
+            write: scope.write,
+            audit
+        });
+        scope.bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
+        return { id: requestId, ...body };
+    }
+    if (ownsLocal(scope.owners, scope.name)) {
+        await confirm(scope.pool, {
+            machine: scope.name,
+            start,
+            tags: body.tags,
+            properties: body.properties || {},
+            resolved: true
+        }, scope.segments);
+    }
+    await scope.write.respond(start, body.tags, body.properties || {}, audit);
+    scope.bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
+    return { id: requestId, ...body };
 }
 
 /**
@@ -139,20 +192,8 @@ export default function shopWithTimeline(name, options) {
                 await write.retag(start, tags, properties, audit);
                 bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties), audit });
             },
-            async respond(requestId, body, audit) {
-                const start = parseStart(requestId);
-                if (ownsLocal(owners, name)) {
-                    await confirm(pool, {
-                        machine: name,
-                        start,
-                        tags: body.tags,
-                        properties: body.properties || {},
-                        resolved: true
-                    }, segments);
-                }
-                await write.respond(start, body.tags, body.properties || {}, audit);
-                bus.emit({ type: 'resolved', request: { id: requestId, start }, audit });
-                return { id: requestId, ...body };
+            respond(requestId, body, audit) {
+                return answer({ pool, owners, name, segments, write, bus }, requestId, body, audit);
             }
         };
     }

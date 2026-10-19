@@ -101,7 +101,7 @@ describe('segmentPipeline upsert configuration', function() {
     it('guards conflict update so a stale pending cannot reopen a completed span', function() {
         assert.strictEqual(
             segmentUpdateWhere,
-            'segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time',
+            '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\')',
             'segment upsert must keep a completed span against a pending heartbeat that is not later'
         );
     });
