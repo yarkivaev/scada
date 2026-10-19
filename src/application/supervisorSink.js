@@ -7,6 +7,7 @@ import migrate, { migratePrivileged } from '../infrastructure/ingest/db/migrate.
 import stateDataFromPool from '../infrastructure/persistence/stateDataFromPool.js';
 import { parseRequestTimeoutMs } from '../infrastructure/ingest/parseRequestTimeoutMs.js';
 import pg from 'pg';
+import { holdClient } from '../infrastructure/persistence/postgresPool.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -59,7 +60,7 @@ export function readDeploymentConfig(env) {
  */
 export default function supervisorSink(env = process.env) {
     const cfg = readDeploymentConfig(env);
-    const pool = new pg.Pool({ connectionString: cfg.postgres });
+    const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres }));
     const segments = segmentPipeline(cfg.stomp, cfg.postgres, pool, cfg.pipeline);
     const decisions = decisionPipeline(cfg.stomp, pool, cfg.pipeline);
     const alerts = alertPipeline(cfg.stomp, pool, cfg.pipeline);
@@ -79,7 +80,7 @@ export default function supervisorSink(env = process.env) {
             if (!cfg.postgresAdmin) {
                 throw new Error('POSTGRES_ADMIN_URL is required for supervisor-sink database migrations');
             }
-            const adminPool = new pg.Pool({ connectionString: cfg.postgresAdmin });
+            const adminPool = holdClient(new pg.Pool({ connectionString: cfg.postgresAdmin }));
             try {
                 await migrate(adminPool, cfg.migrationsDir, cfg.sinkDbProfile);
                 await migratePrivileged(adminPool, cfg.migrationsDir, cfg.sinkDbProfile);
