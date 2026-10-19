@@ -6,6 +6,7 @@ import segmentDispatch from '../../../domain/segment/dispatch.js';
 import segmentCoalesce from '../../../domain/segment/segmentCoalesce.js';
 import silenceBudget from '../../../domain/segment/silenceBudget.js';
 import segmentCodec from '../codecs/segmentCodec.js';
+import processingErrorLog from '../processingErrorLog.js';
 import silentOpenWatch from '../silentOpenWatch.js';
 import abutSegments from '../sinks/abutSegments.js';
 import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
@@ -75,7 +76,10 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     return {
         destination,
         async start() {
-            await abutSegments(pool, budget);
+            const repair = abutSegments(pool, budget);
+            void repair.catch((error) => {
+                processingErrorLog('abut_segments', error, { budgetSeconds: budget });
+            });
             source.start();
             await silence.start();
         },
