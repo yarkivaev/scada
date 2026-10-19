@@ -87,7 +87,7 @@ export default function supervisorSink(env = process.env) {
             } finally {
                 await adminPool.end();
             }
-            segments.start();
+            await segments.start();
             decisions.start();
             alerts.start();
             if (httpServer) {

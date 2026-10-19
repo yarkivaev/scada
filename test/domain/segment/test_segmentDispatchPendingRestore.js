@@ -13,7 +13,9 @@ function upsertSink() {
             for (const record of records) {
                 const key = `${record.machine}|${record.start_time}`;
                 const prior = rows.get(key);
-                if (!(prior && prior.duration > 0 && record.duration === 0)) {
+                const stale = prior && prior.duration > 0 && record.duration === 0 &&
+                    !(Date.parse(record.end_time) > Date.parse(prior.end_time));
+                if (!stale) {
                     rows.set(key, { ...prior, ...record });
                 }
             }
@@ -30,13 +32,12 @@ describe('segmentDispatch pending restore', function() {
         const machine = `ičt-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_000_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const mid = new Date(Date.parse(start) + 45_000).toISOString();
-        const later = new Date(Date.parse(start) + 90_000).toISOString();
         const span = 40 + Math.floor(Math.random() * 20);
         await route.accept({
             type: 'segment', machine, name: 'on', start_time: start, end_time: mid, duration: span
         });
         await route.accept({
-            type: 'segment', machine, name: 'on', start_time: start, end_time: later, duration: 0
+            type: 'segment', machine, name: 'on', start_time: start, end_time: mid, duration: 0
         });
         const row = sink.rows.get(`${machine}|${start}`);
         assert.strictEqual(row.duration, span, 'pending heartbeat reopened a completed segment');

@@ -8,7 +8,8 @@ import {
 } from '../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js';
 
 function allows(existing, incoming) {
-    return existing.duration === 0 || incoming.duration > 0;
+    const later = Date.parse(incoming.end_time) > Date.parse(existing.end_time);
+    return existing.duration === 0 || incoming.duration > 0 || later;
 }
 
 function upsertStore(conflict, update) {
@@ -97,11 +98,18 @@ describe('segmentPipeline upsert configuration', function() {
         );
     });
 
-    it('guards conflict update so pending cannot reopen a completed span', function() {
+    it('guards conflict update so a stale pending cannot reopen a completed span', function() {
         assert.strictEqual(
             segmentUpdateWhere,
-            'segments.duration = 0 OR EXCLUDED.duration > 0',
-            'segment upsert must keep completed duration against a late pending'
+            'segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time',
+            'segment upsert must keep a completed span against a pending heartbeat that is not later'
+        );
+    });
+
+    it('refreshes updated_at when a segment row is upserted', function() {
+        assert.ok(
+            segmentUpdateColumns.includes('updated_at'),
+            'segment upsert must record the wall-clock time of the last heartbeat'
         );
     });
 });
@@ -127,6 +135,26 @@ describe('segmentPipeline monotonic upsert', function() {
             span,
             'pending heartbeat reopened a completed segment'
         );
+    });
+
+    it('reopens a closed segment when a later heartbeat continues it', async function() {
+        const machine = `ičt-${Math.random()}`;
+        const start = new Date(1_700_000_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
+        const frozen = new Date(Date.parse(start) + 12_000).toISOString();
+        const next = new Date(Date.parse(start) + 47_000).toISOString();
+        const store = upsertStore(segmentConflict, segmentUpdateColumns);
+        await store.write([{
+            machine, kind: 'phase', name: 'on', start_time: start,
+            end_time: frozen, duration: 12, options: null, tags: null,
+            properties: '{}', resolved: true
+        }]);
+        await store.write([{
+            machine, kind: 'phase', name: 'on', start_time: start,
+            end_time: next, duration: 0, options: null, tags: null,
+            properties: '{}', resolved: true, updated_at: next
+        }]);
+        const row = store.rows.get(`${machine}\u0000phase\u0000${start}`);
+        assert.strictEqual(row.end_time, next, 'later heartbeat did not extend a silence-closed segment');
     });
 
     it('lets a late close replace an orphan one-second stub', async function() {

@@ -1,7 +1,8 @@
 import processingErrorLog from '../processingErrorLog.js';
 
 /**
- * Closes open segment rows whose advanced end boundary is older than a wall-clock silence budget.
+ * Closes open segment rows that have not been written for a wall-clock silence budget.
+ * Freshness is updated_at, so replaying historical samples does not look idle.
  * Requires end_time > start_time so a lone Started (end equals start) is never treated as silence.
  * Does not insert a replacement Started row.
  *
@@ -27,7 +28,7 @@ export default function closeSilentOpen(pool) {
                          )
                      WHERE duration = 0
                        AND end_time > start_time
-                       AND end_time < NOW() - make_interval(secs => $1)`,
+                       AND updated_at < NOW() - make_interval(secs => $1)`,
                     [budgetSeconds]
                 );
             } catch (error) {
