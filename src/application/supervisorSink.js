@@ -15,6 +15,8 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Reads deployment environment into a normalized config object.
+ * `SINK_PIPELINES=false` leaves Postgres and the state HTTP API in this process
+ * and leaves the STOMP consumers to another container.
  *
  * @param {NodeJS.ProcessEnv} env - process environment
  * @returns {object} deployment configuration
@@ -35,6 +37,7 @@ export function readDeploymentConfig(env) {
         retentionDays: parseInt(env.RETENTION_DAYS || '30', 10),
         migrationsDir: path.join(root, 'db', 'migrations'),
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
+        pipelines: env.SINK_PIPELINES !== 'false',
         pipeline: {
             size: parseInt(env.BATCH_SIZE || '50', 10),
             interval: parseInt(env.FLUSH_INTERVAL || '2', 10),
@@ -87,9 +90,11 @@ export default function supervisorSink(env = process.env) {
             } finally {
                 await adminPool.end();
             }
-            await segments.start();
-            decisions.start();
-            alerts.start();
+            if (cfg.pipelines) {
+                await segments.start();
+                decisions.start();
+                alerts.start();
+            }
             if (httpServer) {
                 httpServer.start();
             }

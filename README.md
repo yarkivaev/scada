@@ -194,6 +194,7 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 | `POSTGRES_URL` | Application DB user (`supervisor_sink`) |
 | `POSTGRES_ADMIN_URL` | Admin user for migrations |
 | `SINK_DB_PROFILE` | `central` or `edge` |
+| `SINK_PIPELINES` | `false` skips STOMP segment, decision, and alert consumers. The site container sets this and a `supervisor-sink` container keeps the default |
 | `STATE_HTTP_PORT` / `STATE_HTTP_TOKEN` | Edge internal API |
 | `MQTT_URL`, `MQTT_TOPICS` | Optional metrics ingest |
 | `CLICKHOUSE_URL` | Central metrics sink |
