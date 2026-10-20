@@ -18,7 +18,14 @@ async function rejectUnknownTags(timeline, parsed, machineId, res, decorate) {
         return false;
     }
     const [gated] = await decorate(machineId, [row]);
-    if (allowedSegmentTags(gated.options, gated.tags, parsed.tags)) {
+    const wanted = Array.isArray(parsed.splits)
+        ? parsed.splits.map((piece) => {
+            return piece.tag;
+        }).filter((id) => {
+            return id;
+        })
+        : parsed.tags;
+    if (allowedSegmentTags(gated.options, gated.tags, wanted)) {
         return false;
     }
     errorResponse('BAD_REQUEST', `Tag is not in segment options for ${machineId}`, 400).send(res);
@@ -88,6 +95,10 @@ export default function timelineRoute(basePath, plant, operatorOptions, decorate
                     return;
                 }
                 await handleOperatorWrite(gate, parsed, async (audit) => {
+                    if (Array.isArray(parsed.splits)) {
+                        await result.machine.timeline.respond(new Date(parsed.start).toISOString(), parsed, audit);
+                        return;
+                    }
                     await result.machine.timeline.retag(new Date(parsed.start), parsed.tags, parsed.properties, audit);
                 });
                 jsonResponse({ status: 'updated' }).send(res);

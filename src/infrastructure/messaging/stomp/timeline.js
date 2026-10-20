@@ -16,6 +16,9 @@ export default function stompTimeline(decisions, machineId) {
         },
         async respond(start, tags, properties, audit) {
             await decisions.publish(machineId, start, tags, properties, audit);
+        },
+        async respondSplit(start, splits, audit) {
+            await decisions.publishSplit(machineId, start, splits, audit);
         }
     };
 }

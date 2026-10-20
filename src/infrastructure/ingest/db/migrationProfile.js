@@ -20,6 +20,7 @@ const privilegedOnly = new Set([
     'C0004__central_operations_grants.sql',
     'C0005__central_operators_grants.sql',
     'C0006__central_operators_registration.sql',
+    'C0007__central_segment_replace_delete.sql',
     'E0002__edge_retention_delete.sql',
     'E0003__edge_operations_grants.sql',
     'E0004__edge_operations_delete.sql'

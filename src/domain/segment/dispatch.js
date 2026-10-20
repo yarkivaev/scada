@@ -1,3 +1,5 @@
+import { replaceSplit } from './splitFamily.js';
+
 /**
  * Persists a pending heartbeat, optionally inside one pool transaction.
  *
@@ -45,6 +47,13 @@ async function persistPending(segmentSink, closer, pool, record) {
  *   const route = segmentDispatch(segmentSink, retag, splitSink, closer, pool);
  *   await route.accept({ type: 'segment', machine: 'm1', start_time: '...', duration: 0 });
  */
+async function acceptFamily(pool, record) {
+    if (!pool || typeof pool.connect !== 'function') {
+        throw new Error('split-family requires a pool');
+    }
+    await replaceSplit(pool, record);
+}
+
 export default function segmentDispatch(segmentSink, retag, splitSink, closer, pool) {
     return {
         async accept(record) {
@@ -54,6 +63,10 @@ export default function segmentDispatch(segmentSink, retag, splitSink, closer, p
             }
             if (record.type === 'split') {
                 await splitSink.write([record]);
+                return;
+            }
+            if (record.type === 'split-family') {
+                await acceptFamily(pool, record);
                 return;
             }
             if (record.type !== 'segment') {

@@ -3,6 +3,18 @@ import userDecisionBody from './userDecisionBody.js';
 
 const DEFAULT_DESTINATION = '/exchange/scada.user_decisions';
 
+function splitWire(piece) {
+    const row = {
+        start: piece.start.getTime() / 1000,
+        end: piece.end.getTime() / 1000,
+        tag: piece.tag || ''
+    };
+    if (piece.open) {
+        row.open = true;
+    }
+    return row;
+}
+
 /**
  * Publishes operator tag decisions to RabbitMQ for Scala supervisor.
  *
@@ -36,6 +48,11 @@ export default function userDecisions(config) {
          */
         async publish(machine, start, tags, properties, audit) {
             const body = userDecisionBody(machine, start, tags, properties, audit);
+            await stompSend(config.stompUrl, destination, body, stompOptions);
+        },
+        async publishSplit(machine, start, splits, audit) {
+            const body = userDecisionBody(machine, start, [], {}, audit);
+            body.splits = (splits || []).map(splitWire);
             await stompSend(config.stompUrl, destination, body, stompOptions);
         }
     };
