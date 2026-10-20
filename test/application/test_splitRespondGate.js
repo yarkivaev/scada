@@ -6,7 +6,7 @@ function audit(id) {
 }
 
 describe('shopWithTimeline split gate', function() {
-    it('does not publish a split whose closed piece is shorter than 60 seconds', async function() {
+    it('publishes a split whose closed piece is shorter than 60 seconds', async function() {
         const machine = `ичт-${Math.floor(Math.random() * 8000 + 1000)}`;
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 30000);
@@ -50,8 +50,8 @@ describe('shopWithTimeline split gate', function() {
         }
         assert.deepStrictEqual(
             { failed, published },
-            { failed: true, published: 0 },
-            'a short split was published to the supervisor'
+            { failed: false, published: 1 },
+            'a short split was not published to the supervisor'
         );
     });
 });

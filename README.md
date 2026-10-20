@@ -89,7 +89,7 @@ One `off` phase can be replaced by contiguous pieces. There is no parent row and
 
 A later edit sends the whole family again. `timeline.respond` / `PATCH /segments` take `{ splits: [{ start, end, tag, open }] }` addressed by the original start. The supervisor publishes one STOMP body, `type: split-family`, with `origin` in epoch millis and the pieces. The sink deletes family starts the new cut does not use, then upserts the pieces, in one transaction.
 
-The replacement must keep the original start and, for a closed off, the latest end of the stored family. Removing every piece but one therefore restores those bounds. `splits: []` is refused before any delete, and the stored family stays. A closed piece is at least 60 seconds. Only the tail of a still-open off may have `duration = 0`. A duration-0 heartbeat does not extend a closed piece that already has `split_of`.
+The replacement must keep the original start and, for a closed off, the latest end of the stored family. Removing every piece but one therefore restores those bounds. `splits: []` is refused before any delete, and the stored family stays. A piece may be any positive length. Only the tail of a still-open off may have `duration = 0`. A duration-0 heartbeat does not extend a closed piece that already has `split_of`.
 
 `C0007` grants `DELETE` on `segments` to `supervisor_sink` on the privileged admin path. The sink role does not run that grant itself. Central previously revoked this privilege (`C0002`).
 

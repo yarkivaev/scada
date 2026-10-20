@@ -89,16 +89,15 @@ describe('checkSplit adversarial bounds', function() {
         }, RangeError, 'a one millisecond gap was accepted');
     });
 
-    it('rejects a closed piece that lasts 59999 milliseconds', function() {
+    it('keeps a closed piece that lasts 59999 milliseconds', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 59999);
         const end = new Date(start.getTime() + 240000);
-        assert.throws(function() {
-            checkSplit(parent(start, end, 240), [
-                piece(start, cut, 'шлак'),
-                piece(cut, end, 'шихта')
-            ]);
-        }, RangeError, 'a 59999 millisecond piece was accepted');
+        const ordered = checkSplit(parent(start, end, 240), [
+            piece(start, cut, 'шлак'),
+            piece(cut, end, 'шихта')
+        ]);
+        assert.strictEqual(ordered[0].end.getTime() - start.getTime(), 59999, 'a 59999 millisecond piece was refused');
     });
 
     it('keeps a closed piece that lasts exactly 60 seconds', function() {

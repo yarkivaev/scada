@@ -1,5 +1,3 @@
-const MIN_MS = 60000;
-
 function dated(piece) {
     return {
         start: new Date(piece.start),
@@ -29,11 +27,8 @@ function refuseGap(ordered, piece, index) {
 
 function refuseSpan(piece) {
     const span = piece.end.getTime() - piece.start.getTime();
-    if (!piece.open && span < MIN_MS) {
-        throw new RangeError('piece is shorter than 60 seconds');
-    }
-    if (piece.open && span < 0) {
-        throw new RangeError('open tail ends before it starts');
+    if (span < 0) {
+        throw new RangeError('piece ends before it starts');
     }
 }
 
