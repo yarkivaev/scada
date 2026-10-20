@@ -238,7 +238,9 @@ describe('shopWithTimeline postgres confirm', function() {
         }, audit(41));
         assert.deepStrictEqual({
             tail: sent[0][1].tag,
-            deleted: sql.some((row) => row.includes('DELETE'))
+            deleted: sql.some((row) => {
+                return row.includes('DELETE');
+            })
         }, { tail: '', deleted: true }, 'split respond did not publish the untagged tail and delete the stale start');
     });
 });
