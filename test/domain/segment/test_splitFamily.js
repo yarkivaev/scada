@@ -30,13 +30,15 @@ describe('checkSplit', function() {
         }, RangeError, 'untagged family was accepted');
     });
 
-    it('rejects a piece shorter than one minute', function() {
+    it('keeps a closed piece shorter than one minute', function() {
         const start = new Date('2026-10-19T06:02:18.000Z');
         const cut = new Date(start.getTime() + 30000);
         const end = new Date('2026-10-19T06:47:06.000Z');
-        assert.throws(function() {
-            checkSplit(parent(start, end, 2690), [piece(start, cut, 'шлак'), piece(cut, end, 'шихта')]);
-        }, RangeError, 'short piece was accepted');
+        const ordered = checkSplit(parent(start, end, 2690), [
+            piece(start, cut, 'шлак'),
+            piece(cut, end, 'шихта')
+        ]);
+        assert.strictEqual(ordered[0].end.getTime() - ordered[0].start.getTime(), 30000, 'a 30 second piece was refused');
     });
 
     it('rejects a gap between pieces', function() {
