@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { checkSplit, replaceSplit, splitRows } from '../../../src/domain/segment/splitFamily.js';
+import { checkSplit, familyCover, replaceSplit, splitRows } from '../../../src/domain/segment/splitFamily.js';
 
 function parent(start, end, duration) {
     return { name: 'off', start_time: start, end_time: end, duration };
@@ -90,6 +90,27 @@ describe('checkSplit', function() {
     });
 });
 
+describe('familyCover', function() {
+    it('spans stored pieces from the original start through the latest end', function() {
+        const start = new Date('2026-10-19T06:02:18.400Z');
+        const cut = new Date('2026-10-19T06:25:00.000Z');
+        const end = new Date('2026-10-19T06:47:06.700Z');
+        const cover = familyCover([
+            { name: 'off', start_time: start, end_time: cut, duration: '1361.6' },
+            { name: 'off', start_time: cut, end_time: end, duration: '1326.7' }
+        ]);
+        assert.deepStrictEqual({
+            start: cover.start_time.getTime(),
+            end: cover.end_time.getTime(),
+            duration: cover.duration
+        }, {
+            start: start.getTime(),
+            end: end.getTime(),
+            duration: (end.getTime() - start.getTime()) / 1000
+        }, 'family cover kept the shortened first piece');
+    });
+});
+
 describe('replaceSplit', function() {
     it('deletes obsolete family starts and upserts the new pieces on one client', async function() {
         const sql = [];
@@ -113,5 +134,22 @@ describe('replaceSplit', function() {
         await replaceSplit(pool, { machine: 'ичт-2', origin: start.getTime(), pieces });
         assert.ok(sql.some(function (row) { return row.includes('DELETE FROM segments'); }), 'obsolete pieces were not deleted');
         assert.strictEqual(sql.filter(function (row) { return row.includes('INSERT INTO segments'); }).length, 2, 'both pieces were not upserted');
+    });
+
+    it('refuses an empty piece list before opening a transaction', async function() {
+        let opened = false;
+        const pool = {
+            connect() {
+                opened = true;
+                return Promise.resolve({ query() {}, release() {} });
+            }
+        };
+        let refused = false;
+        try {
+            await replaceSplit(pool, { machine: 'ичт-9', origin: 1729321338000, pieces: [] });
+        } catch (err) {
+            refused = err instanceof RangeError;
+        }
+        assert.deepStrictEqual({ refused, opened }, { refused: true, opened: false }, 'an empty split opened a transaction');
     });
 });

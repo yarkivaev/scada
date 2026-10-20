@@ -6,7 +6,7 @@ import memoryTimelineStore, { memoryTimelineRead } from '../infrastructure/persi
 import ownerTimeline from '../infrastructure/messaging/ownership/ownerTimeline.js';
 import stompTimeline from '../infrastructure/messaging/stomp/timeline.js';
 import retagBody from '../infrastructure/messaging/stomp/retagBody.js';
-import { checkSplit, replaceSplit, splitRows } from '../domain/segment/splitFamily.js';
+import { checkSplit, familyCover, loadFamily, replaceSplit, splitRows } from '../domain/segment/splitFamily.js';
 
 function parseStart(requestId) {
     const raw = decodeURIComponent(String(requestId));
@@ -104,8 +104,7 @@ function asPiece(piece) {
 
 async function applySplit(scope) {
     if (ownsLocal(scope.owners, scope.machine)) {
-        const parent = await segmentStatePg(scope.pool).rowAt(scope.machine, scope.start);
-        const ordered = checkSplit(parent, scope.splits);
+        const ordered = checkSplit(familyCover(await loadFamily(scope.pool, scope.machine, scope.start)), scope.splits);
         const pieces = splitRows(scope.machine, ordered);
         await replaceSplit(scope.pool, {
             machine: scope.machine,

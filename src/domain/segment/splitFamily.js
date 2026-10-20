@@ -121,6 +121,31 @@ async function writePieces(client, pieces) {
     }, Promise.resolve());
 }
 
+function openRow(row) {
+    return row.duration === 0 || row.duration === '0';
+}
+
+function byRowStart(left, right) {
+    return new Date(left.start_time) - new Date(right.start_time);
+}
+
+function widen(span, row) {
+    const end = new Date(row.end_time).getTime();
+    if (row.name !== 'off') {
+        throw new RangeError(`refusing to split ${row.name}`);
+    }
+    return {
+        end: end > span.end ? end : span.end,
+        pending: span.pending || openRow(row)
+    };
+}
+
+function refuseEmpty(record) {
+    if (!record || !Array.isArray(record.pieces) || record.pieces.length === 0) {
+        throw new RangeError('refusing an empty split');
+    }
+}
+
 async function removeObsolete(client, record) {
     const starts = record.pieces.map(startOf);
     const origin = new Date(Number(record.origin)).toISOString();
@@ -131,6 +156,53 @@ async function removeObsolete(client, record) {
            AND NOT (start_time = ANY($4::timestamptz[]))`,
         [record.machine, origin, String(record.origin), starts]
     );
+}
+
+/**
+ * Reads every phase row of one split family. The key is the original
+ * start: the first piece keeps that start_time, later pieces store it
+ * in properties.split_of as epoch millis.
+ *
+ * @param {object} pool - pg pool
+ * @param {string} machine - machine id
+ * @param {Date} start - original off start
+ * @returns {Promise<Array<object>>} family rows ordered by start
+ */
+export async function loadFamily(pool, machine, start) {
+    const result = await pool.query(
+        `SELECT name, start_time, end_time, duration, properties
+         FROM segments
+         WHERE machine = $1 AND kind = 'phase'
+           AND (start_time = $2 OR (properties IS NOT NULL AND properties::jsonb ->> 'split_of' = $3))
+         ORDER BY start_time`,
+        [machine, start, String(start.getTime())]
+    );
+    return result.rows;
+}
+
+/**
+ * Bounds of one stored family. A later edit must cover this span, so
+ * collapsing every piece but one restores the original start and end.
+ *
+ * @param {Array<object>} rows - phase rows of one family
+ * @returns {object} parent off with start_time, end_time, and duration
+ *
+ * @example
+ *   const parent = familyCover(await loadFamily(pool, machine, start));
+ */
+export function familyCover(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        throw new RangeError('split family is empty');
+    }
+    const ordered = rows.slice().sort(byRowStart);
+    const start = new Date(ordered[0].start_time).getTime();
+    const span = ordered.reduce(widen, { end: start, pending: false });
+    return {
+        name: 'off',
+        start_time: new Date(start),
+        end_time: new Date(span.end),
+        duration: span.pending ? 0 : (span.end - start) / 1000
+    };
 }
 
 /**
@@ -175,6 +247,7 @@ export function splitRows(machine, splits) {
  * @returns {Promise<void>}
  */
 export async function replaceSplit(pool, record) {
+    refuseEmpty(record);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');

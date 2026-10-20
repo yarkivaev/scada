@@ -243,4 +243,79 @@ describe('shopWithTimeline postgres confirm', function() {
             })
         }, { tail: '', deleted: true }, 'split respond did not publish the untagged tail and delete the stale start');
     });
+
+    it('accepts one piece that restores the family bounds rather than the first piece end', async function() {
+        const machine = `ичт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const start = new Date('2026-10-19T06:02:18.400Z');
+        const cut = new Date('2026-10-19T06:25:00.000Z');
+        const end = new Date('2026-10-19T06:47:06.700Z');
+        const sent = [];
+        const pool = {
+            connect() {
+                return Promise.resolve({
+                    query() {
+                        return Promise.resolve({});
+                    },
+                    release() {}
+                });
+            },
+            async query() {
+                return {
+                    rows: [
+                        { name: 'off', start_time: start, end_time: cut, duration: 1362 },
+                        { name: 'off', start_time: cut, end_time: end, duration: 1326 }
+                    ]
+                };
+            }
+        };
+        const tl = shopWithTimeline(machine, {
+            pool,
+            userDecisions: {
+                async publishSplit(_machine, _start, splits) {
+                    sent.push(splits);
+                }
+            }
+        });
+        await tl.respond(start.toISOString(), {
+            splits: [{ start, end, tag: 'шлак' }]
+        }, audit(43));
+        assert.strictEqual(sent[0][0].end.getTime(), end.getTime(), 'one remaining piece was cut down to the first piece');
+    });
+
+    it('refuses to delete every piece of a split family', async function() {
+        const machine = `ичт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const start = new Date('2026-10-19T06:02:18.400Z');
+        const end = new Date('2026-10-19T06:47:06.700Z');
+        const sql = [];
+        const pool = {
+            connect() {
+                return Promise.resolve({
+                    query(text) {
+                        sql.push(String(text));
+                        return Promise.resolve({});
+                    },
+                    release() {}
+                });
+            },
+            async query() {
+                return { rows: [{ name: 'off', start_time: start, end_time: end, duration: 2688 }] };
+            }
+        };
+        const tl = shopWithTimeline(machine, {
+            pool,
+            userDecisions: { async publishSplit() {} }
+        });
+        let refused = false;
+        try {
+            await tl.respond(start.toISOString(), { splits: [] }, audit(44));
+        } catch (err) {
+            refused = err instanceof RangeError;
+        }
+        assert.deepStrictEqual({
+            refused,
+            deleted: sql.some((row) => {
+                return row.includes('DELETE');
+            })
+        }, { refused: true, deleted: false }, 'an empty split deleted the family');
+    });
 });

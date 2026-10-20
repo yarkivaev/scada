@@ -83,6 +83,16 @@ edgeApi (:8081) ← metrics batch, checkpoints, retention (edge profile)
 
 **Edge site** (`siteServer`): runs supervisor-sink HTTP, plant API, and optional MQTT ingest in one process. Metrics land in PostgreSQL on edge; on central they go to ClickHouse.
 
+## Split family
+
+One `off` phase can be replaced by contiguous pieces. There is no parent row and no nested segment. Each piece is a normal `segments` row: `kind = phase`, `name = off`, at most one tag. An empty tag is SQL NULL. The family key is `properties.split_of`, the original start in epoch milliseconds. The first piece keeps that `start_time`, so the existing unique key `(machine, kind, start_time)` still identifies it.
+
+A later edit sends the whole family again. `timeline.respond` / `PATCH /segments` take `{ splits: [{ start, end, tag, open }] }` addressed by the original start. The supervisor publishes one STOMP body, `type: split-family`, with `origin` in epoch millis and the pieces. The sink deletes family starts the new cut does not use, then upserts the pieces, in one transaction.
+
+The replacement must keep the original start and, for a closed off, the latest end of the stored family. Removing every piece but one therefore restores those bounds. `splits: []` is refused before any delete, and the stored family stays. A closed piece is at least 60 seconds. Only the tail of a still-open off may have `duration = 0`. A duration-0 heartbeat does not extend a closed piece that already has `split_of`.
+
+`C0007` grants `DELETE` on `segments` to `supervisor_sink` on the privileged admin path. The sink role does not run that grant itself. Central previously revoked this privilege (`C0002`).
+
 ## Public exports
 
 Main entry (`import { … } from '@yarkivaev/scada'`):
@@ -172,7 +182,7 @@ SQL files in `db/migrations/` use profile prefixes:
 |--------|------------|
 | `V*` | Both central and edge |
 | `E*` | Edge only (metrics tables, retention) |
-| `C*` | Central only (revoke delete on metrics) |
+| `C*` | Central only (central privileges, including segment DELETE) |
 
 Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup via `POSTGRES_ADMIN_URL`.
 
