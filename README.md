@@ -4,6 +4,25 @@ Generic industrial monitoring domain, state persistence, and HTTP APIs (`@yarkiv
 
 This package is plant-agnostic: it defines `plant` → `shop` → `machine` hierarchy, timeline and alerts, sensor read ports, STOMP ingest pipelines, and PostgreSQL/ClickHouse adapters. Plant-specific routes, sensors, HMI strings, and tag taxonomies live in downstream plant packages.
 
+`analyticsMcp` is a stateless Streamable HTTP MCP server. The plant package supplies a `namespaceTree` (path, kind, silence, source topic) and read ports. Tools address nodes by path. `query_postgres` is registered only when a standby query port is supplied. Each call writes one JSON line to the injected journal. `GET /metrics` exposes call counts and in-flight reads.
+
+```javascript
+import { analyticsMcp, namespaceTree } from '@yarkivaev/scada';
+
+const mcp = analyticsMcp({
+  tree: namespaceTree(nodes),
+  tokens: { secret: 'analyst' },
+  journal(line) { process.stdout.write(line); },
+  ports: {
+    measurements, segments, operations, alerts, state, samples, cursor, queryClickhouse
+  },
+  extend(server) { /* plant tools, resources, prompts */ }
+});
+await mcp.listen(0, '127.0.0.1');
+```
+
+`ports.queryPostgres` registers `query_postgres`. `extend(server)` may add plant tools. `POST /mcp` requires `Authorization: Bearer`.
+
 Repository: `https://github.com/yarkivaev/scada`
 
 ## Install
@@ -113,6 +132,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `stompTimeline`, `stompAlerts`, `userDecisions` | STOMP messaging |
 | `machineOwners`, `ownerTimeline`, `httpTimeline`, `httpOperations` | Owner-routed timeline and operations write (local or edge HTTP) |
 | `mqttMetrics`, `modbusMqtt`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
+| `analyticsMcp`, `namespaceTree`, `coverageSpans`, `sqlGuard` | Analytics MCP, path index, coverage spans, read-only SQL guard |
 
 Subpath exports:
 
