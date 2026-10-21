@@ -26,6 +26,31 @@ describe('segmentCodec', function() {
         assert.strictEqual(received[0].duration, 3600, 'should extract duration');
     });
 
+    it('stores a segment body that omits the command type', async function() {
+        const written = [];
+        const sink = {
+            write(records) {
+                written.push(...records);
+                return Promise.resolve();
+            }
+        };
+        const route = segmentDispatch(sink, { accept() { return Promise.resolve(); } }, { write() { return Promise.resolve(); } }, fakeCloser());
+        const codec = segmentCodec(route);
+        await codec.accept({
+            destination: '/queue/scada.segments.ingest',
+            payload: JSON.stringify({
+                machine: 'печь',
+                name: 'off',
+                kind: 'phase',
+                start: '2026-09-30T13:29:00.000Z',
+                end: '2026-09-30T13:35:00.000Z',
+                duration: 360,
+                tags: ['lining_inspection']
+            })
+        });
+        assert.strictEqual(written[0] && written[0].type, 'segment', 'typeless segment body was not stored');
+    });
+
     it('converts epoch timestamps to ISO strings', async function() {
         const received = [];
         const collector = { accept: (record) => { return received.push(record); } };

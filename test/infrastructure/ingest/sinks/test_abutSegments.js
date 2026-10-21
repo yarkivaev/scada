@@ -14,10 +14,10 @@ describe('abutSegments', function() {
         await abutSegments(pool, budget);
         const sql = queries[0].sql.replace(/\s+/gu, ' ');
         assert.ok(
-            sql.includes('SET end_time = right_row.start_time') &&
-                sql.includes('ORDER BY next.start_time') &&
-                sql.includes('LIMIT 1') &&
-                sql.includes('left_row.name = right_row.name') &&
+            sql.includes('SET end_time = next_row.next_start') &&
+                sql.includes('lead(start_time) OVER') &&
+                sql.includes('left_row.name = next_row.next_name') &&
+                !sql.includes('LATERAL') &&
                 queries[0].params[0] === budget,
             'startup repair did not stop at the immediate next segment inside the budget'
         );
