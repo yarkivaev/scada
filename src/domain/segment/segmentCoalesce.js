@@ -153,6 +153,8 @@ export default function segmentCoalesce(codec, options = {}) {
             const ctx = { api, lane, codec, size, intervalMs };
             lane.queue = lane.queue.then(() => {
                 return step(ctx, envelope, parsed);
+            }).catch(() => {
+                return undefined;
             });
             return lane.queue;
         },

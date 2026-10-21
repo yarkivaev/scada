@@ -141,4 +141,41 @@ describe('segmentCoalesce', function() {
         ]);
         assert.strictEqual(new Set(machines).size, 2, 'per-machine lanes did not both flush');
     });
+
+    it('acks the next segment after a failed write on the same machine', async function() {
+        let calls = 0;
+        const codec = {
+            accept() {
+                calls += 1;
+                if (calls === 1) {
+                    return Promise.reject(new Error('boom'));
+                }
+                return Promise.resolve();
+            }
+        };
+        const coalesce = segmentCoalesce(codec, { size: 1, interval: 60 });
+        const machine = `печь-${Math.random().toString(16).slice(2)}`;
+        const first = settle();
+        const second = settle();
+        await coalesce.accept({
+            destination: '/q',
+            payload: heartbeat(machine, 10, 20),
+            settle: first
+        }).catch(() => {
+            return undefined;
+        });
+        await coalesce.accept({
+            destination: '/q',
+            payload: JSON.stringify({
+                type: 'segment',
+                machine,
+                name: 'off',
+                start: 30,
+                end: 40,
+                duration: 10
+            }),
+            settle: second
+        });
+        assert.strictEqual(second.state.acks, 1, 'a failed segment stalled the machine lane');
+    });
 });

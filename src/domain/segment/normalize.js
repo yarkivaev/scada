@@ -17,7 +17,7 @@ export default function segmentNormalize(parsed) {
     const hasOpts = Array.isArray(parsed.options) && parsed.options.length > 0;
     const resolved = typeof parsed.resolved === 'boolean' ? parsed.resolved : !hasOpts;
     return {
-        type: parsed.type,
+        type: parsed.type || 'segment',
         machine: parsed.machine,
         name: parsed.name,
         kind: typeof parsed.kind === 'string' && parsed.kind.length > 0 ? parsed.kind : 'phase',
