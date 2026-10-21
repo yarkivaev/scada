@@ -42,14 +42,24 @@ function segmentRow(parsed, startTime, endTime) {
     return row;
 }
 
+function emitPiece(bus, piece) {
+    const times = timestamps(piece);
+    bus.emit({ type: 'created', segment: segmentRow(piece, times.startTime, times.endTime) });
+}
+
 function consume(raw, buses) {
     const parsed = JSON.parse(raw.payload);
     const bus = buses[parsed.machine];
     if (!bus) {
         return;
     }
-    const { startTime, endTime } = timestamps(parsed);
-    bus.emit({ type: 'created', segment: segmentRow(parsed, startTime, endTime) });
+    if (parsed.type === 'split-family' && Array.isArray(parsed.pieces)) {
+        parsed.pieces.forEach((piece) => {
+            emitPiece(bus, piece);
+        });
+        return;
+    }
+    emitPiece(bus, parsed);
 }
 
 /**
@@ -57,6 +67,8 @@ function consume(raw, buses) {
  *
  * Subscribes to STOMP segment exchange and emits created events
  * on per-machine timeline pubsub buses for SSE delivery.
+ * A split-family envelope emits one event per piece. The envelope
+ * itself has no start or end, and must not be read as one segment.
  *
  * @param {function} source - factory(collector) returning { start(), stop() }
  * @param {object} buses - map of machine IDs to pubsub buses with emit()
