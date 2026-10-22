@@ -1,3 +1,5 @@
+import { clickhouseSchema, postgresSchema } from './mcpSchema.js';
+
 /**
  * Parent path of a node, or an empty string at the root.
  *
@@ -78,29 +80,69 @@ function body(uri, payload) {
 }
 
 /**
- * Registers plant topology and source bindings.
+ * Enumerates catalog entries without knowing their vocabulary.
  *
- * Topology has paths, kinds, titles, and liveness. Bindings map a path to a
- * topic and a unit. Gateway topics are not part of topology.
+ * @param {object} [catalog] - tagCatalog with entries()
+ * @returns {Array<object>} entries
+ *
+ * @example
+ *   tags({ entries() { return []; } });
+ */
+function tags(catalog) {
+    if (catalog && typeof catalog.entries === 'function') {
+        return catalog.entries();
+    }
+    return [];
+}
+
+/**
+ * Registers one JSON resource.
  *
  * @param {object} server - McpServer
- * @param {object} tree - namespaceTree
+ * @param {string} name - resource name
+ * @param {string} uri - resource URI
+ * @param {string} description - short list description
+ * @param {Function} payload - body factory
  * @returns {void}
  *
  * @example
- *   registerResources(server, tree);
+ *   publish(server, 'topology', 'plant://topology', 'Paths', () => []);
  */
-export default function registerResources(server, tree) {
-    server.registerResource('topology', 'plant://topology', {
-        description: 'Paths, kinds, titles, and liveness',
+function publish(server, name, uri, description, payload) {
+    server.registerResource(name, uri, {
+        description,
         mimeType: 'application/json'
     }, () => {
-        return body('plant://topology', topology(tree));
+        return body(uri, payload());
     });
-    server.registerResource('bindings', 'plant://bindings', {
-        description: 'Source topic and unit for each bound path',
-        mimeType: 'application/json'
-    }, () => {
-        return body('plant://bindings', bindings(tree));
+}
+
+/**
+ * Registers plant topology, bindings, tags, and storage schemas.
+ *
+ * Topology has paths, kinds, titles, and liveness. Bindings map a path to a
+ * topic and a unit. Tags enumerate the catalog the plant package supplied.
+ * Schema resources list scada migration tables. Gateway topics stay out of
+ * topology. Operators omit card_uid. kind is opaque.
+ *
+ * @param {object} server - McpServer
+ * @param {object} tree - namespaceTree
+ * @param {object} [catalog] - tagCatalog with entries()
+ * @returns {void}
+ *
+ * @example
+ *   registerResources(server, tree, catalog);
+ */
+export default function registerResources(server, tree, catalog) {
+    publish(server, 'topology', 'plant://topology', 'Paths, kinds, titles, and liveness', () => {
+        return topology(tree);
     });
+    publish(server, 'bindings', 'plant://bindings', 'Source topic and unit for each bound path', () => {
+        return bindings(tree);
+    });
+    publish(server, 'tags', 'plant://tags', 'Tag catalog entries from the plant package', () => {
+        return tags(catalog);
+    });
+    publish(server, 'schema-postgres', 'plant://schema/postgres', 'Postgres tables from scada migrations', postgresSchema);
+    publish(server, 'schema-clickhouse', 'plant://schema/clickhouse', 'ClickHouse scada.metrics', clickhouseSchema);
 }
