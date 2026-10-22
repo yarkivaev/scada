@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { z } from 'zod';
 import analyticsMcp from '../../../src/application/mcp/analyticsMcp.js';
+import shopWithTimeline from '../../../src/application/shopWithTimeline.js';
 import namespaceTree from '../../../src/domain/namespace/namespaceTree.js';
 
 function ports(extra) {
@@ -235,5 +236,48 @@ describe('analyticsMcp', function() {
         const { body } = await post(address.port, token, call('echo_path', { path: 'цех-α' }));
         await mcp.close();
         assert.strictEqual(body.result.content[0].text, 'цех-α', 'extend did not register a callable tool');
+    });
+
+    it('returns persisted segments when the plant timeline is postgres', async function() {
+        const start = new Date('2024-11-02T03:04:05.137Z');
+        const tag = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const pool = {
+            async query() {
+                return {
+                    rows: [{
+                        name: 'off',
+                        start_time: start,
+                        end_time: new Date(start.getTime() + 180000),
+                        duration: 180,
+                        options: '[]',
+                        tags: JSON.stringify([tag]),
+                        properties: '{}'
+                    }]
+                };
+            }
+        };
+        const tl = shopWithTimeline(`ихт-${Math.floor(Math.random() * 9000 + 1000)}`, { pool });
+        const { address, mcp, token } = await started({
+            ports: {
+                segments() {
+                    return tl.list({
+                        from: start,
+                        to: new Date(start.getTime() + 3600000)
+                    });
+                }
+            }
+        });
+        const { body } = await post(address.port, token, call('segments', {
+            from: start.toISOString(),
+            path: 'площадка',
+            to: new Date(start.getTime() + 3600000).toISOString()
+        }));
+        await mcp.close();
+        const payload = JSON.parse(body.result.content[0].text);
+        assert.strictEqual(
+            payload.rows[0].tags,
+            JSON.stringify([tag]),
+            'segments tool missed persisted postgres rows'
+        );
     });
 });

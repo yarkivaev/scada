@@ -1,6 +1,24 @@
 import plant from '../domain/plant/plant.js';
 import initialized from '../domain/shared/initialized.js';
+import pgAlerts from '../infrastructure/persistence/pg/alerts.js';
 import postgresPool from '../infrastructure/persistence/postgresPool.js';
+
+/**
+ * Plant extras: injected ports, or pgAlerts when a pool exists.
+ *
+ * @param {object} options - optional operations and alerts
+ * @param {object|undefined} pool - pg pool
+ * @returns {object} plant options
+ *
+ * @example
+ *   extras({ operations }, pool);
+ */
+function extras(options, pool) {
+    return {
+        operations: options.operations,
+        alerts: options.alerts || (pool ? pgAlerts(pool) : undefined)
+    };
+}
 
 /**
  * Generic plant factory wiring sensors and a shop factory over a connection.
@@ -32,5 +50,5 @@ export default async function metricsPlant(machines, options) {
         segments: options.segments,
         shopName: options.shopName
     });
-    return plant(initialized({ [shop.name()]: shop }, Object.values));
+    return plant(initialized({ [shop.name()]: shop }, Object.values), extras(options, pool));
 }

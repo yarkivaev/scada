@@ -132,7 +132,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `stompTimeline`, `stompAlerts`, `userDecisions` | STOMP messaging |
 | `machineOwners`, `ownerTimeline`, `httpTimeline`, `httpOperations` | Owner-routed timeline and operations write (local or edge HTTP) |
 | `mqttMetrics`, `modbusMqtt`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
-| `analyticsMcp`, `namespaceTree`, `coverageSpans`, `sqlGuard` | Analytics MCP, path index, coverage spans, read-only SQL guard |
+| `analyticsMcp`, `namespaceTree`, `coverageSpans`, `coverageCursor`, `sqlGuard` | Analytics MCP, path index, coverage spans, checkpoint-or-sample cursor, read-only SQL guard |
 
 Subpath exports:
 
