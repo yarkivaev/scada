@@ -43,7 +43,7 @@ function mockReq(bodyText) {
     return req;
 }
 
-function buildScene() {
+function buildScene(decorateTimeline) {
     const machineId = `m${Math.floor(Math.random() * 9000 + 1000)}`;
     const captured = [];
     const provider = {
@@ -79,7 +79,8 @@ function buildScene() {
         clock: virtualClock(() => {
             return new Date();
         }),
-        timelineOperator: { provider, requireOperator: true, defaultUser: 'hmi-kiosk' }
+        timelineOperator: { provider, requireOperator: true, defaultUser: 'hmi-kiosk' },
+        decorateTimeline
     });
     return { api, machineId, captured };
 }
@@ -145,5 +146,55 @@ describe('timeline PATCH splits', function() {
             ]
         });
         assert.strictEqual(res.statusCode, 400, 'PATCH accepted a split tag outside options');
+    });
+
+    it('accepts charge loading on the next piece after lining inspection', async function() {
+        const scene = buildScene(function (_machineId, rows) {
+            return rows.map(function (row, index) {
+                const prior = rows.slice(0, index).some(function (earlier) {
+                    return Array.isArray(earlier.tags) && earlier.tags.includes('lining_inspection');
+                });
+                const options = prior ? ['charge_loading', 'lining_inspection'] : ['lining_inspection'];
+                return { ...row, options };
+            });
+        });
+        const start = new Date('2026-10-22T08:11:07.413Z');
+        const cut = new Date(start.getTime() + 17000);
+        const end = new Date(start.getTime() + 64000);
+        scene.captured.row = { name: 'off', options: ['lining_inspection'], tags: [] };
+        const res = await patch(scene, {
+            start: start.toISOString(),
+            operatorId: 3,
+            splits: [
+                { start, end: cut, tag: 'lining_inspection' },
+                { start: cut, end, tag: 'charge_loading' }
+            ]
+        });
+        assert.strictEqual(res.statusCode, 200, 'PATCH rejected charge loading after lining inspection in the same split');
+    });
+
+    it('rejects charge loading when no earlier piece entered melting', async function() {
+        const scene = buildScene(function (_machineId, rows) {
+            return rows.map(function (row, index) {
+                const prior = rows.slice(0, index).some(function (earlier) {
+                    return Array.isArray(earlier.tags) && earlier.tags.includes('lining_inspection');
+                });
+                const options = prior ? ['charge_loading', 'lining_inspection'] : ['lining_inspection'];
+                return { ...row, options };
+            });
+        });
+        const start = new Date('2026-10-22T09:04:41.907Z');
+        const cut = new Date(start.getTime() + 23000);
+        const end = new Date(start.getTime() + 81000);
+        scene.captured.row = { name: 'off', options: ['lining_inspection'], tags: [] };
+        const res = await patch(scene, {
+            start: start.toISOString(),
+            operatorId: 3,
+            splits: [
+                { start, end: cut, tag: '' },
+                { start: cut, end, tag: 'charge_loading' }
+            ]
+        });
+        assert.strictEqual(res.statusCode, 400, 'PATCH accepted charge loading before lining inspection');
     });
 });
