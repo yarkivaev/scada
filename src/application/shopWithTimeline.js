@@ -73,6 +73,13 @@ function writePort(name, decisions, owners) {
     }, owners)(name);
 }
 
+function demandWrite(name, decisions, owners) {
+    if (!decisions) {
+        throw new Error(`Timeline write requires userDecisions for ${name}`);
+    }
+    return writePort(name, decisions, owners);
+}
+
 function ownsLocal(owners, name) {
     if (!owners) {
         return true;
@@ -153,23 +160,23 @@ async function answer(scope, requestId, body, audit) {
 }
 
 /**
- * Builds a machine timeline from PostgreSQL persistence and STOMP user decisions.
+ * Builds a machine timeline from PostgreSQL when a pool exists.
  *
- * Optional owners registry routes retag/respond to an edge HTTP plant API.
+ * Reads do not need userDecisions. retag and respond throw without it.
+ * Optional owners registry routes those writes to an edge HTTP plant API.
  *
  * @param {string} name - machine id
- * @param {object} options - pool, userDecisions, optional owners
+ * @param {object} options - pool, optional userDecisions and owners
  * @returns {object} timeline port with list, rowAt, pending, stream, retag, respond, bus
  *
  * @example
- *   const tl = shopWithTimeline('machine1', { pool, userDecisions, owners });
+ *   const tl = shopWithTimeline('machine1', { pool });
  */
 export default function shopWithTimeline(name, options) {
     const { pool, userDecisions: decisions, owners, segments } = options;
-    if (pool && decisions) {
+    if (pool) {
         const bus = pubsub();
         const read = pgTimeline(pool, name);
-        const write = writePort(name, decisions, owners);
         const port = timeline(read, bus);
         return {
             list: port.list,
@@ -179,6 +186,7 @@ export default function shopWithTimeline(name, options) {
             stream: port.stream,
             bus,
             async retag(start, tags, properties, audit) {
+                const write = demandWrite(name, decisions, owners);
                 if (ownsLocal(owners, name)) {
                     await confirm(pool, {
                         machine: name,
@@ -192,6 +200,7 @@ export default function shopWithTimeline(name, options) {
                 bus.emit({ type: 'resolved', segment: resolvedStub(start, tags, properties), audit });
             },
             respond(requestId, body, audit) {
+                const write = demandWrite(name, decisions, owners);
                 return answer({ pool, owners, name, segments, write, bus }, requestId, body, audit);
             }
         };

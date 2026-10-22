@@ -3,7 +3,7 @@
  * Provides initialization for all contained shops.
  *
  * @param {object} shops - initialized list of shops
- * @param {object} [options] - operations, topology
+ * @param {object} [options] - operations, alerts, topology
  * @returns {object} plant with shops property and init method
  *
  * @example
@@ -14,6 +14,7 @@ export default function plant(shops, options = {}) {
     return {
         shops,
         operations: options.operations,
+        alerts: options.alerts,
         topology: options.topology,
         init() {
             shops.init();

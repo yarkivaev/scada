@@ -319,3 +319,64 @@ describe('shopWithTimeline postgres confirm', function() {
         }, { refused: true, deleted: false }, 'an empty split deleted the family');
     });
 });
+
+describe('shopWithTimeline postgres read', function() {
+    it('lists persisted rows when a pool exists without userDecisions', async function() {
+        const machine = `ихт-α-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const start = new Date('2024-11-02T03:04:05.137Z');
+        const tag = `шлак-${Math.floor(Math.random() * 90)}`;
+        const pool = {
+            async query() {
+                return {
+                    rows: [{
+                        name: 'off',
+                        start_time: start,
+                        end_time: new Date(start.getTime() + 180000),
+                        duration: 180,
+                        options: '[]',
+                        tags: JSON.stringify([tag]),
+                        properties: '{}'
+                    }]
+                };
+            }
+        };
+        const rows = await shopWithTimeline(machine, { pool }).list({
+            from: start,
+            to: new Date(start.getTime() + 3600000)
+        });
+        assert.strictEqual(
+            rows[0].tags,
+            JSON.stringify([tag]),
+            'pool without userDecisions did not read persisted segments'
+        );
+    });
+
+    it('throws on retag when userDecisions is missing', async function() {
+        const updates = [];
+        const pool = {
+            async query(sql) {
+                if (String(sql).includes('UPDATE')) {
+                    updates.push(sql);
+                }
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        const tl = shopWithTimeline(`ихт-β-${Math.floor(Math.random() * 9000 + 1000)}`, { pool });
+        let failed = false;
+        try {
+            await tl.retag(
+                new Date('2024-11-02T03:04:05.137Z'),
+                ['шлак'],
+                {},
+                { id: 7, displayName: 'оп-7', decidedAt: new Date('2024-11-02T03:04:05.137Z') }
+            );
+        } catch {
+            failed = true;
+        }
+        assert.deepStrictEqual(
+            { failed, updates: updates.length },
+            { failed: true, updates: 0 },
+            'retag without userDecisions wrote tags or stayed silent'
+        );
+    });
+});
