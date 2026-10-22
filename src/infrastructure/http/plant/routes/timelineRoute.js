@@ -9,6 +9,30 @@ async function handleOperatorWrite(gate, parsed, write) {
     await write(audit);
 }
 
+function proposedRows(row, parsed) {
+    if (!Array.isArray(parsed.splits)) {
+        return [row];
+    }
+    return parsed.splits.map((piece) => {
+        const tags = piece.tag ? [piece.tag] : [];
+        return { ...row, start: piece.start, start_time: piece.start, tags };
+    });
+}
+
+function tagsAt(parsed, index) {
+    if (!Array.isArray(parsed.splits)) {
+        return parsed.tags;
+    }
+    const tag = parsed.splits[index] && parsed.splits[index].tag;
+    return tag ? [tag] : [];
+}
+
+function blockedTag(standing, painted, parsed) {
+    return painted.some((gated, index) => {
+        return !allowedSegmentTags(gated.options, standing, tagsAt(parsed, index));
+    });
+}
+
 async function rejectUnknownTags(timeline, parsed, machineId, res, decorate) {
     if (typeof timeline.rowAt !== 'function') {
         return false;
@@ -17,15 +41,8 @@ async function rejectUnknownTags(timeline, parsed, machineId, res, decorate) {
     if (!row) {
         return false;
     }
-    const [gated] = await decorate(machineId, [row]);
-    const wanted = Array.isArray(parsed.splits)
-        ? parsed.splits.map((piece) => {
-            return piece.tag;
-        }).filter((id) => {
-            return id;
-        })
-        : parsed.tags;
-    if (allowedSegmentTags(gated.options, gated.tags, wanted)) {
+    const painted = await decorate(machineId, proposedRows(row, parsed));
+    if (!blockedTag(row.tags, painted, parsed)) {
         return false;
     }
     errorResponse('BAD_REQUEST', `Tag is not in segment options for ${machineId}`, 400).send(res);
