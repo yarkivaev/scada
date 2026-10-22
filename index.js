@@ -87,6 +87,7 @@ export { default as siteSyncSites } from './src/application/sync/siteSyncSites.j
 export { default as siteSyncTargets } from './src/application/sync/siteSyncTargets.js';
 export { default as siteSyncBind } from './src/application/sync/siteSyncBind.js';
 export { default as namespaceTree } from './src/domain/namespace/namespaceTree.js';
+export { default as coverageOverlay } from './src/domain/span/coverageOverlay.js';
 export { default as coverageSpans } from './src/domain/span/coverageSpans.js';
 export { default as coverageCursor } from './src/application/mcp/coverageCursor.js';
 export { default as sqlGuard } from './src/domain/sql/sqlGuard.js';

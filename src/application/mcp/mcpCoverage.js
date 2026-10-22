@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import coverageOverlay from '../../domain/span/coverageOverlay.js';
 import coverageSpans from '../../domain/span/coverageSpans.js';
 import { toolText } from './mcpText.js';
 
@@ -34,13 +35,13 @@ async function coverOne(path, args, ports, tree) {
     const node = tree.resolve(path);
     const samples = await ports.samples({ from: args.from, path, to: args.to });
     const cursor = await ports.cursor({ path });
-    const spans = coverageSpans(
+    const spans = coverageOverlay(coverageSpans(
         samples,
         args.from,
         args.to,
         node.silenceSeconds * 1000,
         cursorAt(cursor)
-    );
+    ), await ports.segments({ from: args.from, path, to: args.to }));
     return {
         path,
         spans: spans.slice(0, 200),

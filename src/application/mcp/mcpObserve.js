@@ -72,7 +72,33 @@ function settle(outcome) {
 }
 
 /**
+ * Times one tool call after the engine slot is held.
+ *
+ * @param {string} name - tool name
+ * @param {object} args - tool arguments
+ * @param {object} extra - SDK extra
+ * @param {Function} cb - tool callback
+ * @param {object} ctx - journal context
+ * @returns {Promise<object>} tool result
+ *
+ * @example
+ *   invokeTool('state', {}, {}, () => ({ content: [] }), ctx);
+ */
+async function invokeTool(name, args, extra, cb, ctx) {
+    const engine = engineOf(name);
+    const started = Date.now();
+    ctx.metrics.begin(engine);
+    const outcome = await invoke(cb, args, extra);
+    ctx.metrics.end(engine);
+    note(ctx, name, outcome.status, started, args);
+    return settle(outcome);
+}
+
+/**
  * Times one tool call, counts it, and tracks the engine gauge.
+ *
+ * SQL engines wait for the previous query on that engine so the in-flight
+ * gauge stays at one. Named plant tools are not queued.
  *
  * @param {string} name - tool name
  * @param {object} args - tool arguments
@@ -84,14 +110,14 @@ function settle(outcome) {
  * @example
  *   trackedTool('state', {}, {}, () => ({ content: [] }), ctx);
  */
-async function trackedTool(name, args, extra, cb, ctx) {
+function trackedTool(name, args, extra, cb, ctx) {
     const engine = engineOf(name);
-    const started = Date.now();
-    ctx.metrics.begin(engine);
-    const outcome = await invoke(cb, args, extra);
-    ctx.metrics.end(engine);
-    note(ctx, name, outcome.status, started, args);
-    return settle(outcome);
+    if (engine === 'plant') {
+        return invokeTool(name, args, extra, cb, ctx);
+    }
+    return ctx.flight.run(engine, () => {
+        return invokeTool(name, args, extra, cb, ctx);
+    });
 }
 
 /**

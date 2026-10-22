@@ -2,6 +2,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import mcpFlight from './mcpFlight.js';
 import mcpMetrics from './mcpMetrics.js';
 import observe from './mcpObserve.js';
 import registerCoverage from './mcpCoverage.js';
@@ -98,20 +99,25 @@ function extendServer(server, bundle) {
  * Builds one stateless server for a single HTTP request.
  *
  * @param {object} bundle - analyticsMcp bundle
- * @param {object} metrics - prometheus counters
+ * @param {object} runtime - metrics and SQL flight
  * @param {string} caller - bearer caller name
  * @returns {object} McpServer
  *
  * @example
- *   openServer(bundle, metrics, 'analyst');
+ *   openServer(bundle, runtime, 'analyst');
  */
-function openServer(bundle, metrics, caller) {
+function openServer(bundle, runtime, caller) {
     const server = new McpServer(serverInfo());
-    observe(server, { caller, journal: bundle.journal, metrics });
+    observe(server, {
+        caller,
+        flight: runtime.flight,
+        journal: bundle.journal,
+        metrics: runtime.metrics
+    });
     registerReads(server, bundle.ports, bundle.tree);
     registerCoverage(server, bundle.ports, bundle.tree);
     registerQueries(server, bundle.ports);
-    registerResources(server, bundle.tree);
+    registerResources(server, bundle.tree, bundle.catalog);
     extendServer(server, bundle);
     return server;
 }
@@ -183,8 +189,8 @@ function releaser(transport, server) {
  * @example
  *   dispatch(req, res, bundle, metrics, 'analyst');
  */
-async function dispatch(req, res, bundle, metrics, caller) {
-    const server = openServer(bundle, metrics, caller);
+async function dispatch(req, res, bundle, runtime, caller) {
+    const server = openServer(bundle, runtime, caller);
     const transport = new StreamableHTTPServerTransport({
         enableJsonResponse: true,
         sessionIdGenerator: undefined
@@ -214,13 +220,13 @@ async function dispatch(req, res, bundle, metrics, caller) {
  * @example
  *   postMcp(req, res, bundle, metrics);
  */
-async function postMcp(req, res, bundle, metrics) {
+async function postMcp(req, res, bundle, runtime) {
     const name = callerName(req, bundle.tokens);
     if (name.length === 0) {
         res.writeHead(401).end();
         return;
     }
-    await dispatch(req, res, bundle, metrics, name);
+    await dispatch(req, res, bundle, runtime, name);
 }
 
 /**
@@ -233,9 +239,9 @@ async function postMcp(req, res, bundle, metrics) {
  * @example
  *   writeMetrics(res, metrics);
  */
-function writeMetrics(res, metrics) {
+function writeMetrics(res, runtime) {
     res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' });
-    res.end(metrics.text());
+    res.end(runtime.metrics.text());
 }
 
 /**
@@ -250,13 +256,13 @@ function writeMetrics(res, metrics) {
  * @example
  *   route(req, res, bundle, metrics);
  */
-function route(req, res, bundle, metrics) {
+function route(req, res, bundle, runtime) {
     if (req.method === 'GET' && req.url === '/metrics') {
-        writeMetrics(res, metrics);
+        writeMetrics(res, runtime);
         return Promise.resolve();
     }
     if (req.method === 'POST' && req.url === '/mcp') {
-        return postMcp(req, res, bundle, metrics);
+        return postMcp(req, res, bundle, runtime);
     }
     res.writeHead(404).end();
     return Promise.resolve();
@@ -291,8 +297,8 @@ function fail(res) {
  * @example
  *   onRequest(req, res, bundle, metrics);
  */
-function onRequest(req, res, bundle, metrics) {
-    route(req, res, bundle, metrics).catch(() => {
+function onRequest(req, res, bundle, runtime) {
+    route(req, res, bundle, runtime).catch(() => {
         fail(res);
     });
 }
@@ -352,18 +358,18 @@ function shut(server) {
  * is a function. extend(server) may register more tools. POST /mcp speaks MCP.
  * GET /metrics is Prometheus text.
  *
- * @param {object} bundle - tree, tokens, journal, ports, optional extend
+ * @param {object} bundle - tree, tokens, journal, ports, optional catalog and extend
  * @returns {object} listen and close
  *
  * @example
- *   const mcp = analyticsMcp({ tree, tokens, journal, ports });
+ *   const mcp = analyticsMcp({ tree, tokens, journal, ports, catalog });
  *   await mcp.listen(0, '127.0.0.1');
  */
 export default function analyticsMcp(bundle) {
     assertBundle(bundle);
-    const metrics = mcpMetrics();
+    const runtime = { flight: mcpFlight(), metrics: mcpMetrics() };
     const server = http.createServer((req, res) => {
-        onRequest(req, res, bundle, metrics);
+        onRequest(req, res, bundle, runtime);
     });
     return Object.freeze({
         close() {

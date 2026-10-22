@@ -58,6 +58,7 @@ async function started(extra) {
     const token = `tok-${Math.random().toString(16).slice(2)}`;
     const bundle = extra || {};
     const mcp = analyticsMcp({
+        catalog: bundle.catalog,
         extend: bundle.extend,
         journal(line) {
             lines.push(line);
@@ -278,6 +279,185 @@ describe('analyticsMcp', function() {
             payload.rows[0].tags,
             JSON.stringify([tag]),
             'segments tool missed persisted postgres rows'
+        );
+    });
+
+    it('lists tags and schema resources', async function() {
+        const { address, mcp, token } = await started();
+        const { body } = await post(address.port, token, {
+            id: 11,
+            jsonrpc: '2.0',
+            method: 'resources/list',
+            params: {}
+        });
+        await mcp.close();
+        const uris = body.result.resources.map(function(resource) {
+            return resource.uri;
+        });
+        const expected = [
+            'plant://tags',
+            'plant://schema/postgres',
+            'plant://schema/clickhouse'
+        ];
+        const missing = expected.filter(function(uri) {
+            return !uris.includes(uri);
+        });
+        assert.deepStrictEqual(missing, [], 'tags or schema resources were missing from resources/list');
+    });
+
+    it('returns the supplied tag catalog from plant tags', async function() {
+        const tag = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const { address, mcp, token } = await started({
+            catalog: {
+                entries() {
+                    return [{ id: tag, label: 'Шлак', parent: 'off' }];
+                }
+            }
+        });
+        const { body } = await post(address.port, token, {
+            id: 12,
+            jsonrpc: '2.0',
+            method: 'resources/read',
+            params: { uri: 'plant://tags' }
+        });
+        await mcp.close();
+        const payload = JSON.parse(body.result.contents[0].text);
+        assert.strictEqual(payload[0].id, tag, 'plant tags missed the supplied catalog');
+    });
+
+    it('omits card_uid from the postgres schema resource', async function() {
+        const { address, mcp, token } = await started();
+        const { body } = await post(address.port, token, {
+            id: 13,
+            jsonrpc: '2.0',
+            method: 'resources/read',
+            params: { uri: 'plant://schema/postgres' }
+        });
+        await mcp.close();
+        const text = body.result.contents[0].text;
+        assert.strictEqual(text.includes('card_uid'), false, 'postgres schema listed card_uid');
+    });
+
+    it('omits plant brigade tables from the postgres schema resource', async function() {
+        const { address, mcp, token } = await started();
+        const { body } = await post(address.port, token, {
+            id: 14,
+            jsonrpc: '2.0',
+            method: 'resources/read',
+            params: { uri: 'plant://schema/postgres' }
+        });
+        await mcp.close();
+        const text = body.result.contents[0].text;
+        assert.strictEqual(
+            text.includes('operator_brigades'),
+            false,
+            'postgres schema listed a plant brigade table'
+        );
+    });
+
+    it('names topic as the only clickhouse series key', async function() {
+        const { address, mcp, token } = await started();
+        const { body } = await post(address.port, token, {
+            id: 15,
+            jsonrpc: '2.0',
+            method: 'resources/read',
+            params: { uri: 'plant://schema/clickhouse' }
+        });
+        await mcp.close();
+        const text = body.result.contents[0].text;
+        const payload = JSON.parse(text);
+        const table = payload.tables[0];
+        const columns = table.columns.map(function(column) {
+            return column.name;
+        });
+        assert.deepStrictEqual(
+            { columns, name: table.name, notes: table.notes },
+            {
+                columns: ['topic', 'ts', 'value'],
+                name: 'scada.metrics',
+                notes: ['topic is the only series key']
+            },
+            'clickhouse schema invented sensor columns or another series key'
+        );
+    });
+
+    it('puts the overlapping timeline name on a coverage span', async function() {
+        const from = '2024-11-02T03:04:05.137Z';
+        const to = '2024-11-02T03:04:45.137Z';
+        const phase = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const { address, mcp, token } = await started({
+            ports: {
+                cursor() {
+                    return to;
+                },
+                samples() {
+                    return [from, '2024-11-02T03:04:25.137Z', to];
+                },
+                segments() {
+                    return [{
+                        end_time: to,
+                        name: phase,
+                        start_time: from
+                    }];
+                }
+            }
+        });
+        const { body } = await post(address.port, token, call('coverage', {
+            from,
+            paths: ['площадка/мощность'],
+            to
+        }));
+        await mcp.close();
+        const payload = JSON.parse(body.result.content[0].text);
+        assert.strictEqual(
+            payload.paths[0].spans[0].phase,
+            phase,
+            'coverage span missed the overlapping timeline name'
+        );
+    });
+
+    it('keeps one clickhouse SQL query in flight', async function() {
+        const seen = [];
+        let active = 0;
+        let peak = 0;
+        const { address, mcp, token } = await started({
+            ports: {
+                queryClickhouse() {
+                    active += 1;
+                    peak = Math.max(peak, active);
+                    return new Promise(function(resolve) {
+                        setTimeout(function finish() {
+                            active -= 1;
+                            resolve([{ value: 1 }]);
+                        }, 80);
+                    });
+                }
+            }
+        });
+        const sql = "SELECT value FROM metrics WHERE ts >= '2024-11-02T03:04:05.137Z'";
+        const poll = setInterval(function tick() {
+            fetch(`http://127.0.0.1:${address.port}/metrics`).then(function(response) {
+                return response.text();
+            }).then(function(text) {
+                const line = text.split('\n').find(function(row) {
+                    return row.startsWith('mcp_inflight{engine="clickhouse"}');
+                });
+                if (line) {
+                    seen.push(Number(line.split(' ').pop()));
+                }
+            });
+        }, 10);
+        await Promise.all([
+            post(address.port, token, call('query_clickhouse', { sql })),
+            post(address.port, token, call('query_clickhouse', { sql }))
+        ]);
+        clearInterval(poll);
+        await mcp.close();
+        const gauge = Math.max(1, ...seen);
+        assert.deepStrictEqual(
+            { gauge, peak },
+            { gauge: 1, peak: 1 },
+            'two clickhouse SQL queries ran in flight together'
         );
     });
 });

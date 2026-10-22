@@ -4,13 +4,16 @@ Generic industrial monitoring domain, state persistence, and HTTP APIs (`@yarkiv
 
 This package is plant-agnostic: it defines `plant` → `shop` → `machine` hierarchy, timeline and alerts, sensor read ports, STOMP ingest pipelines, and PostgreSQL/ClickHouse adapters. Plant-specific routes, sensors, HMI strings, and tag taxonomies live in downstream plant packages.
 
-`analyticsMcp` is a stateless Streamable HTTP MCP server. The plant package supplies a `namespaceTree` (path, kind, silence, source topic) and read ports. Tools address nodes by path. `query_postgres` is registered only when a standby query port is supplied. Each call writes one JSON line to the injected journal. `GET /metrics` exposes call counts and in-flight reads.
+`analyticsMcp` is a stateless Streamable HTTP MCP server. The plant package supplies a `namespaceTree` (path, kind, silence, source topic), read ports, and the tag catalog already used by `plantApi({ tagCatalog })`. Tools address nodes by path. `query_postgres` is registered only when a standby query port is supplied. Each SQL engine runs one query at a time. Each call writes one JSON line to the injected journal. `GET /metrics` exposes call counts and in-flight reads.
+
+Resources: `plant://topology`, `plant://bindings`, `plant://tags`, `plant://schema/postgres`, `plant://schema/clickhouse`. Column lists live in the schema resources, not here.
 
 ```javascript
-import { analyticsMcp, namespaceTree } from '@yarkivaev/scada';
+import { analyticsMcp, namespaceTree, tagCatalog } from '@yarkivaev/scada';
 
 const mcp = analyticsMcp({
   tree: namespaceTree(nodes),
+  catalog: tagCatalog(),
   tokens: { secret: 'analyst' },
   journal(line) { process.stdout.write(line); },
   ports: {
@@ -21,7 +24,7 @@ const mcp = analyticsMcp({
 await mcp.listen(0, '127.0.0.1');
 ```
 
-`ports.queryPostgres` registers `query_postgres`. `extend(server)` may add plant tools. `POST /mcp` requires `Authorization: Bearer`.
+`ports.queryPostgres` registers `query_postgres`. `extend(server)` may add plant tools. `POST /mcp` requires `Authorization: Bearer`. Coverage spans add the overlapping timeline segment name as `phase`. The process journal is stdout only; `activityTracking` still writes Loki HTTP access into `activity.http_access`, not `activity.mcp_calls`.
 
 Repository: `https://github.com/yarkivaev/scada`
 
@@ -132,7 +135,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `stompTimeline`, `stompAlerts`, `userDecisions` | STOMP messaging |
 | `machineOwners`, `ownerTimeline`, `httpTimeline`, `httpOperations` | Owner-routed timeline and operations write (local or edge HTTP) |
 | `mqttMetrics`, `modbusMqtt`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
-| `analyticsMcp`, `namespaceTree`, `coverageSpans`, `coverageCursor`, `sqlGuard` | Analytics MCP, path index, coverage spans, checkpoint-or-sample cursor, read-only SQL guard |
+| `analyticsMcp`, `namespaceTree`, `coverageSpans`, `coverageOverlay`, `coverageCursor`, `sqlGuard` | Analytics MCP, path index, coverage spans, timeline-name overlay, checkpoint-or-sample cursor, read-only SQL guard |
 
 Subpath exports:
 
