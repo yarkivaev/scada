@@ -13,7 +13,7 @@ describe('releases', function() {
                     api: [{ id: 'plant', url }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    ownership: [machine],
+                    fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
                     upstream: [{ objects: [machine], to: 'archive' }]
                 },
                 {
@@ -43,7 +43,7 @@ describe('releases', function() {
                     api: [{ id: 'plant', url: 'http://192.0.2.9:30300/api/v1' }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    ownership: [machine],
+                    fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
                     upstream: [{ objects: [machine], to: 'archive' }]
                 },
                 { id: 'archive', implementation: { cluster: 'archive', profile: 'archive' } }
@@ -53,26 +53,23 @@ describe('releases', function() {
         assert.strictEqual(cut.scada.sites, undefined, 'releases copied upstream onto the sender');
     });
 
-    it('limits a release to the objects that node owns', function() {
-        const machine = `m${Math.random().toString(36).slice(2, 8)}`;
-        const other = `n${Math.random().toString(36).slice(2, 8)}`;
+    it('publishes telemetry and leaves editable state out of it', function() {
+        const meter = `m${Math.random().toString(36).slice(2, 8)}`;
+        const state = `s${Math.random().toString(36).slice(2, 8)}`;
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
-            machines: [
-                { device: 'd1', id: machine, kind: 'unit', place: 'mill.hall' },
-                { device: 'd2', id: other, kind: 'unit', place: 'mill.hall' }
-            ],
             nodes: [{
+                fan_in: [{ device: 'd', id: meter, kind: 'unit', place: 'mill.hall' }],
                 id: 'cell',
                 implementation: { cluster: 'cell', profile: 'cell' },
-                ownership: [machine]
+                ownership: [{ id: state, kind: 'cycle' }]
             }],
             profiles: { cell: { modules: {} } }
         }, 'cell');
         assert.deepStrictEqual(
             cut.scada.machines.map((item) => {return item.id}),
-            [machine],
-            'releases gave the node an object it does not own'
+            [meter],
+            'releases published editable state as telemetry'
         );
     });
 
@@ -123,7 +120,7 @@ describe('releases', function() {
                         api: [{ id: 'plant', url }],
                         id: 'cell',
                         implementation: { cluster: 'cell', profile: 'cell' },
-                        ownership: [machine],
+                        fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
                         upstream: [{ objects: [machine], to: 'archive' }]
                     },
                     {
@@ -138,22 +135,22 @@ describe('releases', function() {
         );
     });
 
-    it('copies an object the node carries in ownership', function() {
+    it('copies a telemetry record from fan-in', function() {
         const machine = `m${Math.random().toString(36).slice(2, 8)}`;
         const device = `d${Math.random().toString(36).slice(2, 8)}`;
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [{
+                fan_in: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }],
                 id: 'cell',
-                implementation: { cluster: 'cell', profile: 'cell' },
-                ownership: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }]
+                implementation: { cluster: 'cell', profile: 'cell' }
             }],
             profiles: { cell: { modules: {} } }
         }, 'cell');
         assert.strictEqual(
             cut.scada.machines[0].device,
             device,
-            'releases dropped the object carried on the node'
+            'releases dropped the telemetry record'
         );
     });
 

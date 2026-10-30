@@ -1,6 +1,6 @@
 import { nodeFor, profileFor } from './releaseNodes.js';
 import { assertHeld, edgesOf } from './releaseEdges.js';
-import { bindModules, ownedBy, passedApps, routesFor } from './releaseValues.js';
+import { bindModules, passedApps, routesFor, telemetryOf } from './releaseValues.js';
 
 /**
  * Copies process fields the chart reads beside the image.
@@ -30,11 +30,11 @@ function withProcess(values, profile, node, app) {
 }
 
 /**
- * Copies ownership and fan-in when the node has any.
+ * Copies telemetry and routes when the node has any.
  *
  * @param {object} values - release values
- * @param {object[]} owned - machine records
- * @param {object[]} routes - owner routes
+ * @param {object[]} telemetry - fan-in records
+ * @param {object[]} routes - routes to source nodes
  * @returns {object} the same values
  * @example
  *   withObjects(values, owned, routes);
@@ -72,7 +72,7 @@ function scadaRelease(document, node, profile, edges) {
         node,
         app
     );
-    return withObjects(values, ownedBy(document, node), routesFor(document, edges, node));
+    return withObjects(values, telemetryOf(node), routesFor(document, edges, node));
 }
 
 /**

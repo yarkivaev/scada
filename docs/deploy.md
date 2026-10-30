@@ -14,12 +14,12 @@ A node has four parts. Each part is optional.
 
 | Part | What it answers |
 |---|---|
-| `ownership` | which objects' state this node manages. The same object on several nodes is one fault-tolerant set |
-| `fan_in` | which data this node is responsible for receiving, and from which node |
+| `ownership` | state of an object this node edits. The same object on several nodes is one fault-tolerant set. This is not telemetry |
+| `fan_in` | telemetry this node receives. A record with no `from` is a device or collector and has no state. A record with `from` names telemetry arriving from another node |
 | `upstream` | where this node delivers data |
 | `api` | which services this node provides |
 
-Objects live on the node that manages them. `fan_in` and `upstream` name those object ids. A node may omit any part: it can manage state and offer no service, receive and forward without managing state, or only provide an API.
+Telemetry lives in `fan_in` and has no state. `ownership` is state this node edits. `fan_in` and `upstream` name object ids. A node may omit any part.
 
 Everything else is implementation and is written apart from those four parts: which profile, which cluster, which modules, which image.
 
@@ -28,7 +28,7 @@ plant: mill
 title: Mill
 nodes:
   - id: cell-b
-    ownership:
+    fan_in:
       - id: unit-2
         device: device-2
         kind: unit
@@ -43,12 +43,11 @@ nodes:
       profile: cell
       cluster: cell-b
   - id: cell-a
-    ownership:
+    fan_in:
       - id: unit-1
         device: device-1
         kind: unit
         place: tubes.hall.bay-1
-    fan_in:
       - from: cell-b
         api: plant
         objects: [unit-2]
@@ -105,7 +104,7 @@ apps:
 
 There is no machine catalog beside the nodes. Extra keys on an ownership object are opaque: the chart copies the object through. `channels` and collectors are such keys, or they sit in `implementation` when they describe how that node runs.
 
-`ownership`, `fan_in`, `upstream`, and `api` name nodes and objects. They do not name databases. An unknown object id or node id is an error. An object in `fan_in` or `upstream` must already be in that source node's `ownership` or `fan_in`. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set and each of them manages that state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source. It is required when that source provides more than one service, and the source must provide it.
+`fan_in`, `upstream`, and `api` name nodes and telemetry ids. They do not name databases. An unknown object id or node id is an error. An object in `upstream` or in a `from` fan-in must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source. It is required when that source provides more than one service, and the source must provide it.
 
 Implementation:
 
@@ -134,8 +133,8 @@ Scada projection:
 | `profile.modules.message_bus` | `rabbitmq` |
 | `profile.modules.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
-| `ownership`, full machine records | `machines` |
-| `fan_in`, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API |
+| local `fan_in` records, the ones without `from` | `machines` |
+| `fan_in` with `from`, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
 | `implementation.service` | `service` |
@@ -209,7 +208,7 @@ The chart's own RabbitMQ definitions create user `guest` / `guest` and point `ST
 
 ## What a profile installs
 
-The profile is implementation. It decides which modules exist. `ownership`, `fan_in`, and `upstream` decide which objects the release carries. A node with ownership and fan-in emits both `machines` and `sites`. A node with neither emits neither.
+The profile is implementation. It decides which modules exist. Local fan-in is the telemetry the release publishes as `machines`. Fan-in from another node becomes `sites`. Ownership is editable state and is not copied into `machines`.
 
 Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. Set ownership and fan-in when the release must not use that fallback.
 

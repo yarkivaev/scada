@@ -1,4 +1,4 @@
-import { machineById, nodeById } from './releaseNodes.js';
+import { nodeById } from './releaseNodes.js';
 import { serviceUrl } from './releaseEdges.js';
 
 /**
@@ -62,20 +62,16 @@ export function routesFor(document, edges, node) {
 }
 
 /**
- * Machine records this node manages.
+ * Telemetry this node receives from a device. Entries with `from` are routes.
  *
- * @param {object} document - system document
  * @param {object} node - selected node
- * @returns {object[]} machine records
+ * @returns {object[]} fan-in records
  * @example
- *   ownedBy(document, node);
+ *   telemetryOf(node);
  */
-export function ownedBy(document, node) {
-    return (node.ownership || []).map((entry) => {
-        if (typeof entry === 'string') {
-            return machineById(document, entry);
-        }
-        return entry;
+export function telemetryOf(node) {
+    return (node.fan_in || []).filter((entry) => {
+        return entry && typeof entry !== 'string' && !entry.from;
     });
 }
 

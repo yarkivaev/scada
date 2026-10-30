@@ -59,6 +59,9 @@ export function edgesOf(document) {
             remember(edges, { api: undefined, from: node.id, objects: edge.objects || [], to: edge.to });
         });
         (node.fan_in || []).forEach((edge) => {
+            if (!edge.from) {
+                return;
+            }
             nodeById(document, edge.from);
             remember(edges, { api: edge.api, from: edge.from, objects: edge.objects || [], to: node.id });
         });
@@ -80,10 +83,14 @@ export function edgesOf(document) {
  */
 function holds(document, edges, nodeId, objectId, stack) {
     const node = nodeById(document, nodeId);
-    if ((node.ownership || []).some((entry) => {
+    const owned = (node.ownership || []).some((entry) => {
         const id = typeof entry === 'string' ? entry : entry.id;
         return id === objectId;
-    })) {
+    });
+    const received = (node.fan_in || []).some((entry) => {
+        return entry && typeof entry !== 'string' && !entry.from && entry.id === objectId;
+    });
+    if (owned || received) {
         return true;
     }
     if (stack.includes(nodeId)) {
