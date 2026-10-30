@@ -143,11 +143,8 @@ describe('releases', function() {
             nodes: [{
                 fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
                 id: 'cell',
-                implementation: {
-                    cluster: 'cell',
-                    objects: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }],
-                    profile: 'cell'
-                }
+                implementation: { cluster: 'cell', profile: 'cell' },
+                objects: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }]
             }],
             profiles: { cell: { modules: {} } }
         }, 'cell');
