@@ -225,7 +225,7 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 
 ## Deploy
 
-The deployment DSL is specified in [docs/deploy.md](docs/deploy.md). A site states an intent (`own`, `collect`, or `local`). A profile shared by many sites states the implementation: which databases, which broker, and which migration set. One Helm release of `charts/scada` is one cluster, cut from that document.
+The deployment DSL is specified in [docs/deploy.md](docs/deploy.md). A site states an intent (`own`, `collect`, or `local`). A profile shared by many sites states purposes: `upstream`, `state_store`, `message_bus`, and `telemetry_store`. The chart binds those purposes to products. One Helm release of `charts/scada` is one cluster, cut from that document.
 
 ## Testing
 

@@ -10,7 +10,7 @@ The chart does not know furnaces or HMI. Extra keys on a machine are opaque: the
 
 ## System document
 
-A site states **intent**: what this node is for in the plant. A **profile** is the implementation shared by a set of sites: which databases and services run there, and which migration set the process uses. Many sites may name one profile. Changing Postgres on every edge is a change to the profile, not to each site.
+A site states **intent**: what this node is for in the plant. A **profile** is the implementation shared by a set of sites. Each field names a purpose. The chart binds that purpose to a product when it emits a release. Many sites may name one profile. Changing the state store on every edge is a change to the profile, not to each site.
 
 ```yaml
 plant: mill
@@ -23,22 +23,23 @@ machines:
     # any further keys are opaque
 profiles:                        # required. Implementation of a class of node
   cell:
-    sink: edge                   # required: central or edge. Becomes SINK_DB_PROFILE
+    upstream: forward            # required: forward or accept
     command: ["node", "bin/edge-site.js"]
-    postgres: { enabled: true }
-    rabbitmq: { enabled: true }
-    clickhouse: { enabled: false }
+    state_store: { enabled: true }
+    message_bus: { enabled: true }
+    telemetry_store: { enabled: false }
   archive:
-    sink: central
+    upstream: accept
     command: ["node", "bin/central-site.js"]
-    postgres: { enabled: true }
-    rabbitmq: { enabled: true }
-    clickhouse: { enabled: true }
+    state_store: { enabled: true }
+    message_bus: { enabled: true }
+    telemetry_store: { enabled: true }
   cell-external:
-    sink: edge
+    upstream: forward
     command: ["node", "bin/edge-site.js"]
-    postgres: { enabled: false }
-    rabbitmq: { enabled: false }
+    state_store: { enabled: false }
+    message_bus: { enabled: false }
+    telemetry_store: { enabled: false }
 sites:
   - id: edge-a                   # required, unique
     cluster: edge-a              # required, unique release selector
@@ -61,7 +62,7 @@ apps:
   scada:
     image: example.invalid/plant:1   # required. Every scada release uses it unless the profile sets image
     pullSecret: registry             # optional
-    secret: scada-postgres           # optional Postgres Secret name. Default scada-postgres
+    secret: scada-postgres           # optional state-store Secret name. Default scada-postgres
   wms:                               # any other key is an app this package does not interpret
     chart: wms                       # required
     clusters: [central]              # required. Site cluster ids that receive the app
@@ -70,6 +71,16 @@ apps:
 ```
 
 `place` is a dot path. `tubes.hall.bay-1` is three levels, and another machine may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two machines share a parent when their paths share a prefix. An empty segment is an error.
+
+Profile fields:
+
+| Field | Purpose |
+|---|---|
+| `upstream` | `forward`: this node sends plant data to a node above it. `accept`: this node is the top. It does not name a site. The `collect` site is the node that accepts |
+| `command` | argv of the site process |
+| `state_store` | durable plant records: timeline, alerts, segments. Enabled installs Postgres |
+| `message_bus` | alerts, segments, telemetry, operations, and decisions between processes. Enabled installs RabbitMQ |
+| `telemetry_store` | time-series measurements. Enabled installs ClickHouse |
 
 `intent` is the only topology choice on a site:
 
@@ -87,8 +98,11 @@ Scada projection:
 |---|---|
 | `apps.scada.image`, or `profile.image` when set | `image` |
 | `profile.command` | `command` |
-| `profile.sink` | `role` |
-| `profile.postgres` / `rabbitmq` / `clickhouse` | the same objects, merged over chart defaults |
+| `profile.upstream` `forward` | `role: edge` |
+| `profile.upstream` `accept` | `role: central` |
+| `profile.state_store` | `postgres` |
+| `profile.message_bus` | `rabbitmq` |
+| `profile.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
 | `own` machines, full records | `machines` |
 | `collect` | `sites` built from every `own` site |
@@ -108,6 +122,8 @@ helm upgrade --install edge-a charts/scada \
 `image` is required on the release. The release name becomes the DNS prefix: `edge-a-site-server`, `edge-a-postgres`, `edge-a-rabbitmq`, `edge-a-clickhouse`. The file passed to Helm is the release values below, not the system document.
 
 ## Values
+
+These names are the chart binding. A profile does not use them. `releases` writes them from the purpose fields above.
 
 | Field | Default | Becomes |
 |---|---|---|
@@ -163,7 +179,7 @@ The chart's own RabbitMQ definitions create user `guest` / `guest` and point `ST
 
 ## What a profile installs
 
-The profile, not the site, decides the processes. `sink: central` selects the central migration set. `sink: edge` selects the edge set. `clickhouse.enabled`, `postgres.enabled`, and `rabbitmq.enabled` are independent of `intent`. An `own` site may use `cell` or `cell-external`. A `collect` site may use `archive`.
+The profile, not the site, decides the processes. `upstream: accept` selects the central migration set. `upstream: forward` selects the edge set. `telemetry_store`, `state_store`, and `message_bus` are independent of `intent`. An `own` site may use `cell` or `cell-external`. A `collect` site may use `archive`.
 
 Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. Use `intent: own` or `intent: collect` when the release must not use that fallback.
 
