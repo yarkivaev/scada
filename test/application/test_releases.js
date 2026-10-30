@@ -138,6 +138,25 @@ describe('releases', function() {
         );
     });
 
+    it('copies an object the node carries in ownership', function() {
+        const machine = `m${Math.random().toString(36).slice(2, 8)}`;
+        const device = `d${Math.random().toString(36).slice(2, 8)}`;
+        const cut = releases({
+            apps: { scada: { image: 'example.invalid/plant:1' } },
+            nodes: [{
+                id: 'cell',
+                implementation: { cluster: 'cell', profile: 'cell' },
+                ownership: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }]
+            }],
+            profiles: { cell: { modules: {} } }
+        }, 'cell');
+        assert.strictEqual(
+            cut.scada.machines[0].device,
+            device,
+            'releases dropped the object carried on the node'
+        );
+    });
+
     it('rejects a cluster the document does not name', function() {
         const cluster = `missing${Math.random().toString(36).slice(2, 6)}`;
         assert.throws(

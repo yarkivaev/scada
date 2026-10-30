@@ -71,7 +71,12 @@ export function routesFor(document, edges, node) {
  *   ownedBy(document, node);
  */
 export function ownedBy(document, node) {
-    return (node.ownership || []).map((id) => {return machineById(document, id)});
+    return (node.ownership || []).map((entry) => {
+        if (typeof entry === 'string') {
+            return machineById(document, entry);
+        }
+        return entry;
+    });
 }
 
 /**

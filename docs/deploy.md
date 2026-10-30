@@ -19,26 +19,20 @@ A node has four parts. Each part is optional.
 | `upstream` | where this node delivers data |
 | `api` | which services this node provides |
 
-Objects in this document are machine ids. A node may omit any part: it can manage state and offer no service, receive and forward without managing state, or only provide an API.
+Objects live on the node that manages them. `fan_in` and `upstream` name those object ids. A node may omit any part: it can manage state and offer no service, receive and forward without managing state, or only provide an API.
 
 Everything else is implementation and is written apart from those four parts: which profile, which cluster, which modules, which image.
 
 ```yaml
 plant: mill
 title: Mill
-machines:
-  - id: unit-1                   # required, unique
-    device: device-1             # required
-    kind: unit                   # required
-    place: tubes.hall.bay-1      # required. Dot path. Each segment is one level
-    # any further keys are opaque
-  - id: unit-2
-    device: device-2
-    kind: unit
-    place: tubes.hall.bay-1
 nodes:
   - id: cell-b
-    ownership: [unit-2]
+    ownership:
+      - id: unit-2
+        device: device-2
+        kind: unit
+        place: tubes.hall.bay-1
     upstream:
       - to: cell-a
         objects: [unit-2]
@@ -49,7 +43,11 @@ nodes:
       profile: cell
       cluster: cell-b
   - id: cell-a
-    ownership: [unit-1]
+    ownership:
+      - id: unit-1
+        device: device-1
+        kind: unit
+        place: tubes.hall.bay-1
     fan_in:
       - from: cell-b
         api: plant
@@ -103,7 +101,9 @@ apps:
       image: example.invalid/wms:1
 ```
 
-`place` is a dot path. `tubes.hall.bay-1` is three levels, and another machine may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two machines share a parent when their paths share a prefix. An empty segment is an error.
+`place` is a dot path on the object. `tubes.hall.bay-1` is three levels, and another object may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two objects share a parent when their paths share a prefix. An empty segment is an error.
+
+There is no machine catalog beside the nodes. Extra keys on an ownership object are opaque: the chart copies the object through. `channels` and collectors are such keys, or they sit in `implementation` when they describe how that node runs.
 
 `ownership`, `fan_in`, `upstream`, and `api` name nodes and objects. They do not name databases. An unknown object id or node id is an error. An object in `fan_in` or `upstream` must already be in that source node's `ownership` or `fan_in`. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set and each of them manages that state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source. It is required when that source provides more than one service, and the source must provide it.
 

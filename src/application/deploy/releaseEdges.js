@@ -80,7 +80,10 @@ export function edgesOf(document) {
  */
 function holds(document, edges, nodeId, objectId, stack) {
     const node = nodeById(document, nodeId);
-    if ((node.ownership || []).includes(objectId)) {
+    if ((node.ownership || []).some((entry) => {
+        const id = typeof entry === 'string' ? entry : entry.id;
+        return id === objectId;
+    })) {
         return true;
     }
     if (stack.includes(nodeId)) {
