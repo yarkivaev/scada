@@ -13,8 +13,8 @@ describe('releases', function() {
                     api: [{ id: 'plant', url }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
-                    upstream: [{ object: machine, to: 'archive' }]
+                    fan_in: [{ from: 'modbus://192.0.2.9:502', name: machine }],
+                    upstream: [{ name: machine, to: 'archive' }]
                 },
                 {
                     id: 'archive',
@@ -43,8 +43,8 @@ describe('releases', function() {
                     api: [{ id: 'plant', url: 'http://192.0.2.9:30300/api/v1' }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
-                    upstream: [{ object: machine, to: 'archive' }]
+                    fan_in: [{ from: 'modbus://192.0.2.9:502', name: machine }],
+                    upstream: [{ name: machine, to: 'archive' }]
                 },
                 { id: 'archive', implementation: { cluster: 'archive', profile: 'archive' } }
             ],
@@ -59,7 +59,7 @@ describe('releases', function() {
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [{
-                fan_in: [{ from: 'modbus://192.0.2.8:502', object: meter }],
+                fan_in: [{ from: 'modbus://192.0.2.8:502', name: meter }],
                 id: 'cell',
                 implementation: { cluster: 'cell', profile: 'cell' },
                 ownership: [{ id: state, kind: 'cycle' }]
@@ -67,7 +67,7 @@ describe('releases', function() {
             profiles: { cell: { modules: {} } }
         }, 'cell');
         assert.deepStrictEqual(
-            cut.scada.machines.map((item) => {return item.object}),
+            cut.scada.machines.map((item) => {return item.name}),
             [meter],
             'releases published editable state as telemetry'
         );
@@ -120,11 +120,11 @@ describe('releases', function() {
                         api: [{ id: 'plant', url }],
                         id: 'cell',
                         implementation: { cluster: 'cell', profile: 'cell' },
-                        fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
-                        upstream: [{ object: machine, to: 'archive' }]
+                        fan_in: [{ from: 'modbus://192.0.2.9:502', name: machine }],
+                        upstream: [{ name: machine, to: 'archive' }]
                     },
                     {
-                        fan_in: [{ api: 'plant', from: 'cell', object: other }],
+                        fan_in: [{ api: 'plant', from: 'cell', name: other }],
                         id: 'archive',
                         implementation: { cluster: 'archive', profile: 'archive' }
                     }
@@ -137,11 +137,10 @@ describe('releases', function() {
 
     it('copies the object a flow names', function() {
         const machine = `m${Math.random().toString(36).slice(2, 8)}`;
-        const device = `d${Math.random().toString(36).slice(2, 8)}`;
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [{
-                fan_in: [{ device, from: 'modbus://192.0.2.9:502', object: machine }],
+                fan_in: [{ from: 'modbus://192.0.2.9:502', name: machine }],
                 id: 'cell',
                 implementation: { cluster: 'cell', profile: 'cell' },
                 objects: [{ id: machine, kind: 'unit', place: 'mill.hall' }]
@@ -149,9 +148,9 @@ describe('releases', function() {
             profiles: { cell: { modules: {} } }
         }, 'cell');
         assert.strictEqual(
-            cut.scada.machines[0].device,
-            device,
-            'releases dropped the telemetry record'
+            cut.scada.machines[0].id,
+            machine,
+            'releases dropped the named object'
         );
     });
 
@@ -161,13 +160,13 @@ describe('releases', function() {
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [
                 {
-                    fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
+                    fan_in: [{ from: 'modbus://192.0.2.9:502', name: machine }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    upstream: [{ object: machine, to: 'archive' }]
+                    upstream: [{ name: machine, to: 'archive' }]
                 },
                 {
-                    fan_in: [{ from: 'cell', object: machine }],
+                    fan_in: [{ from: 'cell', name: machine }],
                     id: 'archive',
                     implementation: { cluster: 'archive', profile: 'archive' }
                 }

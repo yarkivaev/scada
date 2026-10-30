@@ -225,7 +225,7 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 
 ## Deploy
 
-The deployment DSL is specified in [docs/deploy.md](docs/deploy.md). A node states four optional parts: `ownership`, `fan_in`, `upstream`, and `api`. A flow is `from`, one `object`, and optional `signals`. An object is state: `id`, `title`, `kind`, `place`. Measurements ride on the flow. Profile, cluster, and modules are implementation. One Helm release of `charts/scada` is one cluster, cut from that document.
+The deployment DSL is specified in [docs/deploy.md](docs/deploy.md). A flow is `from` and `name`. An object is state: `id`, `title`, `kind`, `place`. Profile, cluster, and modules are implementation. One Helm release of `charts/scada` is one cluster, cut from that document.
 
 ## Testing
 

@@ -30,15 +30,15 @@ function remember(edges, edge) {
         edges.push({
             api: edge.api,
             from: edge.from,
-            objects: [edge.object],
-            sides: { [edge.side]: [edge.object] },
+            objects: [edge.name],
+            sides: { [edge.side]: [edge.name] },
             to: edge.to
         });
         return;
     }
     const prior = found.sides[edge.side] || [];
-    if (!prior.includes(edge.object)) {
-        prior.push(edge.object);
+    if (!prior.includes(edge.name)) {
+        prior.push(edge.name);
     }
     found.sides[edge.side] = prior;
     const left = found.sides.out;
@@ -66,14 +66,14 @@ export function edgesOf(document) {
     (document.nodes || []).forEach((node) => {
         (node.upstream || []).forEach((flow) => {
             nodeById(document, flow.to);
-            remember(edges, { api: undefined, from: node.id, object: flow.object, side: 'out', to: flow.to });
+            remember(edges, { api: undefined, from: node.id, name: flow.name, side: 'out', to: flow.to });
         });
         (node.fan_in || []).forEach((flow) => {
             if (!ids.has(flow.from)) {
                 return;
             }
             nodeById(document, flow.from);
-            remember(edges, { api: flow.api, from: flow.from, object: flow.object, side: 'in', to: node.id });
+            remember(edges, { api: flow.api, from: flow.from, name: flow.name, side: 'in', to: node.id });
         });
     });
     return edges;
@@ -99,7 +99,7 @@ function holds(document, edges, nodeId, objectId, stack) {
         return id === objectId;
     });
     const received = (node.fan_in || []).some((entry) => {
-        return entry && entry.object === objectId && !ids.has(entry.from);
+        return entry && entry.name === objectId && !ids.has(entry.from);
     });
     if (owned || received) {
         return true;

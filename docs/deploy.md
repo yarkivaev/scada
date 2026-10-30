@@ -21,17 +21,15 @@ A node has four parts. Each part is optional.
 
 Telemetry lives in `fan_in` and has no state. `ownership` is state this node edits. A node may omit any part.
 
-A flow has three fields. One flow names one object. Several objects are several flows.
+A flow has two fields. One flow has one name. Several names are several flows.
 
 | Field | On `fan_in` | On `upstream` |
 |---|---|---|
-| `from` | a node id, or a source. A node id is another node. Anything else is a device source: an address such as `modbus://192.0.2.10:502`, or the id of a collector in `objects` | this node, so the field is omitted |
-| `object` | the one object this flow carries | the one object this flow carries |
-| `signals` | optional. A map of signal name to source address, or omitted for the whole object's telemetry | optional, same meaning |
+| `from` | where this flow comes from: a node id, or a source such as `modbus://192.0.2.10:502` | this node, so the field is omitted |
+| `name` | what this flow is called | what this flow is called |
 | `to` | this node, so the field is omitted | the node that receives the flow |
-| `api` | which service of the source to call, when that source publishes one | omitted |
 
-`objects` names state this node edits. An object item is that subject: `id`, `title`, `kind`, `place`. Measurements are not fields of the object. The device name and the signal addresses ride on the flow, which has no state. A debug port for the local panel is implementation. This document does not yet list the state fields themselves.
+Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` names state this node edits. An object item is that subject: `id`, `title`, `kind`, `place`. This document does not yet list the state fields themselves. A debug port for the local panel is implementation.
 
 ```yaml
 plant: mill
@@ -40,12 +38,10 @@ nodes:
   - id: cell-b
     fan_in:
       - from: modbus://192.0.2.11:502
-        object: unit-2
-        device: device-2
-        signals: { voltage: AI1, current: AI2 }
+        name: unit-2
     upstream:
       - to: cell-a
-        object: unit-2
+        name: unit-2
     api:
       - id: plant
         url: http://192.0.2.11:30300/api/v1
@@ -59,16 +55,15 @@ nodes:
   - id: cell-a
     fan_in:
       - from: modbus://192.0.2.10:502
-        object: unit-1
-        device: device-1
+        name: unit-1
       - from: cell-b
         api: plant
-        object: unit-2
+        name: unit-2
     upstream:
       - to: archive
-        object: unit-1
+        name: unit-1
       - to: archive
-        object: unit-2
+        name: unit-2
     api:
       - id: plant
         url: http://192.0.2.10:30300/api/v1
@@ -84,10 +79,10 @@ nodes:
     fan_in:
       - from: cell-a
         api: plant
-        object: unit-1
+        name: unit-1
       - from: cell-a
         api: plant
-        object: unit-2
+        name: unit-2
     implementation:
       profile: archive
       cluster: archive
