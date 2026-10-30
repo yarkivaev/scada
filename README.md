@@ -225,7 +225,7 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 
 ## Deploy
 
-`charts/scada` is the deployment DSL: one Helm release is one site. Values `role`, `machines`, and `sites` select a standalone site, an edge, or a central archive in front of several edges. Field reference, Secret keys, broker topology, and the three site shapes are in [docs/deploy.md](docs/deploy.md).
+The deployment DSL has two levels, specified in [docs/deploy.md](docs/deploy.md). The system document lists every machine, site, and app. One Helm release of `charts/scada` is one cluster, cut from that document.
 
 ## Testing
 
