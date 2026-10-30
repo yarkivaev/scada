@@ -29,7 +29,7 @@ A flow has two fields. One flow has one name. Several names are several flows.
 | `name` | what this flow is called | what this flow is called |
 | `to` | this node, so the field is omitted | the node that receives the flow |
 
-Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` names state this node edits. An object item is that subject: `id`, `title`, `kind`, `place`. This document does not yet list the state fields themselves. A debug port for the local panel is implementation.
+Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` lists the state this node is responsible for. An entry is the object's id. The same id on several nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves. A debug port for the local panel is implementation.
 
 ```yaml
 plant: mill
@@ -46,9 +46,7 @@ nodes:
       - id: plant
         url: http://192.0.2.11:30300/api/v1
     objects:
-      - id: unit-2
-        kind: unit
-        place: tubes.hall.bay-1
+      - unit-2
     implementation:
       profile: cell
       cluster: cell-b
@@ -68,9 +66,7 @@ nodes:
       - id: plant
         url: http://192.0.2.10:30300/api/v1
     objects:
-      - id: unit-1
-        kind: unit
-        place: tubes.hall.bay-1
+      - unit-1
     implementation:
       profile: cell
       cluster: cell-a

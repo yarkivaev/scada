@@ -82,11 +82,15 @@ export function telemetryOf(document, node) {
     return (node.fan_in || []).filter((entry) => {
         return entry && entry.from && !ids.has(entry.from);
     }).map((flow) => {
-        const found = catalog.find((item) => {return item.id === flow.name});
+        const found = catalog.find((item) => {
+            const id = typeof item === 'string' ? item : item.id;
+            return id === flow.name;
+        });
         if (!found) {
             return flow;
         }
-        return { ...found, ...flow, id: found.id };
+        const row = typeof found === 'string' ? { id: found } : found;
+        return { ...row, ...flow, id: row.id };
     });
 }
 
