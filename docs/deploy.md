@@ -6,7 +6,7 @@ The **system document** is one file for the whole plant: every machine, every si
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
-The chart does not know furnaces or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them. Location is a tree of places, not a fixed shop level.
+The chart does not know furnaces or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them. A machine's place is a dot path, so the hierarchy is as deep as the path.
 
 ## System document
 
@@ -15,23 +15,11 @@ A site states **intent**: what this node is for in the plant. A **profile** is t
 ```yaml
 plant: mill
 title: Mill
-places:                          # required tree. Ids are unique across the whole tree
-  - id: tubes
-    title: Tubes                # optional
-    kind: plant                 # optional, opaque. plant, shop, section are not DSL keywords
-    places:
-      - id: hall
-        title: Hall
-        kind: shop
-        places:
-          - id: bay-1
-            title: Bay 1
-            kind: section
 machines:
   - id: unit-1                   # required, unique
     device: device-1             # required
     kind: unit                   # required
-    place: bay-1                 # required. Must be a place id. The path is tubes / hall / bay-1
+    place: tubes.hall.bay-1      # required. Dot path. Each segment is one level
     # any further keys are opaque
 profiles:                        # required. Implementation of a class of node
   cell:
@@ -81,7 +69,7 @@ apps:
       image: example.invalid/wms:1
 ```
 
-A place id is unique in the tree. A machine's `place` must name one of those ids. The path to that id is the parent chain, so a machine can sit under a plant, a shop, a section, or any deeper node. `kind` on a place is a label for the plant package. The DSL does not treat `shop` specially. A missing place id is an error.
+`place` is a dot path. `tubes.hall.bay-1` is three levels, and another machine may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two machines share a parent when their paths share a prefix. An empty segment is an error.
 
 `intent` is the only topology choice on a site:
 
@@ -150,7 +138,7 @@ machines:
   - id: unit-1
     device: device-1
     kind: unit
-    place: bay-1
+    place: tubes.hall.bay-1
 ```
 
 `sites` entries are owner routes. `machineOwners` treats each machine id as owned by that `baseUrl`. A machine that appears in no site stays local. `siteSyncSites` accepts the same objects (`baseUrl` or `url`, optional `token`, optional `machines`).
@@ -206,8 +194,8 @@ clickhouse:
 service:
   nodePort: 30300
 machines:
-  - { id: unit-1, device: device-1, kind: unit, place: bay-1 }
-  - { id: unit-2, device: device-2, kind: unit, place: bay-1 }
+  - { id: unit-1, device: device-1, kind: unit, place: tubes.hall.bay-1 }
+  - { id: unit-2, device: device-2, kind: unit, place: tubes.hall.bay-1 }
 ```
 
 A central archive in front of those edges. Metrics go to ClickHouse. Writes for `unit-1` and `unit-2` go to the first edge, `unit-3` to the second. Any other machine stays local:
