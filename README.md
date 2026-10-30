@@ -223,6 +223,19 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 | `CLICKHOUSE_URL` | Central metrics sink |
 | `PORT` | Plant API port (siteServer, default 3000) |
 
+## Helm
+
+`charts/scada` installs a generic site: `site-server`, Postgres, RabbitMQ (STOMP + the `scada.*` ingest exchanges), and ClickHouse only when `clickhouse.enabled` is true. The chart does not know shops, furnaces, or HMI. A plant package sets `image`, `command`, `role` (`central` or `edge`), `machines` (`EDGE_MACHINES`), and `sites` (`EDGE_SITES`).
+
+Postgres reads Secret `postgres.secret` keys `user`, `password`, `url`, and `adminUrl`. The in-cluster RabbitMQ user in the chart definitions is `guest`, matching the generic broker this chart creates.
+
+```bash
+helm template plant charts/scada --namespace scada \
+  --set image=example.invalid/plant:1 \
+  --set role=edge \
+  --set clickhouse.enabled=false
+```
+
 ## Testing
 
 ```bash
