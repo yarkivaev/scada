@@ -31,7 +31,7 @@ A flow has three fields. One flow names one object. Several objects are several 
 | `to` | this node, so the field is omitted | the node that receives the flow |
 | `api` | which service of the source to call, when that source publishes one | omitted |
 
-`objects` names state this node edits. An object item is that subject: `id`, `title`, `kind`, `place`. Measurements are not fields of the object. The device name, the signal addresses, and the panel ride on the flow, which has no state. This document does not yet list the state fields themselves.
+`objects` names state this node edits. An object item is that subject: `id`, `title`, `kind`, `place`. Measurements are not fields of the object. The device name and the signal addresses ride on the flow, which has no state. A debug port for the local panel is implementation. This document does not yet list the state fields themselves.
 
 ```yaml
 plant: mill
@@ -135,6 +135,7 @@ Implementation:
 | `implementation.profile` | node | module set. Unknown name is an error |
 | `implementation.cluster` | node | release selector. One Helm release, one cluster |
 | `implementation.service` | node | how an API is published, for example `nodePort` |
+| `implementation.inspect` | node | debug port of the local panel. The chart does not read it |
 | `command` | profile | argv of the site process |
 | `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
 | `state_store` | module | durable records: timeline, alerts, segments. Enabled installs Postgres |
