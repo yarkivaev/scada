@@ -72,7 +72,7 @@ function scadaRelease(document, node, profile, edges) {
         node,
         app
     );
-    return withObjects(values, telemetryOf(node), routesFor(document, edges, node));
+    return withObjects(values, telemetryOf(document, node), routesFor(document, edges, node));
 }
 
 /**

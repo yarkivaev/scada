@@ -15,13 +15,23 @@ A node has four parts. Each part is optional.
 | Part | What it answers |
 |---|---|
 | `ownership` | state of an object this node edits. The same object on several nodes is one fault-tolerant set. This is not telemetry |
-| `fan_in` | telemetry this node receives. A record with no `from` is a device or collector and has no state. A record with `from` names telemetry arriving from another node |
-| `upstream` | where this node delivers data |
+| `fan_in` | one flow into this node. It has no state |
+| `upstream` | one flow out of this node |
 | `api` | services other nodes may call. A panel that only the local HMI uses is not an api |
 
-Telemetry lives in `fan_in` and has no state. `ownership` is state this node edits. `fan_in` and `upstream` name object ids. A node may omit any part.
+Telemetry lives in `fan_in` and has no state. `ownership` is state this node edits. A node may omit any part.
 
-Everything else is implementation and is written apart from those four parts: which profile, which cluster, which modules, which image.
+A flow has three fields. One flow names one object. Several objects are several flows.
+
+| Field | On `fan_in` | On `upstream` |
+|---|---|---|
+| `from` | a node id, or a source. A node id is another node. Anything else is a device source: an address such as `modbus://192.0.2.10:502`, or the id of a collector in `implementation.objects` | this node, so the field is omitted |
+| `object` | the one object this flow carries | the one object this flow carries |
+| `signals` | optional signal names. Omitted means the whole object's telemetry | optional, same meaning |
+| `to` | this node, so the field is omitted | the node that receives the flow |
+| `api` | which service of the source to call, when that source publishes one | omitted |
+
+`device`, `label`, `kind`, `place`, `channels`, `modbus`, `inspect`, `host`, and `feeds` are not flow fields. They describe how this node runs and live on `implementation.objects`.
 
 ```yaml
 plant: mill
@@ -29,31 +39,35 @@ title: Mill
 nodes:
   - id: cell-b
     fan_in:
-      - id: unit-2
-        device: device-2
-        kind: unit
-        place: tubes.hall.bay-1
+      - from: modbus://192.0.2.11:502
+        object: unit-2
+        signals: [voltage, current]
     upstream:
       - to: cell-a
-        objects: [unit-2]
+        object: unit-2
     api:
       - id: plant
         url: http://192.0.2.11:30300/api/v1
     implementation:
       profile: cell
       cluster: cell-b
+      objects:
+        - id: unit-2
+          device: device-2
+          kind: unit
+          place: tubes.hall.bay-1
   - id: cell-a
     fan_in:
-      - id: unit-1
-        device: device-1
-        kind: unit
-        place: tubes.hall.bay-1
+      - from: modbus://192.0.2.10:502
+        object: unit-1
       - from: cell-b
         api: plant
-        objects: [unit-2]
+        object: unit-2
     upstream:
       - to: archive
-        objects: [unit-1, unit-2]
+        object: unit-1
+      - to: archive
+        object: unit-2
     api:
       - id: plant
         url: http://192.0.2.10:30300/api/v1
@@ -61,11 +75,19 @@ nodes:
       profile: cell
       cluster: cell-a
       service: { nodePort: 30300 }
+      objects:
+        - id: unit-1
+          device: device-1
+          kind: unit
+          place: tubes.hall.bay-1
   - id: archive
     fan_in:
       - from: cell-a
         api: plant
-        objects: [unit-1, unit-2]
+        object: unit-1
+      - from: cell-a
+        api: plant
+        object: unit-2
     implementation:
       profile: archive
       cluster: archive
@@ -102,9 +124,9 @@ apps:
 
 `place` is a dot path on the object. `tubes.hall.bay-1` is three levels, and another object may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two objects share a parent when their paths share a prefix. An empty segment is an error.
 
-There is no machine catalog beside the nodes. Extra keys on an ownership object are opaque: the chart copies the object through. `channels` and collectors are such keys, or they sit in `implementation` when they describe how that node runs.
+There is no machine catalog beside the nodes. `implementation.objects` holds the records the process reads: identity, place, and how the source is wired. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
-`fan_in`, `upstream`, and `api` name nodes and telemetry ids. They do not name databases. An unknown object id or node id is an error. An object in `upstream` or in a `from` fan-in must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
+`fan_in`, `upstream`, and `api` name nodes, sources, and one object id. They do not name databases. An unknown node id is an error. An object in `upstream` or in a node-to-node `fan_in` must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
 
 Implementation:
 
@@ -133,8 +155,8 @@ Scada projection:
 | `profile.modules.message_bus` | `rabbitmq` |
 | `profile.modules.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
-| local `fan_in` records, the ones without `from` | `machines` |
-| `fan_in` with `from`, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API |
+| `fan_in` whose `from` is not a node, joined with `implementation.objects` | `machines` |
+| `fan_in` whose `from` is a node, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
 | `implementation.service` | `service` |

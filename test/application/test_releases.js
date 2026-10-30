@@ -13,8 +13,8 @@ describe('releases', function() {
                     api: [{ id: 'plant', url }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
-                    upstream: [{ objects: [machine], to: 'archive' }]
+                    fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
+                    upstream: [{ object: machine, to: 'archive' }]
                 },
                 {
                     id: 'archive',
@@ -43,8 +43,8 @@ describe('releases', function() {
                     api: [{ id: 'plant', url: 'http://192.0.2.9:30300/api/v1' }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
-                    upstream: [{ objects: [machine], to: 'archive' }]
+                    fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
+                    upstream: [{ object: machine, to: 'archive' }]
                 },
                 { id: 'archive', implementation: { cluster: 'archive', profile: 'archive' } }
             ],
@@ -59,7 +59,7 @@ describe('releases', function() {
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [{
-                fan_in: [{ device: 'd', id: meter, kind: 'unit', place: 'mill.hall' }],
+                fan_in: [{ from: 'modbus://192.0.2.8:502', object: meter }],
                 id: 'cell',
                 implementation: { cluster: 'cell', profile: 'cell' },
                 ownership: [{ id: state, kind: 'cycle' }]
@@ -67,7 +67,7 @@ describe('releases', function() {
             profiles: { cell: { modules: {} } }
         }, 'cell');
         assert.deepStrictEqual(
-            cut.scada.machines.map((item) => {return item.id}),
+            cut.scada.machines.map((item) => {return item.object}),
             [meter],
             'releases published editable state as telemetry'
         );
@@ -120,11 +120,11 @@ describe('releases', function() {
                         api: [{ id: 'plant', url }],
                         id: 'cell',
                         implementation: { cluster: 'cell', profile: 'cell' },
-                        fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
-                        upstream: [{ objects: [machine], to: 'archive' }]
+                        fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
+                        upstream: [{ object: machine, to: 'archive' }]
                     },
                     {
-                        fan_in: [{ api: 'plant', from: 'cell', objects: [other] }],
+                        fan_in: [{ api: 'plant', from: 'cell', object: other }],
                         id: 'archive',
                         implementation: { cluster: 'archive', profile: 'archive' }
                     }
@@ -135,15 +135,19 @@ describe('releases', function() {
         );
     });
 
-    it('copies a telemetry record from fan-in', function() {
+    it('copies the object a flow names', function() {
         const machine = `m${Math.random().toString(36).slice(2, 8)}`;
         const device = `d${Math.random().toString(36).slice(2, 8)}`;
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [{
-                fan_in: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }],
+                fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
                 id: 'cell',
-                implementation: { cluster: 'cell', profile: 'cell' }
+                implementation: {
+                    cluster: 'cell',
+                    objects: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }],
+                    profile: 'cell'
+                }
             }],
             profiles: { cell: { modules: {} } }
         }, 'cell');
@@ -160,13 +164,13 @@ describe('releases', function() {
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [
                 {
-                    fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
+                    fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
                     id: 'cell',
                     implementation: { cluster: 'cell', profile: 'cell' },
-                    upstream: [{ objects: [machine], to: 'archive' }]
+                    upstream: [{ object: machine, to: 'archive' }]
                 },
                 {
-                    fan_in: [{ from: 'cell', objects: [machine] }],
+                    fan_in: [{ from: 'cell', object: machine }],
                     id: 'archive',
                     implementation: { cluster: 'archive', profile: 'archive' }
                 }

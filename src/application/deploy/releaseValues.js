@@ -68,16 +68,22 @@ export function routesFor(document, edges, node) {
 }
 
 /**
- * Telemetry this node receives from a device. Entries with `from` are routes.
+ * Telemetry this node receives from a source that is not a node.
  *
+ * @param {object} document - system document
  * @param {object} node - selected node
- * @returns {object[]} fan-in records
+ * @returns {object[]} device records named by those flows
  * @example
- *   telemetryOf(node);
+ *   telemetryOf(document, node);
  */
-export function telemetryOf(node) {
+export function telemetryOf(document, node) {
+    const ids = new Set((document.nodes || []).map((item) => {return item.id}));
+    const catalog = (node.implementation && node.implementation.objects) || [];
     return (node.fan_in || []).filter((entry) => {
-        return entry && typeof entry !== 'string' && !entry.from;
+        return entry && entry.from && !ids.has(entry.from);
+    }).map((flow) => {
+        const found = catalog.find((item) => {return item.id === flow.object});
+        return found || flow;
     });
 }
 

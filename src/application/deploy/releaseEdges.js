@@ -30,14 +30,23 @@ function remember(edges, edge) {
         edges.push({
             api: edge.api,
             from: edge.from,
-            objects: edge.objects.slice(),
+            objects: [edge.object],
+            sides: { [edge.side]: [edge.object] },
             to: edge.to
         });
         return;
     }
-    if (!sameObjects(found.objects, edge.objects)) {
+    const prior = found.sides[edge.side] || [];
+    if (!prior.includes(edge.object)) {
+        prior.push(edge.object);
+    }
+    found.sides[edge.side] = prior;
+    const left = found.sides.out;
+    const right = found.sides.in;
+    if (left && right && !sameObjects(left, right)) {
         throw new Error(`system document edge from ${edge.from} to ${edge.to} lists different objects`);
     }
+    found.objects = (left || right).slice();
     if (edge.api) {
         found.api = edge.api;
     }
@@ -52,18 +61,19 @@ function remember(edges, edge) {
  *   edgesOf(document);
  */
 export function edgesOf(document) {
+    const ids = new Set((document.nodes || []).map((node) => {return node.id}));
     const edges = [];
     (document.nodes || []).forEach((node) => {
-        (node.upstream || []).forEach((edge) => {
-            nodeById(document, edge.to);
-            remember(edges, { api: undefined, from: node.id, objects: edge.objects || [], to: edge.to });
+        (node.upstream || []).forEach((flow) => {
+            nodeById(document, flow.to);
+            remember(edges, { api: undefined, from: node.id, object: flow.object, side: 'out', to: flow.to });
         });
-        (node.fan_in || []).forEach((edge) => {
-            if (!edge.from) {
+        (node.fan_in || []).forEach((flow) => {
+            if (!ids.has(flow.from)) {
                 return;
             }
-            nodeById(document, edge.from);
-            remember(edges, { api: edge.api, from: edge.from, objects: edge.objects || [], to: node.id });
+            nodeById(document, flow.from);
+            remember(edges, { api: flow.api, from: flow.from, object: flow.object, side: 'in', to: node.id });
         });
     });
     return edges;
@@ -83,12 +93,13 @@ export function edgesOf(document) {
  */
 function holds(document, edges, nodeId, objectId, stack) {
     const node = nodeById(document, nodeId);
+    const ids = new Set((document.nodes || []).map((item) => {return item.id}));
     const owned = (node.ownership || []).some((entry) => {
         const id = typeof entry === 'string' ? entry : entry.id;
         return id === objectId;
     });
     const received = (node.fan_in || []).some((entry) => {
-        return entry && typeof entry !== 'string' && !entry.from && entry.id === objectId;
+        return entry && entry.object === objectId && !ids.has(entry.from);
     });
     if (owned || received) {
         return true;
