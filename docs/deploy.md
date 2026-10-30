@@ -10,7 +10,7 @@ The chart does not know furnaces or HMI. Extra keys on a machine are opaque: the
 
 ## System document
 
-A site states **intent**: what this node is for in the plant. A **profile** is the implementation shared by a set of sites. Each field names a purpose. The chart binds that purpose to a product when it emits a release. Many sites may name one profile. Changing the state store on every edge is a change to the profile, not to each site.
+Sites and links are a directed graph. A link moves one set of machines from one site to another. A site may hold machines of its own, receive machines, and send machines, including different machines in each direction. A **profile** is the module set shared by many sites. Each module is on or off. The chart binds an enabled module to a product when it emits a release. Changing the state store on every cell is a change to the profile, not to each site.
 
 ```yaml
 plant: mill
@@ -21,43 +21,51 @@ machines:
     kind: unit                   # required
     place: tubes.hall.bay-1      # required. Dot path. Each segment is one level
     # any further keys are opaque
-profiles:                        # required. Implementation of a class of node
+  - id: unit-2
+    device: device-2
+    kind: unit
+    place: tubes.hall.bay-1
+profiles:                        # required. Module set of a class of node
   cell:
-    upstream: forward            # required: forward or accept
     command: ["node", "bin/edge-site.js"]
-    state_store: { enabled: true }
-    message_bus: { enabled: true }
-    telemetry_store: { enabled: false }
+    modules:
+      state_store: { enabled: true }
+      message_bus: { enabled: true }
+      telemetry_store: { enabled: false }
   archive:
-    upstream: accept
     command: ["node", "bin/central-site.js"]
-    state_store: { enabled: true }
-    message_bus: { enabled: true }
-    telemetry_store: { enabled: true }
+    modules:
+      state_store: { enabled: true }
+      message_bus: { enabled: true }
+      telemetry_store: { enabled: true }
   cell-external:
-    upstream: forward
     command: ["node", "bin/edge-site.js"]
-    state_store: { enabled: false }
-    message_bus: { enabled: false }
-    telemetry_store: { enabled: false }
+    modules:
+      state_store: { enabled: false }
+      message_bus: { enabled: false }
+      telemetry_store: { enabled: false }
 sites:
-  - id: edge-a                   # required, unique
-    cluster: edge-a              # required, unique release selector
+  - id: cell-a                   # required, unique
+    cluster: cell-a              # required, unique release selector
     profile: cell                # required. Unknown name is an error
-    intent: own                  # required: own, collect, or local
-    api: http://192.0.2.10:30300/api/v1   # required when intent is own
-    machines: [unit-1]           # required when intent is own. Unknown id is an error
+    api: http://192.0.2.10:30300/api/v1   # required when this site is the source of a link
+    machines: [unit-1]           # machines held locally. Unknown id is an error
     service: { nodePort: 30300 } # optional reachability of this node, not of the profile
-  - id: edge-b
-    cluster: edge-b
+  - id: cell-b
+    cluster: cell-b
     profile: cell
-    intent: own
     api: http://192.0.2.11:30300/api/v1
     machines: [unit-2]
-  - id: central
-    cluster: central
+  - id: archive
+    cluster: archive
     profile: archive
-    intent: collect
+links:                           # directed. One machine may ride several links
+  - from: cell-b                 # required site id
+    to: cell-a                   # required site id, different from from
+    machines: [unit-2]           # required, non-empty
+  - from: cell-a
+    to: archive
+    machines: [unit-1, unit-2]
 apps:
   scada:
     image: example.invalid/plant:1   # required. Every scada release uses it unless the profile sets image
@@ -65,30 +73,24 @@ apps:
     secret: scada-postgres           # optional state-store Secret name. Default scada-postgres
   wms:                               # any other key is an app this package does not interpret
     chart: wms                       # required
-    clusters: [central]              # required. Site cluster ids that receive the app
+    clusters: [archive]              # required. Site cluster ids that receive the app
     values:                          # required object, copied through
       image: example.invalid/wms:1
 ```
 
 `place` is a dot path. `tubes.hall.bay-1` is three levels, and another machine may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two machines share a parent when their paths share a prefix. An empty segment is an error.
 
-Profile fields:
+Modules:
 
-| Field | Purpose |
-|---|---|
-| `upstream` | `forward`: this node sends plant data to a node above it. `accept`: this node is the top. It does not name a site. The `collect` site is the node that accepts |
-| `command` | argv of the site process |
-| `state_store` | durable plant records: timeline, alerts, segments. Enabled installs Postgres |
-| `message_bus` | alerts, segments, telemetry, operations, and decisions between processes. Enabled installs RabbitMQ |
-| `telemetry_store` | time-series measurements. Enabled installs ClickHouse |
-
-`intent` is the only topology choice on a site:
-
-| Intent | `EDGE_MACHINES` | `EDGE_SITES` |
+| Module | Purpose | Enabled installs |
 |---|---|---|
-| `own` | the site's machine records | omitted |
-| `collect` | omitted | every `own` site that has `api`, as `{ baseUrl, machines }` |
-| `local` | omitted | omitted |
+| `state_store` | durable plant records: timeline, alerts, segments | Postgres |
+| `message_bus` | alerts, segments, telemetry, operations, and decisions between processes | RabbitMQ |
+| `telemetry_store` | time-series measurements | ClickHouse |
+
+`command` is the argv of the site process. An unknown module name is an error. `enabled: false` installs nothing for that purpose. A site that needs a different module set names another profile.
+
+A machine is held by at most one site's `machines` list. The source of a link must hold each listed machine, either in its own `machines` or by an incoming link. Following links for one machine must not return to a site already visited. The source site must have `api`. In the example, `cell-b` holds `unit-2` and sends it to `cell-a`. `cell-a` holds `unit-1`, receives `unit-2`, and sends both to `archive`.
 
 `releases(document, cluster)` joins the selected site with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no site is an error. Passwords are not fields of this document.
 
@@ -98,14 +100,12 @@ Scada projection:
 |---|---|
 | `apps.scada.image`, or `profile.image` when set | `image` |
 | `profile.command` | `command` |
-| `profile.upstream` `forward` | `role: edge` |
-| `profile.upstream` `accept` | `role: central` |
-| `profile.state_store` | `postgres` |
-| `profile.message_bus` | `rabbitmq` |
-| `profile.telemetry_store` | `clickhouse` |
+| `profile.modules.state_store` | `postgres` |
+| `profile.modules.message_bus` | `rabbitmq` |
+| `profile.modules.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
-| `own` machines, full records | `machines` |
-| `collect` | `sites` built from every `own` site |
+| this site's `machines`, full records | `machines` |
+| each link whose `to` is this site | one `sites` entry: `{ baseUrl: from.api, machines }` |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
 | `site.service` | `service` |
@@ -113,24 +113,24 @@ Scada projection:
 An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
 
 ```bash
-helm upgrade --install edge-a charts/scada \
+helm upgrade --install cell-a charts/scada \
   --namespace scada \
   --create-namespace \
-  -f edge-a.yaml
+  -f cell-a.yaml
 ```
 
-`image` is required on the release. The release name becomes the DNS prefix: `edge-a-site-server`, `edge-a-postgres`, `edge-a-rabbitmq`, `edge-a-clickhouse`. The file passed to Helm is the release values below, not the system document.
+`image` is required on the release. The release name becomes the DNS prefix: `cell-a-site-server`, `cell-a-postgres`, `cell-a-rabbitmq`, `cell-a-clickhouse`. The file passed to Helm is the release values below, not the system document.
 
 ## Values
 
-These names are the chart binding. A profile does not use them. `releases` writes them from the purpose fields above.
+These names are the chart binding. A profile does not use them. `releases` writes them from the modules above.
 
 | Field | Default | Becomes |
 |---|---|---|
 | `image` | empty, required | site-server image |
 | `command` | image entrypoint | container command, for example `["node", "bin/edge-site.js"]` |
 | `pullSecret` | none | `imagePullSecrets` name |
-| `role` | `edge` | `SINK_DB_PROFILE`. `central` uses the central migration set. Any other value is the edge set |
+| `role` | `edge` | `SINK_DB_PROFILE` on the current process. The system document does not set it |
 | `machines` | `[]` | `EDGE_MACHINES` JSON, omitted when empty |
 | `sites` | `[]` | `EDGE_SITES` JSON, omitted when empty |
 | `env` | `[]` | extra `{ name, value }` pairs on the site-server container |
@@ -179,9 +179,9 @@ The chart's own RabbitMQ definitions create user `guest` / `guest` and point `ST
 
 ## What a profile installs
 
-The profile, not the site, decides the processes. `upstream: accept` selects the central migration set. `upstream: forward` selects the edge set. `telemetry_store`, `state_store`, and `message_bus` are independent of `intent`. An `own` site may use `cell` or `cell-external`. A `collect` site may use `archive`.
+The profile decides which modules exist. The links decide which machines move. A site with local machines and incoming links emits both `machines` and `sites`. A site with neither emits neither.
 
-Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. Use `intent: own` or `intent: collect` when the release must not use that fallback.
+Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. List the machines and the links when the release must not use that fallback.
 
 ## Broker topology
 
@@ -189,51 +189,49 @@ When `rabbitmq.enabled` is true the chart loads definitions for topic exchanges 
 
 ## Release values
 
-The blocks below are what `releases` emits for one cluster. They are not the system document. A standalone `local` site on profile `cell` emits:
-
-```yaml
-image: example.invalid/plant:1
-command: ["node", "bin/site.js"]
-role: edge
-clickhouse:
-  enabled: false
-```
-
-An edge that owns two machines and is reachable from the plant LAN:
+The blocks below are what `releases` emits for one cluster. They are not the system document. `cell-b` holds `unit-2` and has no incoming link:
 
 ```yaml
 image: example.invalid/plant:1
 command: ["node", "bin/edge-site.js"]
-role: edge
+clickhouse:
+  enabled: false
+machines:
+  - { id: unit-2, device: device-2, kind: unit, place: tubes.hall.bay-1 }
+```
+
+`cell-a` holds `unit-1` and receives `unit-2`:
+
+```yaml
+image: example.invalid/plant:1
+command: ["node", "bin/edge-site.js"]
 clickhouse:
   enabled: false
 service:
   nodePort: 30300
 machines:
   - { id: unit-1, device: device-1, kind: unit, place: tubes.hall.bay-1 }
-  - { id: unit-2, device: device-2, kind: unit, place: tubes.hall.bay-1 }
+sites:
+  - baseUrl: http://192.0.2.11:30300/api/v1
+    machines: [unit-2]
 ```
 
-A central archive in front of those edges. Metrics go to ClickHouse. Writes for `unit-1` and `unit-2` go to the first edge, `unit-3` to the second. Any other machine stays local:
+`archive` holds nothing locally and receives both machines from `cell-a`. Metrics go to ClickHouse:
 
 ```yaml
 image: example.invalid/plant:1
 command: ["node", "bin/central-site.js"]
-role: central
 clickhouse:
   enabled: true
 sites:
   - baseUrl: http://192.0.2.10:30300/api/v1
     machines: [unit-1, unit-2]
-  - baseUrl: http://192.0.2.11:30300/api/v1
-    machines: [unit-3]
 ```
 
-External Postgres and an external broker, still the same chart:
+External state store and an external bus, profile `cell-external`:
 
 ```yaml
 image: example.invalid/plant:1
-role: edge
 postgres:
   enabled: false
 rabbitmq:
@@ -250,3 +248,5 @@ Prefer Secret references over literal URLs when the values file is stored in git
 ## Outside this DSL
 
 This chart does not create the Kubernetes cluster, choose how many nodes it has, or install ingress, storage class, or a remote shovel. Another app is a key under `apps` with its own `chart` and `values`. `releases` hands those values through. This chart does not render them.
+
+The running site process still selects one migration set with `SINK_DB_PROFILE`. This document can describe a node that both sends and receives, and `releases` emits both `machines` and `sites` for it. The process does not yet apply two migration sets on that node.
