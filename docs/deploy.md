@@ -6,7 +6,7 @@ The **system document** is one file for the whole plant: every machine, every si
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
-The chart does not know shops, furnaces, or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them.
+The chart does not know furnaces or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them. Location is a tree of places, not a fixed shop level.
 
 ## System document
 
@@ -15,11 +15,23 @@ A site states **intent**: what this node is for in the plant. A **profile** is t
 ```yaml
 plant: mill
 title: Mill
+places:                          # required tree. Ids are unique across the whole tree
+  - id: tubes
+    title: Tubes                # optional
+    kind: plant                 # optional, opaque. plant, shop, section are not DSL keywords
+    places:
+      - id: hall
+        title: Hall
+        kind: shop
+        places:
+          - id: bay-1
+            title: Bay 1
+            kind: section
 machines:
   - id: unit-1                   # required, unique
     device: device-1             # required
-    shop: hall                   # required
     kind: unit                   # required
+    place: bay-1                 # required. Must be a place id. The path is tubes / hall / bay-1
     # any further keys are opaque
 profiles:                        # required. Implementation of a class of node
   cell:
@@ -46,7 +58,7 @@ sites:
     intent: own                  # required: own, collect, or local
     api: http://192.0.2.10:30300/api/v1   # required when intent is own
     machines: [unit-1]           # required when intent is own. Unknown id is an error
-    service: { nodePort: 30300 } # optional placement of this node, not of the profile
+    service: { nodePort: 30300 } # optional reachability of this node, not of the profile
   - id: edge-b
     cluster: edge-b
     profile: cell
@@ -68,6 +80,8 @@ apps:
     values:                          # required object, copied through
       image: example.invalid/wms:1
 ```
+
+A place id is unique in the tree. A machine's `place` must name one of those ids. The path to that id is the parent chain, so a machine can sit under a plant, a shop, a section, or any deeper node. `kind` on a place is a label for the plant package. The DSL does not treat `shop` specially. A missing place id is an error.
 
 `intent` is the only topology choice on a site:
 
@@ -135,8 +149,8 @@ helm upgrade --install edge-a charts/scada \
 machines:
   - id: unit-1
     device: device-1
-    shop: hall
     kind: unit
+    place: bay-1
 ```
 
 `sites` entries are owner routes. `machineOwners` treats each machine id as owned by that `baseUrl`. A machine that appears in no site stays local. `siteSyncSites` accepts the same objects (`baseUrl` or `url`, optional `token`, optional `machines`).
@@ -192,8 +206,8 @@ clickhouse:
 service:
   nodePort: 30300
 machines:
-  - { id: unit-1, device: device-1, shop: hall, kind: unit }
-  - { id: unit-2, device: device-2, shop: hall, kind: unit }
+  - { id: unit-1, device: device-1, kind: unit, place: bay-1 }
+  - { id: unit-2, device: device-2, kind: unit, place: bay-1 }
 ```
 
 A central archive in front of those edges. Metrics go to ClickHouse. Writes for `unit-1` and `unit-2` go to the first edge, `unit-3` to the second. Any other machine stays local:
