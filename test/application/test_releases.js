@@ -154,6 +154,28 @@ describe('releases', function() {
         );
     });
 
+    it('does not call an edge that publishes no api', function() {
+        const machine = `m${Math.random().toString(36).slice(2, 8)}`;
+        const cut = releases({
+            apps: { scada: { image: 'example.invalid/plant:1' } },
+            nodes: [
+                {
+                    fan_in: [{ device: 'd', id: machine, kind: 'unit', place: 'mill.hall' }],
+                    id: 'cell',
+                    implementation: { cluster: 'cell', profile: 'cell' },
+                    upstream: [{ objects: [machine], to: 'archive' }]
+                },
+                {
+                    fan_in: [{ from: 'cell', objects: [machine] }],
+                    id: 'archive',
+                    implementation: { cluster: 'archive', profile: 'archive' }
+                }
+            ],
+            profiles: { archive: { modules: {} }, cell: { modules: {} } }
+        }, 'archive');
+        assert.strictEqual(cut.scada.sites, undefined, 'releases called an edge that publishes no api');
+    });
+
     it('rejects a cluster the document does not name', function() {
         const cluster = `missing${Math.random().toString(36).slice(2, 6)}`;
         assert.throws(

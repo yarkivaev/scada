@@ -17,7 +17,7 @@ A node has four parts. Each part is optional.
 | `ownership` | state of an object this node edits. The same object on several nodes is one fault-tolerant set. This is not telemetry |
 | `fan_in` | telemetry this node receives. A record with no `from` is a device or collector and has no state. A record with `from` names telemetry arriving from another node |
 | `upstream` | where this node delivers data |
-| `api` | which services this node provides |
+| `api` | services other nodes may call. A panel that only the local HMI uses is not an api |
 
 Telemetry lives in `fan_in` and has no state. `ownership` is state this node edits. `fan_in` and `upstream` name object ids. A node may omit any part.
 
@@ -104,7 +104,7 @@ apps:
 
 There is no machine catalog beside the nodes. Extra keys on an ownership object are opaque: the chart copies the object through. `channels` and collectors are such keys, or they sit in `implementation` when they describe how that node runs.
 
-`fan_in`, `upstream`, and `api` name nodes and telemetry ids. They do not name databases. An unknown object id or node id is an error. An object in `upstream` or in a `from` fan-in must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source. It is required when that source provides more than one service, and the source must provide it.
+`fan_in`, `upstream`, and `api` name nodes and telemetry ids. They do not name databases. An unknown object id or node id is an error. An object in `upstream` or in a `from` fan-in must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
 
 Implementation:
 

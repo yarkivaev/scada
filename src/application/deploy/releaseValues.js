@@ -53,12 +53,18 @@ export function bindModules(profile, secret) {
  *   routesFor(document, edges, node);
  */
 export function routesFor(document, edges, node) {
-    return edges.filter((edge) => {return edge.to === node.id}).map((edge) => {
-        return {
-            baseUrl: serviceUrl(nodeById(document, edge.from), edge.api),
+    const routes = [];
+    edges.filter((edge) => {return edge.to === node.id}).forEach((edge) => {
+        const source = nodeById(document, edge.from);
+        if (!edge.api && (source.api || []).length === 0) {
+            return;
+        }
+        routes.push({
+            baseUrl: serviceUrl(source, edge.api),
             machines: edge.objects.slice()
-        };
+        });
     });
+    return routes;
 }
 
 /**
