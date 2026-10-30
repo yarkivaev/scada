@@ -2,7 +2,7 @@
 
 Two levels.
 
-The **system document** is one file for the whole plant: every machine, every site, every app. A plant package stores that file and does not project it itself.
+The **system document** is one file for the whole plant: every machine, every node, every app. A plant package stores that file and does not project it itself.
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
@@ -10,7 +10,18 @@ The chart does not know furnaces or HMI. Extra keys on a machine are opaque: the
 
 ## System document
 
-Sites and links are a directed graph. A link moves one set of machines from one site to another. A site may hold machines of its own, receive machines, and send machines, including different machines in each direction. A **profile** is the module set shared by many sites. Each module is on or off. The chart binds an enabled module to a product when it emits a release. Changing the state store on every cell is a change to the profile, not to each site.
+A node has four parts. Each part is optional.
+
+| Part | What it answers |
+|---|---|
+| `ownership` | which objects' state this node manages. The same object on several nodes is one fault-tolerant set |
+| `fan_in` | which data this node is responsible for receiving, and from which node |
+| `upstream` | where this node delivers data |
+| `api` | which services this node provides |
+
+Objects in this document are machine ids. A node may omit any part: it can manage state and offer no service, receive and forward without managing state, or only provide an API.
+
+Everything else is implementation and is written apart from those four parts: which profile, which cluster, which modules, which image.
 
 ```yaml
 plant: mill
@@ -25,7 +36,43 @@ machines:
     device: device-2
     kind: unit
     place: tubes.hall.bay-1
-profiles:                        # required. Module set of a class of node
+nodes:
+  - id: cell-b
+    ownership: [unit-2]
+    upstream:
+      - to: cell-a
+        objects: [unit-2]
+    api:
+      - id: plant
+        url: http://192.0.2.11:30300/api/v1
+    implementation:
+      profile: cell
+      cluster: cell-b
+  - id: cell-a
+    ownership: [unit-1]
+    fan_in:
+      - from: cell-b
+        api: plant
+        objects: [unit-2]
+    upstream:
+      - to: archive
+        objects: [unit-1, unit-2]
+    api:
+      - id: plant
+        url: http://192.0.2.10:30300/api/v1
+    implementation:
+      profile: cell
+      cluster: cell-a
+      service: { nodePort: 30300 }
+  - id: archive
+    fan_in:
+      - from: cell-a
+        api: plant
+        objects: [unit-1, unit-2]
+    implementation:
+      profile: archive
+      cluster: archive
+profiles:                        # implementation shared by many nodes
   cell:
     command: ["node", "bin/edge-site.js"]
     modules:
@@ -44,28 +91,6 @@ profiles:                        # required. Module set of a class of node
       state_store: { enabled: false }
       message_bus: { enabled: false }
       telemetry_store: { enabled: false }
-sites:
-  - id: cell-a                   # required, unique
-    cluster: cell-a              # required, unique release selector
-    profile: cell                # required. Unknown name is an error
-    api: http://192.0.2.10:30300/api/v1   # required when this site is the source of a link
-    machines: [unit-1]           # machines held locally. Unknown id is an error
-    service: { nodePort: 30300 } # optional reachability of this node, not of the profile
-  - id: cell-b
-    cluster: cell-b
-    profile: cell
-    api: http://192.0.2.11:30300/api/v1
-    machines: [unit-2]
-  - id: archive
-    cluster: archive
-    profile: archive
-links:                           # directed. One machine may ride several links
-  - from: cell-b                 # required site id
-    to: cell-a                   # required site id, different from from
-    machines: [unit-2]           # required, non-empty
-  - from: cell-a
-    to: archive
-    machines: [unit-1, unit-2]
 apps:
   scada:
     image: example.invalid/plant:1   # required. Every scada release uses it unless the profile sets image
@@ -73,26 +98,31 @@ apps:
     secret: scada-postgres           # optional state-store Secret name. Default scada-postgres
   wms:                               # any other key is an app this package does not interpret
     chart: wms                       # required
-    clusters: [archive]              # required. Site cluster ids that receive the app
+    clusters: [archive]              # required. Node cluster ids that receive the app
     values:                          # required object, copied through
       image: example.invalid/wms:1
 ```
 
 `place` is a dot path. `tubes.hall.bay-1` is three levels, and another machine may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two machines share a parent when their paths share a prefix. An empty segment is an error.
 
-Modules:
+`ownership`, `fan_in`, `upstream`, and `api` name nodes and objects. They do not name databases. An unknown object id or node id is an error. An object in `fan_in` or `upstream` must already be in that source node's `ownership` or `fan_in`. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set and each of them manages that state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object lists must match. `fan_in.api` selects a service of the source. It is required when that source provides more than one service, and the source must provide it.
 
-| Module | Purpose | Enabled installs |
+Implementation:
+
+| Field | Where | What it decides |
 |---|---|---|
-| `state_store` | durable plant records: timeline, alerts, segments | Postgres |
-| `message_bus` | alerts, segments, telemetry, operations, and decisions between processes | RabbitMQ |
-| `telemetry_store` | time-series measurements | ClickHouse |
+| `implementation.profile` | node | module set. Unknown name is an error |
+| `implementation.cluster` | node | release selector. One Helm release, one cluster |
+| `implementation.service` | node | how an API is published, for example `nodePort` |
+| `command` | profile | argv of the site process |
+| `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
+| `state_store` | module | durable records: timeline, alerts, segments. Enabled installs Postgres |
+| `message_bus` | module | alerts, segments, telemetry, operations, and decisions. Enabled installs RabbitMQ |
+| `telemetry_store` | module | time-series measurements. Enabled installs ClickHouse |
 
-`command` is the argv of the site process. An unknown module name is an error. `enabled: false` installs nothing for that purpose. A site that needs a different module set names another profile.
+A node that needs a different module set names another profile.
 
-A machine is held by at most one site's `machines` list. The source of a link must hold each listed machine, either in its own `machines` or by an incoming link. Following links for one machine must not return to a site already visited. The source site must have `api`. In the example, `cell-b` holds `unit-2` and sends it to `cell-a`. `cell-a` holds `unit-1`, receives `unit-2`, and sends both to `archive`.
-
-`releases(document, cluster)` joins the selected site with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no site is an error. Passwords are not fields of this document.
+`releases(document, cluster)` joins the selected node with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no node is an error. Passwords are not fields of this document.
 
 Scada projection:
 
@@ -104,13 +134,13 @@ Scada projection:
 | `profile.modules.message_bus` | `rabbitmq` |
 | `profile.modules.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
-| this site's `machines`, full records | `machines` |
-| each link whose `to` is this site | one `sites` entry: `{ baseUrl: from.api, machines }` |
+| `ownership`, full machine records | `machines` |
+| `fan_in`, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
-| `site.service` | `service` |
+| `implementation.service` | `service` |
 
-An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
+`upstream` is not repeated on the sender's release. The receiver's `sites` list is the edge. An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
 
 ```bash
 helm upgrade --install cell-a charts/scada \
@@ -179,9 +209,9 @@ The chart's own RabbitMQ definitions create user `guest` / `guest` and point `ST
 
 ## What a profile installs
 
-The profile decides which modules exist. The links decide which machines move. A site with local machines and incoming links emits both `machines` and `sites`. A site with neither emits neither.
+The profile is implementation. It decides which modules exist. `ownership`, `fan_in`, and `upstream` decide which objects the release carries. A node with ownership and fan-in emits both `machines` and `sites`. A node with neither emits neither.
 
-Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. List the machines and the links when the release must not use that fallback.
+Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. Set ownership and fan-in when the release must not use that fallback.
 
 ## Broker topology
 
@@ -189,7 +219,7 @@ When `rabbitmq.enabled` is true the chart loads definitions for topic exchanges 
 
 ## Release values
 
-The blocks below are what `releases` emits for one cluster. They are not the system document. `cell-b` holds `unit-2` and has no incoming link:
+The blocks below are what `releases` emits for one cluster. They are not the system document. `cell-b` owns `unit-2` and has no fan-in:
 
 ```yaml
 image: example.invalid/plant:1
@@ -200,7 +230,7 @@ machines:
   - { id: unit-2, device: device-2, kind: unit, place: tubes.hall.bay-1 }
 ```
 
-`cell-a` holds `unit-1` and receives `unit-2`:
+`cell-a` owns `unit-1` and its fan-in is `unit-2`:
 
 ```yaml
 image: example.invalid/plant:1
@@ -216,7 +246,7 @@ sites:
     machines: [unit-2]
 ```
 
-`archive` holds nothing locally and receives both machines from `cell-a`. Metrics go to ClickHouse:
+`archive` has no ownership. Its fan-in is both machines from `cell-a`. Metrics go to ClickHouse:
 
 ```yaml
 image: example.invalid/plant:1
@@ -249,4 +279,4 @@ Prefer Secret references over literal URLs when the values file is stored in git
 
 This chart does not create the Kubernetes cluster, choose how many nodes it has, or install ingress, storage class, or a remote shovel. Another app is a key under `apps` with its own `chart` and `values`. `releases` hands those values through. This chart does not render them.
 
-The running site process still selects one migration set with `SINK_DB_PROFILE`. This document can describe a node that both sends and receives, and `releases` emits both `machines` and `sites` for it. The process does not yet apply two migration sets on that node.
+The running site process still selects one migration set with `SINK_DB_PROFILE`. This document can describe a node that both sends and receives, and `releases` emits both `machines` and `sites` for it. The process does not yet apply two migration sets on that node. Several nodes may own one object. The process does not yet choose which member of that set serves a request.
