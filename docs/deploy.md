@@ -27,11 +27,11 @@ A flow has three fields. One flow names one object. Several objects are several 
 |---|---|---|
 | `from` | a node id, or a source. A node id is another node. Anything else is a device source: an address such as `modbus://192.0.2.10:502`, or the id of a collector in `objects` | this node, so the field is omitted |
 | `object` | the one object this flow carries | the one object this flow carries |
-| `signals` | optional signal names. Omitted means the whole object's telemetry | optional, same meaning |
+| `signals` | optional. A map of signal name to source address, or omitted for the whole object's telemetry | optional, same meaning |
 | `to` | this node, so the field is omitted | the node that receives the flow |
 | `api` | which service of the source to call, when that source publishes one | omitted |
 
-`objects` is the node's own list of records: identity, place, and how each source is wired. A flow names one of those ids. `device`, `label`, `kind`, `place`, `channels`, `modbus`, `inspect`, `host`, and `feeds` live on that record. They are not implementation. Implementation is the profile, the cluster, and the modules.
+`objects` names state this node edits. An object item is that subject: `id`, `title`, `kind`, `place`. Measurements are not fields of the object. The device name, the signal addresses, and the panel ride on the flow, which has no state. This document does not yet list the state fields themselves.
 
 ```yaml
 plant: mill
@@ -41,7 +41,8 @@ nodes:
     fan_in:
       - from: modbus://192.0.2.11:502
         object: unit-2
-        signals: [voltage, current]
+        device: device-2
+        signals: { voltage: AI1, current: AI2 }
     upstream:
       - to: cell-a
         object: unit-2
@@ -50,7 +51,6 @@ nodes:
         url: http://192.0.2.11:30300/api/v1
     objects:
       - id: unit-2
-        device: device-2
         kind: unit
         place: tubes.hall.bay-1
     implementation:
@@ -60,6 +60,7 @@ nodes:
     fan_in:
       - from: modbus://192.0.2.10:502
         object: unit-1
+        device: device-1
       - from: cell-b
         api: plant
         object: unit-2
@@ -73,7 +74,6 @@ nodes:
         url: http://192.0.2.10:30300/api/v1
     objects:
       - id: unit-1
-        device: device-1
         kind: unit
         place: tubes.hall.bay-1
     implementation:

@@ -94,7 +94,7 @@ export function edgesOf(document) {
 function holds(document, edges, nodeId, objectId, stack) {
     const node = nodeById(document, nodeId);
     const ids = new Set((document.nodes || []).map((item) => {return item.id}));
-    const owned = (node.ownership || []).some((entry) => {
+    const owned = (node.ownership || []).concat(node.objects || []).some((entry) => {
         const id = typeof entry === 'string' ? entry : entry.id;
         return id === objectId;
     });

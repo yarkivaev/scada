@@ -79,11 +79,14 @@ export function routesFor(document, edges, node) {
 export function telemetryOf(document, node) {
     const ids = new Set((document.nodes || []).map((item) => {return item.id}));
     const catalog = node.objects || [];
-    return (node.fan_in || []).filter((entry) => {
+        return (node.fan_in || []).filter((entry) => {
         return entry && entry.from && !ids.has(entry.from);
     }).map((flow) => {
         const found = catalog.find((item) => {return item.id === flow.object});
-        return found || flow;
+        if (!found) {
+            return flow;
+        }
+        return { ...found, ...flow, id: found.id };
     });
 }
 

@@ -141,10 +141,10 @@ describe('releases', function() {
         const cut = releases({
             apps: { scada: { image: 'example.invalid/plant:1' } },
             nodes: [{
-                fan_in: [{ from: 'modbus://192.0.2.9:502', object: machine }],
+                fan_in: [{ device, from: 'modbus://192.0.2.9:502', object: machine }],
                 id: 'cell',
                 implementation: { cluster: 'cell', profile: 'cell' },
-                objects: [{ device, id: machine, kind: 'unit', place: 'mill.hall' }]
+                objects: [{ id: machine, kind: 'unit', place: 'mill.hall' }]
             }],
             profiles: { cell: { modules: {} } }
         }, 'cell');
