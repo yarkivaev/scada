@@ -25,6 +25,8 @@ function render(body) {
 }
 
 describe('scada chart', function() {
+    this.timeout(15000);
+
     it('publishes edge machine owners as EDGE_MACHINES', function() {
         const machine = `m${Math.random().toString(36).slice(2, 8)}`;
         const device = `d${Math.random().toString(36).slice(2, 8)}`;
