@@ -32,8 +32,6 @@ A flow has two fields. One flow has one name. Several names are several flows.
 Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` lists the state this node is responsible for. An entry is the object's id. The same id on several nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
 
 ```yaml
-plant: mill
-title: Mill
 nodes:
   - id: cell-b
     fan_in:
