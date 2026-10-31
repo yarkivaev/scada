@@ -29,7 +29,7 @@ A flow has two fields. One flow has one name. Several names are several flows.
 | `name` | what this flow is called | what this flow is called |
 | `to` | this node, so the field is omitted | the node that receives the flow |
 
-Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` lists the state this node is responsible for. An entry is the object's id. The same id on several nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves. A debug port for the local panel is implementation.
+Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` lists the state this node is responsible for. An entry is the object's id. The same id on several nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
 
 ```yaml
 plant: mill
@@ -126,7 +126,6 @@ Implementation:
 | `implementation.profile` | node | module set. Unknown name is an error |
 | `implementation.cluster` | node | release selector. One Helm release, one cluster |
 | `implementation.service` | node | how an API is published, for example `nodePort` |
-| `implementation.inspect` | node | debug port of the local panel. The chart does not read it |
 | `command` | profile | argv of the site process |
 | `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
 | `state_store` | module | durable records: timeline, alerts, segments. Enabled installs Postgres |
