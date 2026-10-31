@@ -46,8 +46,10 @@ nodes:
     objects:
       - unit-2
     implementation:
-      profile: cell
-      cluster: cell-b
+      profile:
+        id: cell
+        variables:
+          cluster: cell-b
   - id: cell-a
     fan_in:
       - from: modbus://192.0.2.10:502
@@ -66,8 +68,10 @@ nodes:
     objects:
       - unit-1
     implementation:
-      profile: cell
-      cluster: cell-a
+      profile:
+        id: cell
+        variables:
+          cluster: cell-a
       service: { nodePort: 30300 }
   - id: archive
     fan_in:
@@ -78,16 +82,22 @@ nodes:
         api: plant
         name: unit-2
     implementation:
-      profile: archive
-      cluster: archive
+      profile:
+        id: archive
+        variables:
+          cluster: archive
 profiles:                        # implementation shared by many nodes
   cell:
+    variables:
+      cluster: null
     command: ["node", "bin/edge-site.js"]
     modules:
       state_store: { enabled: true }
       message_bus: { enabled: true }
       telemetry_store: { enabled: false }
   archive:
+    variables:
+      cluster: null
     command: ["node", "bin/central-site.js"]
     modules:
       state_store: { enabled: true }
@@ -121,8 +131,9 @@ Implementation:
 
 | Field | Where | What it decides |
 |---|---|---|
-| `implementation.profile` | node | module set. Unknown name is an error |
-| `implementation.cluster` | node | release selector. One Helm release, one cluster |
+| `implementation.profile.id` | node | profile name. Unknown name is an error |
+| `variables` | profile | values a node may override. `cluster` selects the release. One Helm release, one cluster |
+| `implementation.profile.variables` | node | overrides of that profile |
 | `implementation.service` | node | how an API is published, for example `nodePort` |
 | `command` | profile | argv of the site process |
 | `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
@@ -132,7 +143,7 @@ Implementation:
 
 A node that needs a different module set names another profile.
 
-`releases(document, cluster)` joins the selected node with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no node is an error. Passwords are not fields of this document.
+`releases(document, cluster)` joins the selected node with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no `profile.variables.cluster` is an error. Passwords are not fields of this document.
 
 Scada projection:
 
