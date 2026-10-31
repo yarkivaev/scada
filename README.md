@@ -223,6 +223,10 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 | `CLICKHOUSE_URL` | Central metrics sink |
 | `PORT` | Plant API port (siteServer, default 3000) |
 
+## Deploy
+
+The deployment DSL is specified in [docs/deploy.md](docs/deploy.md). A flow is `from` and `name`. An object listed on a node is state that node is responsible for. Profile, cluster, and modules are implementation. One Helm release of `charts/scada` is one cluster, cut from that document.
+
 ## Testing
 
 ```bash

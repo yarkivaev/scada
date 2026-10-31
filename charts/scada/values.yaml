@@ -1,0 +1,29 @@
+role: edge
+image: ""
+command: []
+pullSecret: ""
+machines: []
+sites: []
+env: []
+service:
+  port: 3000
+  internalPort: 8081
+  nodePort: 0
+postgres:
+  enabled: true
+  image: postgres:16
+  secret: scada-postgres
+  database: scada
+rabbitmq:
+  enabled: true
+  image: rabbitmq:3.13-management
+clickhouse:
+  enabled: false
+  image: clickhouse/clickhouse-server:24.8
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

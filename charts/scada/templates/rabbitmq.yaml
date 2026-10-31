@@ -1,0 +1,107 @@
+{{- if .Values.rabbitmq.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-rabbitmq
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scada.labels" . | nindent 4 }}
+    app: rabbitmq
+data:
+  enabled_plugins: |
+    [rabbitmq_stomp, rabbitmq_management].
+  rabbitmq.conf: |
+    load_definitions = /etc/rabbitmq/definitions.json
+  definitions.json: |
+    {
+      "vhosts": [{"name": "/"}],
+      "users": [{"name": "guest", "password": "guest", "tags": ["administrator"]}],
+      "permissions": [{"user": "guest", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*"}],
+      "exchanges": [
+        {"vhost": "/", "name": "scada.alerts", "type": "topic", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.segments", "type": "topic", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.telemetry", "type": "topic", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.operations", "type": "topic", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.user_decisions", "type": "topic", "durable": true, "auto_delete": false}
+      ],
+      "queues": [
+        {"vhost": "/", "name": "scada.segments.ingest", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.telemetry.ingest", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.operations.ingest", "durable": true, "auto_delete": false},
+        {"vhost": "/", "name": "scada.user_decisions", "durable": true, "auto_delete": false}
+      ],
+      "bindings": [
+        {"source": "scada.telemetry", "vhost": "/", "destination": "scada.telemetry.ingest", "destination_type": "queue", "routing_key": "#"},
+        {"source": "scada.operations", "vhost": "/", "destination": "scada.operations.ingest", "destination_type": "queue", "routing_key": "#"},
+        {"source": "scada.segments", "vhost": "/", "destination": "scada.segments.ingest", "destination_type": "queue", "routing_key": "#"},
+        {"source": "scada.user_decisions", "vhost": "/", "destination": "scada.user_decisions", "destination_type": "queue", "routing_key": "#"}
+      ]
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-rabbitmq
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scada.labels" . | nindent 4 }}
+    app: rabbitmq
+spec:
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: stomp
+      port: 61613
+      targetPort: stomp
+  selector:
+    app: rabbitmq
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-rabbitmq
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scada.labels" . | nindent 4 }}
+    app: rabbitmq
+spec:
+  serviceName: {{ .Release.Name }}-rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "scada.labels" . | nindent 8 }}
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: {{ .Values.rabbitmq.image | quote }}
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: stomp
+              containerPort: 61613
+          volumeMounts:
+            - name: config
+              mountPath: /etc/rabbitmq
+            - name: data
+              mountPath: /var/lib/rabbitmq
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+{{- end }}
