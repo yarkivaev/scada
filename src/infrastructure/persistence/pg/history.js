@@ -1,4 +1,5 @@
 import historyContext from './historyContext.js';
+import historyConfigure from './historyConfigure.js';
 
 function machineName(machine) {
     if (typeof machine !== 'string' || !machine || machine.length > 200) { throw new TypeError('machine required'); }
@@ -101,15 +102,7 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now } =
     return {
         configure(machine, topics, bucketMs = 30000) {
             if (!Array.isArray(topics) || topics.length > 500 || !Number.isSafeInteger(bucketMs) || bucketMs <= 0) { throw new TypeError('Invalid history topics'); }
-            return transaction(pool, machine, async (client) => {
-                await client.query('DELETE FROM history_topics WHERE machine=$1', [machine]);
-                for (const item of topics) {
-                    if (typeof item.topic !== 'string' || !item.topic || typeof item.channel !== 'string' || !item.channel) { throw new TypeError('Invalid history topic'); }
-                    // eslint-disable-next-line no-await-in-loop
-                    await client.query('INSERT INTO history_topics(machine,topic,channel,bucket_ms,retention_days) VALUES($1,$2,$3,$4,$5)', [machine,item.topic,item.channel,bucketMs,retentionDays]);
-                }
-                return { configured: topics.length };
-            });
+            return transaction(pool,machine,(client) => { return historyConfigure(client,machine,topics,bucketMs,retentionDays); });
         },
         async purge() {
             const result = await pool.query(`DELETE FROM history_observations o WHERE time_ms < $1
@@ -123,7 +116,7 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now } =
         context(machine, from, until, padding = 60000) { return context(pool, machine, from, until, { padding, cutoff: cutoff() }); },
         async work(machine) {
             machineName(machine);
-            const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until" FROM history_work WHERE machine=$1 ORDER BY created_at,id LIMIT 100', [machine]);
+            const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until" FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
             return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until) }; }) };
         },
         commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, base); }

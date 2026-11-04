@@ -152,4 +152,23 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.ok(Date.now()-new Date((await pool.query("SELECT updated_at FROM segments WHERE machine='fresh'")).rows[0].updated_at).getTime()<5000);
     });
 
+    it('imports already persisted telemetry on first topic registration without duplicate work on restart', async () => {
+        const store=historyPg(pool); const time=Date.now()-1000;
+        await pool.query('INSERT INTO metrics VALUES($1,$2,$3)',['before/config',new Date(time),8]);
+        await store.configure('bootstrap',[{topic:'before/config',channel:'a'}]);
+        assert.equal((await store.context('bootstrap',time,time)).items[0].value,8);
+        const first=(await store.work('bootstrap')).items;
+        await store.configure('bootstrap',[{topic:'before/config',channel:'a'}]);
+        assert.deepEqual((await store.work('bootstrap')).items,first);
+    });
+
+    it('prioritizes current classification over a bounded historical batch', async () => {
+        const store=historyPg(pool); const now=Date.now();
+        const points=Array.from({length:12},(_,index)=>{return {eventId:`priority${index}`,channel:'a',time:now-(12-index)*60000,value:index};});
+        await store.accept('priority',points);
+        await store.accept('priority',[{eventId:'latest',channel:'a',time:now,value:20}]);
+        const work=(await store.work('priority')).items;
+        assert.equal(work.length,8); assert.equal(work[0].until,now);
+    });
+
 });
