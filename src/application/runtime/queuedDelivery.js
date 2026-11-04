@@ -6,7 +6,7 @@ export default function queuedDelivery(env, secrets, supplied) {
     let timer;
     let stopped = false;
     const queue = supplied ?? (env.COLLECTOR_SPOOL_DIR ? deliveryQueue(env.COLLECTOR_SPOOL_DIR, {
-        maxBytes: Number(env.COLLECTOR_SPOOL_MAX_BYTES), factory(spec) { return sinks().get(spec.type)(spec, { secrets }); },
+        maxBytes: Number(env.COLLECTOR_SPOOL_MAX_BYTES), maxRecords: Number(env.COLLECTOR_SPOOL_MAX_RECORDS ?? 100000), factory(spec) { return sinks().get(spec.type)(spec, { secrets }); },
         onError(error) { process.stderr.write(`Collector delivery delayed: ${error.message}\n`); }
     }) : undefined);
     async function tick() {
