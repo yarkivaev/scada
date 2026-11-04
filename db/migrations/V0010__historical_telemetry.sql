@@ -8,8 +8,10 @@ CREATE TABLE IF NOT EXISTS history_observations (
     PRIMARY KEY (machine, channel, time_ms),
     UNIQUE (machine, event_id)
 );
+CREATE INDEX IF NOT EXISTS history_observations_time ON history_observations(machine,time_ms);
 CREATE TABLE IF NOT EXISTS history_work (
     id UUID PRIMARY KEY,
+    token UUID NOT NULL DEFAULT gen_random_uuid(),
     machine TEXT NOT NULL,
     from_ms BIGINT NOT NULL,
     until_ms BIGINT NOT NULL,
@@ -25,6 +27,7 @@ CREATE TABLE IF NOT EXISTS history_annotations (
     duration DOUBLE PRECISION,
     tags TEXT,
     properties TEXT,
+    resolved BOOLEAN,
     PRIMARY KEY(machine,kind,start_time,name)
 );
 CREATE TABLE IF NOT EXISTS history_topics (
@@ -48,7 +51,7 @@ BEGIN
         IF inserted > 0 AND NEW.ts >= now()-make_interval(days => mapping.retention_days) THEN
             INSERT INTO history_work(id,machine,from_ms,until_ms)
               VALUES(md5(mapping.machine||':'||(moment/mapping.bucket_ms)::text)::uuid,mapping.machine,moment,moment)
-              ON CONFLICT(id) DO UPDATE SET from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms);
+              ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms);
         END IF;
     END LOOP;
     RETURN NEW;

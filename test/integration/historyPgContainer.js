@@ -28,9 +28,9 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const context = await store.context('m1', time, time);
         assert.equal(context.items.length, 1); assert.equal(context.items[0].value, 1);
         const work = await store.work('m1'); assert.equal(work.items.length, 1);
-        await store.commit('m1', work.items[0].id, []);
+        await store.commit('m1', work.items[0].id, [], {workToken:work.items[0].token,from:time,until:time});
         assert.equal((await store.work('m1')).items.length, 0);
-        await store.commit('m1', work.items[0].id, []);
+        await store.commit('m1', work.items[0].id, [], {workToken:work.items[0].token,from:time,until:time});
     });
     it('does not schedule classification for out-of-history telemetry', async () => {
         const store = historyPg(pool);
@@ -47,7 +47,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const context = await store.context('race',time,time+1000);
         const work = (await store.work('race')).items[0];
         await pool.query("UPDATE segments SET tags='[\"manual\"]' WHERE machine='race'");
-        await assert.rejects(store.commit('race',work.id,context.segments,{...context.context,revision:context.revision}), /context changed/u);
+        await assert.rejects(store.commit('race',work.id,context.segments,{...context.context,revision:context.revision,workToken:work.token}), /context changed/u);
         assert.equal((await store.work('race')).items.length,1);
         assert.equal((await pool.query("SELECT tags FROM segments WHERE machine='race'")).rows[0].tags,'["manual"]');
     });
@@ -59,6 +59,30 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query('INSERT INTO metrics(topic,ts,value) VALUES($1,$2,$3)', ['MX210/icht-1/GET/AI3/VALUE',new Date(time),5]);
         assert.equal((await store.work('offline')).items.length,1);
         assert.equal((await store.context('offline',time,time)).items[0].value,5);
+    });
+
+    it('rejects stale work claims after the bucket was expanded or recreated', async () => {
+        const store = historyPg(pool);
+        await store.configure('claim', [{topic:'claim/power',channel:'power'}],30000);
+        const time=Math.floor(Date.now()/30000)*30000;
+        await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time),1]);
+        const first=(await store.work('claim')).items[0];
+        await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time+25000),2]);
+        await assert.rejects(store.commit('claim',first.id,[],{workToken:first.token,from:time,until:time}),/claim changed/u);
+        const expanded=(await store.work('claim')).items[0];
+        await store.commit('claim',expanded.id,[],{workToken:expanded.token,from:time,until:time+25000});
+        await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time+26000),3]);
+        await assert.rejects(store.commit('claim',expanded.id,[],{workToken:expanded.token,from:time,until:time+25000}),/claim changed/u);
+        assert.equal((await store.work('claim')).items.length,1);
+    });
+    it('retains predecessor parameter values across continuous other-channel updates', async () => {
+        const store=historyPg(pool);
+        const time=Date.now()-30000;
+        const points=[{eventId:'speed',channel:'speed',time,value:1},...[5,10,15,20,25,30].map((seconds)=>{return {eventId:`beat${seconds}`,channel:'beat',time:time+seconds*1000,value:1};})];
+        await store.accept('seed',points);
+        const context=await store.context('seed',time+25000,time+25000,10000);
+        assert.equal(context.initial.values.speed,1);
+        assert.equal(context.initial.time,time+10000);
     });
 
 });
