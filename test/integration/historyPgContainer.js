@@ -111,10 +111,24 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const store=historyPg(pool); const time=Date.now()-1100000;
         await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES
             ('hysteresis','phase','off',$1,$2,50),('hysteresis','phase','off',$2,$3,950)`,[new Date(time),new Date(time+50000),new Date(time+1000000)]);
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value) SELECT 'hysteresis','beat',$1::bigint+n*5000,'hystbeat'||n,1 FROM generate_series(0,200) n`,[time]);
         const points=[[0,'a',0],[25,'a',10],[30,'a',3],[1000,'beat',1]].map(([seconds,channel,value])=>{return {eventId:`hyst${channel}${seconds}`,channel,time:time+seconds*1000,value};});
         await store.accept('hysteresis',points);
         const context=await store.context('hysteresis',time+25000,time+25000,10000);
         assert.equal(context.items.at(-1).time,time+1000000);
+    });
+
+    it('tracks indirectly restored parameters when late data bridges an old gap', async () => {
+        const store=historyPg(pool); const time=Date.now()-1100000;
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES
+            ('bridge','phase','cold',$1,$2,35),('bridge','phase','idle',$3,$4,945)`,[new Date(time+14000),new Date(time+49000),new Date(time+54000),new Date(time+999000)]);
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value)
+            SELECT 'bridge','b',$1::bigint+14000+n*5000,'bridgebeat'||n,CASE WHEN n<8 THEN 1 ELSE 2 END FROM generate_series(0,197) n`,[time]);
+        await store.accept('bridge',[{eventId:'originalA',channel:'a',time,value:1},{eventId:'bridge',channel:'b',time:time+7000,value:1}]);
+        const context=await store.context('bridge',time+7000,time+7000,10000);
+        assert.equal(context.items.at(-1).time,time+999000);
+        assert.equal(context.continuity.length,1);
+        assert.ok(context.items.some((point)=>{return point.channel==='a'&&point.value===1;}));
     });
 
 });
