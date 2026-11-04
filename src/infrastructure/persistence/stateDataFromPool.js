@@ -1,3 +1,4 @@
+import historyPg from './pg/history.js';
 import alertsStatePg from './pg/alerts.js';
 import checkpointStatePg from './pg/checkpoints.js';
 import metricsStateDisabled from './memory/metricsDisabled.js';
@@ -12,6 +13,7 @@ export default function stateDataFromPool(pool, options = {}) {
         segments: segmentStatePg(pool),
         alerts: alertsStatePg(pool),
         metrics,
+        history: historyPg(pool, { retentionDays: options.historyRetentionDays ?? 30 }),
         checkpoints: checkpointStatePg(pool, metricsEnabled),
         operations: operationStatePg(pool)
     };

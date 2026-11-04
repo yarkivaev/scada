@@ -1,13 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import taskState from './taskState.js';
 import deadline from './deadline.js';
 import budgetedSink from './budgetedSink.js';
 
+// eslint-disable-next-line max-statements
 function validate(spec, ports) {
     if (!ports.sources.has(spec.source?.type)) { throw new TypeError('Unknown stream source'); }
     if (!Array.isArray(spec.sinks) || !spec.sinks.length || spec.sinks.some((sink) => { return !ports.sinks.has(sink.type); })) {
         throw new TypeError('Unknown stream sink');
     }
-    if (!['live', 'durable'].includes(spec.delivery)) { throw new TypeError('Explicit delivery policy required'); }
+    if (!['live', 'durable', 'spooled'].includes(spec.delivery)) { throw new TypeError('Explicit delivery policy required'); }
+    if (spec.delivery === 'spooled' && spec.sinks.some((sink) => { return sink.type !== 'amqp'; })) { throw new TypeError('Spooled delivery requires AMQP'); }
     const names = spec.sinks.map((sink, index) => { return sink.id ?? String(index); });
     if (new Set(names).size !== names.length) { throw new TypeError('Duplicate sink id'); }
     if (spec.delivery === 'durable' && spec.sinks.some((sink) => { return sink.type === 'mqtt' && ![1, 2].includes(sink.options?.qos); })) {
@@ -26,6 +29,7 @@ async function durable(bag, value) {
     await bag.state.resume(bag.sinks);
     if (pending?.event.eventId !== value.eventId) { await bag.state.deliver(value, bag.sinks, value.checkpoint ?? null); }
 }
+// eslint-disable-next-line max-statements
 async function accept(bag, record) {
     bag.context.signal.throwIfAborted();
     if (bag.stopped) { throw new Error('Stream stopped'); }
@@ -33,8 +37,11 @@ async function accept(bag, record) {
     try {
         const value = bag.transform ? await bag.transform(record) : record;
         bag.context.signal.throwIfAborted();
+        bag.context.report?.({ state: 'running', read: 1 });
         if (value === null) { return; }
-        if (bag.state) { await durable(bag, value); }
+        if (bag.queued) {
+            await bag.context.deliveryQueue.accept({ ...value, eventId: value.eventId ?? randomUUID() }, bag.destinations);
+        } else if (bag.state) { await durable(bag, value); }
         else {
             await Promise.all(Object.values(bag.sinks).map((sink) => {
                 bag.context.signal.throwIfAborted();
@@ -86,10 +93,12 @@ function recipient(spec, stream, context, ports) {
 }
 function create(spec, context, ports) {
     if (spec.delivery === 'durable' && !context.stateStore) { throw new TypeError('Durable stateStore required'); }
-    const sinks = Object.fromEntries(spec.sinks.map((sink, index) => {
+    if (spec.delivery === 'spooled' && !context.deliveryQueue) { throw new TypeError('Node deliveryQueue required'); }
+    const sinks = spec.delivery === 'spooled' ? {} : Object.fromEntries(spec.sinks.map((sink, index) => {
         return [sink.id ?? String(index), budgetedSink(recipient(sink, spec, context, ports), context.budget, false)];
     }));
-    const bag = { sinks, context, stopped: false, timeoutMs: spec.writeTimeoutMs ?? 10000,
+    const bag = { sinks, context, queued: spec.delivery === 'spooled',
+        destinations: spec.sinks.map((sink, index) => { return { ...sink, id: sink.id ?? String(index) }; }), stopped: false, timeoutMs: spec.writeTimeoutMs ?? 10000,
         transform: ports.transforms.get(spec.transform),
         state: spec.delivery === 'durable' ? taskState(context.stateStore, { ...spec, taskId: context.taskId, signal: context.signal }) : null };
     bag.source = ports.sources.get(spec.source.type)(spec.source, { accept(record) { return accept(bag, record); } }, context);
