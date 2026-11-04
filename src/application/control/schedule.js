@@ -37,9 +37,11 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
     const observed = new Map(reports.map((row) => { return [row.nodeId, row]; }));
     function live(id) { const at = observed.get(id)?.receivedAt; return Number.isFinite(at) && at <= now && now - at <= freshnessMs; }
     const taskMap = new Map(catalog.tasks.map((task) => { return [task.taskId, task]; }));
-    const slots = catalog.nodes.map((node) => {
+    const declared = new Set(catalog.nodes.map((node) => { return node.id; }));
+    const nodes = [...catalog.nodes, ...Object.keys(current).filter((id) => { return !declared.has(id); }).map((id) => { return { id, capacity: 0, retired: true }; })];
+    const slots = nodes.map((node) => {
         const previous = current[node.id] ?? { generation: 0, assignments: [] };
-        const assignments = previous.assignments.filter((row) => { return !live(node.id) || (taskMap.has(row.taskId) && eligible(taskMap.get(row.taskId), node)); });
+        const assignments = previous.assignments.filter((row) => { return !live(node.id) || (!node.retired && taskMap.has(row.taskId) && eligible(taskMap.get(row.taskId), node)); });
         return { ...node, previous, assignments: [...assignments], live: live(node.id), load: assignments.reduce((total, row) => { return total + (taskMap.get(row.taskId)?.cost ?? 1); }, 0) };
     });
     const tasks = [...catalog.tasks].sort((a, b) => { return Number(Boolean(b.pinnedNode)) - Number(Boolean(a.pinnedNode)) || a.taskId.localeCompare(b.taskId); });

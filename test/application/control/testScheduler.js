@@ -66,3 +66,11 @@ describe('rolling source configuration', () => {
         assert.equal(next.b.catalogVersion, 'v1');
     });
 });
+describe('node retirement', () => {
+    it('sends an explicit empty snapshot when a connected executor leaves the catalog', () => {
+        const current = { a: { generation: 5, catalogVersion: 'v1', assignments: [{ taskId: 's', generation: 5, specVersion: 1, spec: { adapter: 'test' } }] } };
+        const result = schedule({ version: 'v2', nodes: [], tasks: [] }, [report('a', 1000)], current, { now: 1000 });
+        assert.equal(result.a.assignments.length, 0);
+        assert.ok(result.a.generation > 5);
+    });
+});
