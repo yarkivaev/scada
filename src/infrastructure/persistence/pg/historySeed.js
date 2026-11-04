@@ -12,7 +12,7 @@ export default async function historySeed(pool, machine, before, maxGap) {
     const time = Math.max(...result.rows.map((row) => { return Number(row.time); }));
     const since = Number(result.rows[0].since);
     const prior = await pool.query(`SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved FROM segments
-        WHERE machine=$1 AND start_time<=$2 AND (end_time >= $3 OR (duration=0 AND start_time >= $3)) ORDER BY start_time DESC LIMIT 1`,
+        WHERE machine=$1 AND kind='phase' AND start_time<=$2 AND (end_time >= $3 OR (duration=0 AND start_time >= $3)) ORDER BY start_time DESC LIMIT 1`,
     [machine,new Date(time),new Date(since)]);
     return { since, segment: prior.rows[0] ?? null, time: Math.max(...result.rows.map((row) => { return Number(row.time); })),
         values: Object.fromEntries(result.rows.map((row) => { return [row.channel,row.value]; })) };

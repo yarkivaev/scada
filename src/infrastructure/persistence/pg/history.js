@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import historySeed from './historySeed.js';
+import historyContext from './historyContext.js';
 
 function machineName(machine) {
     if (typeof machine !== 'string' || !machine || machine.length > 200) { throw new TypeError('machine required'); }
@@ -45,22 +44,9 @@ function accept(pool, machine, items, cutoff) {
         return { inserted: added.length };
     });
 }
-function revision(rows) { return createHash('sha256').update(JSON.stringify(rows)).digest('hex'); }
-async function context(pool, machine, from, until, { padding, cutoff }) {
+function context(pool,machine,from,until,options) {
     machineName(machine);
-    if (![from, until, padding].every(Number.isSafeInteger) || from > until || padding < 0 || padding > 86400000) { throw new TypeError('Invalid history range'); }
-    const result = await pool.query(`SELECT event_id AS "eventId", channel, time_ms AS time, value FROM history_observations
-        WHERE machine=$1 AND time_ms >= $2 AND time_ms <= $3 ORDER BY time_ms,channel LIMIT 10001`, [machine, from - padding, until + padding]);
-    if (result.rows.length > 10000) { throw new Error('History context exceeds bounded page; narrow range'); }
-    const segments = await pool.query(`SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed FROM segments
-        WHERE machine=$1 AND start_time <= $3 AND (end_time >= $2 OR duration=0) ORDER BY start_time`,
-    [machine, new Date(from - padding), new Date(until + padding)]);
-    const annotations = await pool.query(`SELECT kind,name,start_time,end_time,duration,tags,properties,resolved FROM history_annotations
-        WHERE machine=$1 AND start_time <= $3 AND end_time >= $2
-            AND (COALESCE(tags,'') NOT IN ('','null','[]') OR COALESCE(properties,'') NOT IN ('','null','{}')) ORDER BY start_time,name`,
-    [machine, new Date(from-padding), new Date(until+padding)]);
-    const initial = await historySeed(pool,machine,from-padding,padding);
-    return { initial, annotations: annotations.rows, available: from >= cutoff, items: result.rows.map((row) => { return { ...row, time: Number(row.time) }; }), segments: segments.rows, revision: revision({ segments: segments.rows, observations: result.rows, initial }), context: { from, until, paddingMs: padding } };
+    return historyContext(pool,machine,from,until,options);
 }
 async function unchanged(client, machine, base) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');

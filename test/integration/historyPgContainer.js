@@ -85,4 +85,36 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(context.initial.time,time+10000);
     });
 
+    it('compacts unchanged heartbeats without truncating the affected existing segment', async () => {
+        const store=historyPg(pool);
+        const time=Date.now()-1100000;
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES('long','phase','running',$1,$2,1000)", [new Date(time),new Date(time+1000000)]);
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value)
+            SELECT 'long','beat',$1::bigint+n*5000,'longbeat'||n,1 FROM generate_series(0,200) n`,[time]);
+        await store.accept('long',[{eventId:'longspeed0',channel:'speed',time,value:1},{eventId:'late',channel:'speed',time:time+25000,value:0}]);
+        const context=await store.context('long',time+25000,time+25000,10000);
+        assert.equal(context.items.at(-1).time,time+1000000);
+        assert.ok(context.items.length<15);
+        assert.deepEqual(context.continuity,[{from:time+15000,until:time+1000000}]);
+        assert.ok(context.items.some((point)=>{return point.time===time+20000;}));
+    });
+
+    it('preserves first values of each channel after a real continuity reset', async () => {
+        const store=historyPg(pool); const time=Date.now()-200000;
+        const points=[[0,'a',1],[100,'b',1],[101,'a',1],[102,'b',1],[103,'a',2],[104,'b',1]].map(([seconds,channel,value])=>{return {eventId:`gap${channel}${seconds}`,channel,time:time+seconds*1000,value};});
+        await store.accept('gap',points);
+        const context=await store.context('gap',time,time+104000,10000);
+        assert.ok(context.items.some((point)=>{return point.channel==='a'&&point.time===time+101000&&point.value===1;}));
+        assert.equal(context.continuity.length,2);
+    });
+    it('follows carried parameters across user cuts and neutral later values', async () => {
+        const store=historyPg(pool); const time=Date.now()-1100000;
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES
+            ('hysteresis','phase','off',$1,$2,50),('hysteresis','phase','off',$2,$3,950)`,[new Date(time),new Date(time+50000),new Date(time+1000000)]);
+        const points=[[0,'a',0],[25,'a',10],[30,'a',3],[1000,'beat',1]].map(([seconds,channel,value])=>{return {eventId:`hyst${channel}${seconds}`,channel,time:time+seconds*1000,value};});
+        await store.accept('hysteresis',points);
+        const context=await store.context('hysteresis',time+25000,time+25000,10000);
+        assert.equal(context.items.at(-1).time,time+1000000);
+    });
+
 });
