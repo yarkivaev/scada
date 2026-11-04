@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import historySeed from './historySeed.js';
 
+function bounded(rows) {
+    if (rows.length>10000) { throw new Error('History context capacity exceeded; retain work for bounded refinement'); }
+    return rows;
+}
 async function boundary(pool,machine,from,until,padding) {
     const range = await pool.query(`WITH changed AS (
         SELECT DISTINCT channel FROM history_observations WHERE machine=$1 AND time_ms<=greatest($2::bigint,$3::bigint)
@@ -29,7 +33,8 @@ const runs = `WITH timeline AS (
 numbered AS (SELECT time_ms,sum(CASE WHEN prior IS NULL OR time_ms-prior>$4 THEN 1 ELSE 0 END) OVER(ORDER BY time_ms) AS run FROM breaks),
 runs AS (SELECT min(time_ms) AS first,max(time_ms) AS last FROM numbered GROUP BY run)`;
 async function compact(pool,machine,left,right,padding) {
-    const continuity = await pool.query(`${runs} SELECT first,last FROM runs ORDER BY first`, [machine,left,right,padding]);
+    const continuity = await pool.query(`${runs} SELECT first,last FROM runs ORDER BY first LIMIT 10001`, [machine,left,right,padding]);
+    bounded(continuity.rows);
     const points = await pool.query(`${runs}, points AS (
         SELECT event_id AS "eventId",channel,h.time_ms AS time,value,
             lag(value) OVER(PARTITION BY channel,n.run ORDER BY h.time_ms) AS previous,
@@ -51,18 +56,21 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     if (from<cutoff) { return {available:false,items:[],segments:[],annotations:[],context:range}; }
     const right = await boundary(pool,machine,from,until,padding);
     const segments = await pool.query(`SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed FROM segments
-        WHERE machine=$1 AND kind='phase' AND start_time<=$3 AND (end_time>=$2 OR duration=0) ORDER BY start_time`, [machine,new Date(from-padding),new Date(right)]);
+        WHERE machine=$1 AND kind='phase' AND start_time<=$3 AND (end_time>=$2 OR duration=0) ORDER BY start_time LIMIT 10001`, [machine,new Date(from-padding),new Date(right)]);
+    bounded(segments.rows);
     const end = await segmentBoundary(pool,machine,right,segments.rows);
     if (end>right) {
         const expanded = await pool.query(`SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed FROM segments
-            WHERE machine=$1 AND kind='phase' AND start_time<=$3 AND (end_time>=$2 OR duration=0) ORDER BY start_time`, [machine,new Date(from-padding),new Date(end)]);
+            WHERE machine=$1 AND kind='phase' AND start_time<=$3 AND (end_time>=$2 OR duration=0) ORDER BY start_time LIMIT 10001`, [machine,new Date(from-padding),new Date(end)]);
+        bounded(expanded.rows);
         segments.rows=expanded.rows;
     }
     const observations = await compact(pool,machine,from-padding,end,padding);
     const annotations = await pool.query(`SELECT kind,name,start_time,end_time,duration,tags,properties,resolved FROM history_annotations
         WHERE machine=$1 AND kind='phase' AND start_time<=$3 AND end_time>=$2
-        AND (COALESCE(tags,'') NOT IN ('','null','[]') OR COALESCE(properties,'') NOT IN ('','null','{}')) ORDER BY start_time,name`,
+        AND (COALESCE(tags,'') NOT IN ('','null','[]') OR COALESCE(properties,'') NOT IN ('','null','{}')) ORDER BY start_time,name LIMIT 10001`,
     [machine,new Date(from-padding),new Date(end)]);
+    bounded(annotations.rows);
     const initial = await historySeed(pool,machine,from-padding,padding);
     const last = observations.items.at(-1)?.time;
     const rightClosed = last !== undefined && segments.rows.some((row) => { return row.duration>0 && new Date(row.end_time).getTime()>=last; });
