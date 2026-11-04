@@ -1,0 +1,22 @@
+name: Control integration
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  etcd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Start disposable etcd
+        run: |
+          docker run -d --name etcd -p 127.0.0.1:32379:2379 gcr.io/etcd-development/etcd:v3.5.17 /usr/local/bin/etcd --listen-client-urls http://0.0.0.0:2379 --advertise-client-urls http://127.0.0.1:32379
+          for n in $(seq 1 30); do curl -fs http://127.0.0.1:32379/health && exit 0; sleep 1; done
+          exit 1
+      - run: npm ci
+      - run: node test/integration/controlEtcd.js
+      - run: npx mocha --exit test/integration/historyPgContainer.js

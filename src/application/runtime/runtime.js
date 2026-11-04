@@ -75,7 +75,7 @@ export default function createRuntime(options) {
         maxTasks: positive(options.maxTasks ?? 1000), maxPending: positive(options.maxPending ?? 100),
         stopTimeoutMs: positive(options.stopTimeoutMs ?? 10000), startTimeoutMs: positive(options.startTimeoutMs ?? 10000),
         budget: taskBudget(options.budgets ?? { maxBytes: 16777216, maxRecords: 16384 }),
-        services: { stateStore: options.stateStore, secrets: options.secrets, report: options.report } };
+        services: { stateStore: options.stateStore, secrets: options.secrets, report: options.report, deliveryQueue: options.deliveryQueue } };
     if (!(ctx.registry instanceof Map)) { throw new TypeError('registry must be a Map'); }
     return {
         apply(input) { return enqueue(ctx, input, (slot) => { return apply(ctx, input, slot); }); },

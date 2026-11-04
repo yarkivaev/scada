@@ -19,12 +19,14 @@
     "./opcua": "./src/infrastructure/opcua/index.js",
     "./opcua/config": "./src/infrastructure/opcua/config.js",
     "./runtime": "./src/application/runtime/index.js",
-    "./streams": "./src/infrastructure/streams/index.js"
+    "./streams": "./src/infrastructure/streams/index.js",
+    "./control": "./src/application/control/index.js"
   },
   "bin": {
     "modbus-to-mqtt": "./src/bin/modbus-to-mqtt.js",
     "supervisor-sink": "./src/bin/supervisor-sink.js",
-    "scada-collector": "./src/bin/collector.js"
+    "scada-collector": "./src/bin/collector.js",
+    "scada-controller": "./src/bin/controller.js"
   },
   "scripts": {
     "test": "mocha --exit 'test/**/test*.js'",

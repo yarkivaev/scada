@@ -1,0 +1,21 @@
+# Edge assignment control
+
+Three independent edge clusters run etcd and controller replicas; every collector embeds an assignment agent. Losing the control majority prevents new placement but never expires saved work. Serial tasks require a pinned node. Controller changes use etcd transactions comparing the leader value and lease.
+
+Controller environment: CONTROL_NODE_ID, CONTROL_ENDPOINTS (comma-separated), CONTROL_PREFIX (default /scada/control), CONTROL_CA, CONTROL_CERT, CONTROL_KEY, CONTROL_REPLACEMENT_DELAY_MS (default 30000). Run `scada-controller`.
+
+Collector environment: COLLECTOR_NODE_ID, COLLECTOR_CONTROL_ENDPOINTS, COLLECTOR_CONTROL_PREFIX, COLLECTOR_CONTROL_CA/CERT/KEY and COLLECTOR_ASSIGNMENT_FILE (persistent volume). Run `scada-collector`. Existing manifest mode is unchanged when control endpoints are absent. The entire snapshot is validated and fsynced before execution; offline startup restores it. Errors applying one snapshot are retried and reported without discarding the saved assignment. The health endpoint is independent of etcd availability.
+
+`@yarkivaev/scada/control` exports `clientFromEnv`, `controlStore`, `publishCatalog`, `schedule`, `controller` and `assignmentAgent`. Publish with `publishCatalog(controlStore(clientFromEnv(env), env.CONTROL_PREFIX), catalog, expectedRevision?)`. Catalog shape:
+
+```json
+{"version":"1","nodes":[{"id":"edge-a","capacity":100}],"tasks":[{"taskId":"plant/channel","copies":2,"cost":1,"eligibleNodes":["edge-a"],"spec":{"adapter":"example"}}]}
+```
+
+`pinnedNode` forces one physical host. Network tasks default to two copies and capacity cost one. Placement preserves current owners; coverage of each source precedes second copies. Source reading progress is separate from process heartbeat. Extra copies are removed only after enough remaining copies confirm recent reads. An unreachable owner retains its saved work.
+
+Telemetry payloads, credentials, task specs and delivery addresses must not appear in public health responses or error logs. Production etcd must use authenticated TLS plus enabled etcd auth with per-node prefix permissions; TLS client verification alone does not provide key authorization. Catalog publishers and controllers need separate credentials. Provisioning belongs to the deployment DSL.
+
+The gateway request deadline defaults to two seconds per endpoint and response capacity to eight MiB. Initial catalogs should remain small enough to fit etcd transaction limits; this implementation uses one fenced transaction per reconciliation. Restoration from an older etcd snapshot requires an explicit operator epoch/reconciliation procedure; restoring an old generation over a newer local assignment is deliberately rejected.
+
+Verification: `npm test`, `npm run lint`, and `node test/integration/controlEtcd.js` against disposable etcd at ETCD_TEST_URL. The control integration workflow runs only on pull requests and never deploys.
