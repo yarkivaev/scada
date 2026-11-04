@@ -2,6 +2,19 @@ import executionSnapshot, { remoteSnapshot, remoteStatus } from './executionSnap
 import localAssignment from './localAssignment.js';
 import { randomUUID } from 'node:crypto';
 import { checkSnapshot, loadSnapshot, saveSnapshot } from './snapshotFile.js';
+async function applyTasks(runtime,snapshot,nodeId,onError) {
+    const ids=new Set(snapshot.assignments.map((row)=>{return row.taskId;}));
+    const removals=runtime.status().tasks.filter((row)=>{return !ids.has(row.taskId);});
+    const operations=[...removals.map((row)=>{return ()=>{return runtime.remove({taskId:row.taskId,generation:Math.max(snapshot.localGeneration,row.generation??0)});};}),
+        ...snapshot.assignments.map((row)=>{return ()=>{return runtime.apply(localAssignment({...row,generation:snapshot.executionGenerations[row.taskId]},nodeId));};})];
+    let applied=true;
+    for (const operation of operations) {
+        // One unavailable source must not prevent independent assignments from starting.
+        // eslint-disable-next-line no-await-in-loop
+        try {await operation();} catch(error) {applied=false; onError(error);}
+    }
+    return applied;
+}
 /** Control connectivity never determines whether the saved assignment may execute. */
 export default function assignmentAgent({ nodeId, file, store, runtime, validate, intervalMs = 5000, onError = () => {
     // Optional diagnostic sink.
@@ -18,18 +31,8 @@ export default function assignmentAgent({ nodeId, file, store, runtime, validate
             await saveSnapshot(file, snapshot);
             state.desired = snapshot;
         }
-        const ids = new Set(snapshot.assignments.map((row) => { return row.taskId; }));
-        for (const row of runtime.status().tasks) {
-            if (!ids.has(row.taskId)) {
-                // eslint-disable-next-line no-await-in-loop
-                await runtime.remove({ taskId: row.taskId, generation: Math.max(snapshot.localGeneration, row.generation ?? 0) });
-            }
-        }
-        for (const row of snapshot.assignments) {
-            // eslint-disable-next-line no-await-in-loop
-            await runtime.apply(localAssignment({ ...row, generation: snapshot.executionGenerations[row.taskId] }, nodeId));
-        }
-        state.appliedGeneration = snapshot.generation;
+        const applied=await applyTasks(runtime,snapshot,nodeId,onError);
+        state.appliedGeneration=applied?snapshot.generation:null;
     }
     async function once() {
         if (state.stopped) { return; }

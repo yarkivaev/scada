@@ -75,3 +75,24 @@ describe('control snapshot recovery epoch', () => {
         } finally { await rm(directory, { recursive: true, force: true }); }
     });
 });
+
+describe('partial assignment failure isolation', () => {
+    it('starts healthy tasks after a failed source, including offline cached restart', async () => {
+        const { default: createRuntime } = await import('../../../src/application/runtime/runtime.js');
+        const directory=await mkdtemp(path.join(tmpdir(),'partial-'));
+        const file=path.join(directory,'snapshot.json');
+        const snapshot={generation:1,assignments:['bad','good'].map((taskId)=>{return {taskId,generation:1,specVersion:1,spec:{adapter:'test',fail:taskId==='bad'}};})};
+        function runtime() { return createRuntime({registry:new Map([['test',{validate(){},resources(){return [];},create(spec){return {start(){if(spec.fail){throw new Error('source offline');}},stop(){}};}}]])}); }
+        let host=runtime(); let instance;
+        try {
+            instance=agent({nodeId:'a',file,runtime:host,validate(){},store:{assignment(){return snapshot;},report(){}}});
+            await instance.start();
+            assert.equal(host.status().tasks.find((row)=>{return row.taskId==='good';})?.state,'running');
+            await instance.stop(); await host.stop();
+            host=runtime();
+            instance=agent({nodeId:'a',file,runtime:host,validate(){},store:{assignment(){throw new Error('control offline');},report(){}}});
+            await instance.start();
+            assert.equal(host.status().tasks.find((row)=>{return row.taskId==='good';})?.state,'running');
+        } finally {await instance?.stop(); await host.stop(); await rm(directory,{recursive:true,force:true});}
+    });
+});
