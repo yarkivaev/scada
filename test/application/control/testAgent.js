@@ -82,7 +82,8 @@ describe('partial assignment failure isolation', () => {
         const directory=await mkdtemp(path.join(tmpdir(),'partial-'));
         const file=path.join(directory,'snapshot.json');
         const snapshot={generation:1,assignments:['bad','good'].map((taskId)=>{return {taskId,generation:1,specVersion:1,spec:{adapter:'test',fail:taskId==='bad'}};})};
-        function runtime() { return createRuntime({registry:new Map([['test',{validate(){},resources(){return [];},create(spec){return {start(){if(spec.fail){throw new Error('source offline');}},stop(){}};}}]])}); }
+        let available=false;
+        function runtime() { return createRuntime({registry:new Map([['test',{validate(){},resources(){return [];},create(spec){return {start(){if(spec.fail&&!available){throw new Error('source offline');}},stop(){}};}}]])}); }
         let host=runtime(); let instance;
         try {
             instance=agent({nodeId:'a',file,runtime:host,validate(){},store:{assignment(){return snapshot;},report(){}}});
@@ -93,6 +94,8 @@ describe('partial assignment failure isolation', () => {
             instance=agent({nodeId:'a',file,runtime:host,validate(){},store:{assignment(){throw new Error('control offline');},report(){}}});
             await instance.start();
             assert.equal(host.status().tasks.find((row)=>{return row.taskId==='good';})?.state,'running');
+            available=true; await instance.tick();
+            assert.equal(host.status().tasks.find((row)=>{return row.taskId==='bad';})?.state,'running');
         } finally {await instance?.stop(); await host.stop(); await rm(directory,{recursive:true,force:true});}
     });
 });

@@ -36,10 +36,9 @@ export default function assignmentAgent({ nodeId, file, store, runtime, validate
     }
     async function once() {
         if (state.stopped) { return; }
-        try {
-            const snapshot = await store.assignment(nodeId);
-            if (!state.stopped && snapshot) { await reconcile(snapshot); }
-        } catch (error) { onError(error); }
+        let snapshot=state.desired;
+        try {snapshot=await store.assignment(nodeId)??snapshot;} catch(error) {onError(error);}
+        try {if(!state.stopped&&snapshot){await reconcile(snapshot);}} catch(error) {onError(error);}
         try {
             if (!state.stopped) { state.sequence += 1; await store.report(nodeId, { nodeId, bootId: state.bootId, sequence: state.sequence, receivedAt: Date.now(), receivedGeneration: state.desired?.generation ?? null, appliedGeneration: state.appliedGeneration, controlEpoch: state.desired?.controlEpoch ?? 'initial', ...remoteStatus(runtime.status(), state.desired) }); }
         } catch (error) { onError(error); }
