@@ -17,7 +17,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         }
         await pool.query(await readFile(new URL('../../db/migrations/V0001__baseline.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0001__edge_metrics.sql', import.meta.url), 'utf8'));
-        await pool.query(await readFile(new URL('../../db/migrations/V0010__historical_telemetry.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0006__historical_telemetry.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('atomically accepts first value, ignores conflicts and records persistent work', async () => {
@@ -129,6 +129,17 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(context.items.at(-1).time,time+999000);
         assert.equal(context.continuity.length,1);
         assert.ok(context.items.some((point)=>{return point.channel==='a'&&point.value===1;}));
+    });
+
+    it('supports the existing receiver role with only required local history privileges', async () => {
+        await pool.query('CREATE ROLE supervisor_sink');
+        await pool.query(await readFile(new URL('../../db/migrations/E0005__historical_telemetry_grants.sql', import.meta.url),'utf8'));
+        const client=await pool.connect();
+        try {
+            await client.query('SET ROLE supervisor_sink');
+            assert.equal((await client.query('SELECT count(*) FROM history_work')).rowCount,1);
+            await client.query("INSERT INTO history_topics(machine,topic,channel) VALUES('role','role/topic','value')");
+        } finally { await client.query('RESET ROLE'); client.release(); }
     });
 
 });

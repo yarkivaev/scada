@@ -13,7 +13,7 @@ export default function stateDataFromPool(pool, options = {}) {
         segments: segmentStatePg(pool),
         alerts: alertsStatePg(pool),
         metrics,
-        history: historyPg(pool, { retentionDays: options.historyRetentionDays ?? 30 }),
+        history: metricsEnabled ? historyPg(pool, { retentionDays: options.historyRetentionDays ?? 30 }) : undefined,
         checkpoints: checkpointStatePg(pool, metricsEnabled),
         operations: operationStatePg(pool)
     };
