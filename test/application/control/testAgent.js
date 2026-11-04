@@ -35,3 +35,19 @@ describe('embedded control agent', () => {
         try { await instance.start(); await instance.tick(); await instance.stop(); } finally { await rm(directory, { recursive: true, force: true }); }
     });
 });
+
+describe('assignment startup retry', () => {
+    it('retries a failed task start on the same saved generation', async () => {
+        const { default: createRuntime } = await import('../../../src/application/runtime/runtime.js');
+        let attempts = 0;
+        const runtime = createRuntime({ registry: new Map([['test', { validate() {}, resources() { return []; }, create() {
+            return { start() { attempts += 1; if (attempts === 1) { throw new Error('temporary source failure'); } }, stop() {} };
+        } }]]) });
+        const input = { taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } };
+        await assert.rejects(runtime.apply(input), /temporary/u);
+        await runtime.apply(input);
+        assert.equal(attempts, 2);
+        assert.equal(runtime.status().tasks[0].state, 'running');
+        await runtime.stop();
+    });
+});

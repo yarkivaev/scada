@@ -35,7 +35,7 @@ function duplicate(slot, request) {
     }
     if (request.generation !== slot.generation) { return false; }
     if (slot.specHash !== request.specHash) { throw new Error('assignment conflict'); }
-    return true;
+    return slot.state !== 'failed';
 }
 async function apply(ctx, input, slot) {
     if (ctx.fatal || ctx.stopping) { throw new Error('Runtime stopping or fatal'); }
