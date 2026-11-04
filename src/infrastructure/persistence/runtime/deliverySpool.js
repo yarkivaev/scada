@@ -109,7 +109,9 @@ export default function deliverySpool(directory, { maxBytes, maxRecords = 100000
                 if (!Number.isSafeInteger(limit) || limit <= 0) { throw new TypeError('Positive pending limit required'); }
                 const rows = [];
                 for (const entry of Array.from(entries.values()).slice(0, limit)) {
-                            const { event, remaining } = await load(entry.name);
+                    // Read sequentially to bound decoded records in memory.
+                    // eslint-disable-next-line no-await-in-loop
+                    const { event, remaining } = await load(entry.name);
                     rows.push({ event, remaining });
                     // Rotate the window so an offline recipient cannot starve later destinations.
                     entries.delete(event.eventId); entries.set(event.eventId, entry);
