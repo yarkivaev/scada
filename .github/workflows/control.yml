@@ -19,4 +19,5 @@ jobs:
           exit 1
       - run: npm ci
       - run: node test/integration/controlEtcd.js
+      - run: node test/integration/controlQuorum.js
       - run: npx mocha --exit test/integration/historyPgContainer.js
