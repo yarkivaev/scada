@@ -63,5 +63,6 @@ describe('rolling source configuration', () => {
         const next = schedule({ ...catalog, version: 'v2', tasks: [{ ...catalog.tasks[0], spec: { adapter: 'test', value: 2 } }] }, reports, current, { now: 1000 });
         const changed = Object.values(next).flatMap((row) => { return row.assignments; }).filter((row) => { return row.spec.value === 2; });
         assert.equal(changed.length, 1);
+        assert.equal(next.b.catalogVersion, 'v1');
     });
 });

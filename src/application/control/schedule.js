@@ -19,13 +19,15 @@ function snapshots(slots, taskMap, { version: catalogVersion, controlEpoch = 'in
             const update = node.live && task && !same(task.spec, row.spec) && updateAllowed(task, node, slots, reports, timing);
             return update ? { ...row, spec: task.spec, assignedAt: timing.now } : row;
         });
-        const changed = node.live && (!same(base, node.previous.assignments) || node.previous.catalogVersion !== catalogVersion || (node.previous.controlEpoch ?? 'initial') !== controlEpoch);
+        const complete = base.every((row) => { return same(row.spec, taskMap.get(row.taskId)?.spec); });
+        const appliedCatalog = complete ? catalogVersion : node.previous.catalogVersion;
+        const changed = node.live && (!same(base, node.previous.assignments) || node.previous.catalogVersion !== appliedCatalog || (node.previous.controlEpoch ?? 'initial') !== controlEpoch);
         const generation = node.previous.generation + Number(changed);
         const assignments = base.map((row) => {
             const old = node.previous.assignments.find((item) => { return item.taskId === row.taskId; });
             return { ...row, generation: old && same(old.spec, row.spec) ? old.generation : generation };
         });
-        return [node.id, changed ? { generation, catalogVersion, controlEpoch, assignments } : node.previous];
+        return [node.id, changed ? { generation, catalogVersion: appliedCatalog, controlEpoch, assignments } : node.previous];
     }));
 }
 /** Conservative coverage-first placement. Unreachable executors retain their last snapshot. */
