@@ -1,6 +1,7 @@
 import ingestHealth from './ingestHealth.js';
 import segmentTransactionConfig from './segmentTransactionConfig.js';
 import segmentBatchStats from './segmentBatchStats.js';
+import historyTelemetry from '../infrastructure/ingest/telemetry/historyTelemetry.js';
 import segmentPipeline, {
     segmentsIngestDestination
 } from '../infrastructure/ingest/pipelines/segmentPipeline.js';
@@ -108,8 +109,10 @@ export default function supervisorSink(env = process.env, options = {}) {
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
     const data = stateDataFromPool(pool, { metricsEnabled, historyRetentionDays: Number(env.HISTORY_RETENTION_DAYS ?? 30) });
     const dataAccess = options.stateData ? options.stateData(data, pool) : data;
+    const localTelemetry = historyTelemetry(env, pool);
     return {
         health: () => {return health.status()},
+        historyTelemetry: localTelemetry,
         apiPort: cfg.apiPort,
         apiToken: cfg.apiToken,
         sinkDbProfile: cfg.sinkDbProfile,
@@ -130,6 +133,7 @@ export default function supervisorSink(env = process.env, options = {}) {
             } finally {
                 await adminPool.end();
             }
+            await localTelemetry?.start();
             if (cfg.pipelines) {
                 await startPipelines(cfg, pool, health);
             }

@@ -21,3 +21,4 @@ jobs:
       - run: node test/integration/controlEtcd.js
       - run: node test/integration/controlQuorum.js
       - run: npx mocha --exit test/integration/historyPgContainer.js
+      - run: npx mocha --exit test/integration/historyAmqpContainer.js

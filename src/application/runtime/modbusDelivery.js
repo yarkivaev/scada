@@ -14,10 +14,13 @@ export default function modbusDelivery(spec, context, publish = modbusPublish) {
             context.signal?.throwIfAborted();
             context.report?.({ state: 'running', read: 1 });
             for (const record of records) {
+                const routingKey = record.topic.replaceAll('/', '.');
+                const destinations = spec.sinks.filter((sink) => { return !sink.routingKeyPrefix || routingKey.startsWith(sink.routingKeyPrefix); });
+                if (!destinations.length) { throw new Error('No matching Modbus telemetry recipient'); }
                 // Retain each decoded observation durably before completing source acceptance.
                 // eslint-disable-next-line no-await-in-loop
                 await context.deliveryQueue.accept({ eventId: record.eventId ?? randomUUID(),
-                    exchange: 'scada.telemetry', routingKey: record.topic.replaceAll('/', '.'), body: Buffer.from(record.payload) }, spec.sinks);
+                    exchange: 'scada.telemetry', routingKey, body: Buffer.from(record.payload) }, destinations);
             }
         }
     };
