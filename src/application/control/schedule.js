@@ -12,20 +12,20 @@ function updateAllowed(task, node, slots, reports, { now, freshnessMs }) {
     const outdated = owners.filter((slot) => { return !modern.includes(slot); });
     return (modern.length === 0 || ready) && outdated[0]?.id === node.id;
 }
-function snapshots(slots, taskMap, catalogVersion, reports, timing) {
+function snapshots(slots, taskMap, { version: catalogVersion, controlEpoch = 'initial' }, reports, timing) {
     return Object.fromEntries(slots.map((node) => {
         const base = node.assignments.map((row) => {
             const task = taskMap.get(row.taskId);
             const update = node.live && task && !same(task.spec, row.spec) && updateAllowed(task, node, slots, reports, timing);
             return update ? { ...row, spec: task.spec, assignedAt: timing.now } : row;
         });
-        const changed = node.live && (!same(base, node.previous.assignments) || node.previous.catalogVersion !== catalogVersion);
+        const changed = node.live && (!same(base, node.previous.assignments) || node.previous.catalogVersion !== catalogVersion || (node.previous.controlEpoch ?? 'initial') !== controlEpoch);
         const generation = node.previous.generation + Number(changed);
         const assignments = base.map((row) => {
             const old = node.previous.assignments.find((item) => { return item.taskId === row.taskId; });
             return { ...row, generation: old && same(old.spec, row.spec) ? old.generation : generation };
         });
-        return [node.id, changed ? { generation, catalogVersion, assignments } : node.previous];
+        return [node.id, changed ? { generation, catalogVersion, controlEpoch, assignments } : node.previous];
     }));
 }
 /** Conservative coverage-first placement. Unreachable executors retain their last snapshot. */
@@ -75,5 +75,5 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
             });
         }
     }
-    return snapshots(slots, taskMap, catalog.version, observed, { now, freshnessMs });
+    return snapshots(slots, taskMap, catalog, observed, { now, freshnessMs });
 }

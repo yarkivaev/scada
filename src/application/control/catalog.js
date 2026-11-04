@@ -1,6 +1,6 @@
 const identifier = /^[\w.:-]{1,200}$/u;
 export default function validateCatalog(catalog) {
-    if (!catalog || typeof catalog.version !== 'string' || !Array.isArray(catalog.nodes) || !Array.isArray(catalog.tasks)) {
+    if (!catalog || typeof catalog.version !== 'string' || (catalog.controlEpoch !== undefined && (typeof catalog.controlEpoch !== 'string' || !catalog.controlEpoch.length)) || !Array.isArray(catalog.nodes) || !Array.isArray(catalog.tasks)) {
         throw new TypeError('Invalid control catalog');
     }
     const nodes = new Set();

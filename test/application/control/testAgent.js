@@ -51,3 +51,27 @@ describe('assignment startup retry', () => {
         await runtime.stop();
     });
 });
+describe('control snapshot recovery epoch', () => {
+    it('accepts a new epoch with lower remote generation and rebases local execution monotonically', async () => {
+        const directory = await mkdtemp(path.join(tmpdir(), 'assignment-'));
+        let snapshot = { controlEpoch: 'before', generation: 50, assignments: [{ taskId: 's', generation: 50, specVersion: 1, spec: { adapter: 'test', value: 1 } }] };
+        const applied = [];
+        const reports = [];
+        const runtime = { apply(input) { applied.push(input); }, remove() {}, status() { return { tasks: applied.length ? [applied.at(-1)] : [] }; } };
+        const instance = agent({ nodeId: 'a', file: path.join(directory, 'snapshot.json'), runtime, validate() {}, store: { assignment() { return snapshot; }, report(id, value) { reports.push(value); } } });
+        try {
+            await instance.start();
+            snapshot = { controlEpoch: 'after', generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test', value: 2 } }] };
+            await instance.tick();
+            assert.equal(applied.at(-1).spec.value, 2);
+            assert.ok(applied.at(-1).generation > applied[0].generation);
+            assert.equal(reports.at(-1).tasks[0].generation, 1);
+            assert.equal(reports.at(-1).tasks[0].executionGeneration, applied.at(-1).generation);
+            const count = applied.length;
+            snapshot = { ...snapshot, generation: 0 };
+            await instance.tick();
+            assert.equal(applied.length, count);
+            await instance.stop();
+        } finally { await rm(directory, { recursive: true, force: true }); }
+    });
+});
