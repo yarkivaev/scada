@@ -74,3 +74,17 @@ describe('node retirement', () => {
         assert.ok(result.a.generation > 5);
     });
 });
+describe('recovery epoch read evidence', () => {
+    it('does not retire redundant copies based on successful reads from an earlier control epoch', () => {
+        const current = Object.fromEntries(['a', 'b', 'c'].map((id) => { return [id, { generation: 1, controlEpoch: 'new', catalogVersion: 'v1', assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
+        const reports = ['a', 'b', 'c'].map((id) => { return { ...report(id, 1000, [{ taskId: 's', generation: 1, state: 'running', lastRead: 1000 }]), controlEpoch: 'old' }; });
+        const result = schedule({ ...catalog, controlEpoch: 'new' }, reports, current, { now: 1000 });
+        assert.equal(Object.values(result).flatMap((row) => { return row.assignments; }).length, 3);
+    });
+    it('does not advance rolling configuration on a matching-generation read from an old epoch', () => {
+        const current = Object.fromEntries(['a', 'b'].map((id) => { return [id, { generation: 1, controlEpoch: 'new', catalogVersion: 'v1', assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test', value: id === 'a' ? 2 : 1 } }] }]; }));
+        const reports = ['a', 'b'].map((id) => { return { ...report(id, 1000, [{ taskId: 's', generation: 1, state: 'running', lastRead: 1000 }]), controlEpoch: 'old' }; });
+        const result = schedule({ ...catalog, controlEpoch: 'new', tasks: [{ ...catalog.tasks[0], spec: { adapter: 'test', value: 2 } }] }, reports, current, { now: 1000 });
+        assert.equal(result.b.assignments[0].spec.value, 1);
+    });
+});

@@ -16,3 +16,5 @@ assert.ok(await second.acquire());
 assert.equal(await first.commit(token, view, { a: { generation: 99, assignments: [] } }), false);
 await assert.rejects(first.publish({ version: '2', nodes: [], tasks: [] }, '0'), /conflict/u);
 process.stdout.write('etcd publication, election, assignment and expired-leader fencing passed\n');
+
+await import('./controlEtcdAuth.js');
