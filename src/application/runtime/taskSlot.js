@@ -24,7 +24,7 @@ function validateTask(task) {
 }
 export async function launch(slot, request, ctx, resources) {
     ctx.claims.acquire(slot.taskId, resources);
-    Object.assign(slot, { generation: request.generation, specHash: request.specHash, removed: false, state: 'starting', reason: null });
+    Object.assign(slot, { generation: request.generation, specHash: request.specHash, removed: false, state: 'starting', reason: null, health: 'unknown', lastRead: null, lastDelivery: null });
     slot.controller = new AbortController();
     const context = taskContext(slot, request, ctx);
     try {
@@ -42,5 +42,5 @@ export async function launch(slot, request, ctx, resources) {
 }
 export function view(slot) {
     return { taskId: slot.taskId, generation: slot.generation, specHash: slot.specHash,
-        state: slot.state, health: slot.health ?? 'unknown', lastDelivery: slot.lastDelivery ?? null, reason: slot.reason ?? null };
+        state: slot.state, health: slot.health ?? 'unknown', lastRead: slot.lastRead ?? null, lastDelivery: slot.lastDelivery ?? null, reason: slot.reason ?? null };
 }

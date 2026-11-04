@@ -147,3 +147,27 @@ it('mandatory AMQP publications reject correlated returns before confirms', asyn
   await second;
   await sink.stop();
 });
+
+describe('recipient topology before publisher acceptance', () => {
+  it('declares durable recipient queue and completes its binding before becoming active', async () => {
+    const fixture = broker();
+    let release;
+    fixture.channel.assertQueue = (name, options) => { fixture.sent.push(['queue', name, options]); return Promise.resolve(); };
+    fixture.channel.bindQueue = (queue, exchange, pattern) => {
+      fixture.sent.push(['binding', queue, exchange, pattern]);
+      return new Promise((resolve) => { release = resolve; });
+    };
+    const sink = amqpSink('amqp://localhost', { connect() { return Promise.resolve(fixture.connection); },
+      exchanges: [{ name: 'events', type: 'topic' }], queues: [{ name: 'local.history', options: { durable: true, autoDelete: false } }],
+      bindings: [{ queue: 'local.history', exchange: 'events', pattern: 'line.#' }] });
+    try {
+      const starting = sink.start();
+      await new Promise((resolve) => { setImmediate(resolve); });
+      assert.equal(sink.active(), false);
+      await assert.rejects(sink.write([record]), /not connected/u);
+      assert.deepEqual(fixture.sent.map((row) => { return row[0]; }), ['exchange', 'queue', 'binding']);
+      release(); await starting;
+      assert.equal(sink.active(), true);
+    } finally { release?.(); await sink.stop(); }
+  });
+});

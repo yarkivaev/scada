@@ -1,4 +1,5 @@
 import http from 'http';
+import historyRoutes from './routes/history/historyRoutes.js';
 import checkpointRoutes from './routes/checkpoint/checkpointRoutes.js';
 import metricsRoutes from './routes/metrics/metricsRoutes.js';
 import retentionRoutes from './routes/retention/retentionRoutes.js';
@@ -26,6 +27,7 @@ export function createEdgeApi(dataAccess, options) {
         : [];
     return routes([
         ...admin,
+        ...historyRoutes(token, dataAccess.history),
         ...checkpointRoutes(token, checkpoints),
         ...metricRoutes
     ], { requestTimeoutMs: opt.requestTimeoutMs });

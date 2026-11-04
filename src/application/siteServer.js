@@ -48,6 +48,7 @@ function mqttSinkForProfile(sink, env) {
 }
 
 function startMqtt(sink, env) {
+    if (env.HISTORY_AMQP_ENABLED === 'true' && env.SINK_DB_PROFILE !== 'central') { return undefined; }
     if (!env.MQTT_URL || !env.MQTT_TOPICS) {
         return undefined;
     }

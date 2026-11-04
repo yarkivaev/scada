@@ -53,6 +53,12 @@ async function configure(state, live) {
     await Promise.all((state.options.exchanges || []).map((item) => {
         return live.channel.assertExchange(item.name, item.type || 'topic', item.options || {durable: true});
     }));
+    await Promise.all((state.options.queues || []).map((item) => {
+        return live.channel.assertQueue(item.name, item.options || { durable: true, autoDelete: false });
+    }));
+    await Promise.all((state.options.bindings || []).map((item) => {
+        return live.channel.bindQueue(item.queue, item.exchange, item.pattern, item.args);
+    }));
 }
 async function current(state, live) {
     if (live.epoch !== state.epoch || !state.wanted) {
