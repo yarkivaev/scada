@@ -164,7 +164,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
 
     it('prioritizes current classification over a bounded historical batch', async () => {
         const store=historyPg(pool); const now=Date.now();
-        const points=Array.from({length:12},(_,index)=>{return {eventId:`priority${index}`,channel:'a',time:now-(12-index)*60000,value:index};});
+        const points=Array.from({length:12},(item,index)=>{return {eventId:`priority${index}`,channel:'a',time:now-(12-index)*60000,value:index};});
         await store.accept('priority',points);
         await store.accept('priority',[{eventId:'latest',channel:'a',time:now,value:20}]);
         const work=(await store.work('priority')).items;
