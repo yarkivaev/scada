@@ -11,7 +11,10 @@ export default function queuedDelivery(env, secrets, supplied) {
     }) : undefined);
     async function tick() {
         if (stopped || !queue) { return; }
-        try { await queue.drain(); } catch (error) { process.stderr.write(`Collector spool: ${error.message}\n`); }
+        try {
+            if (queue.status?.().ready === false) { await queue.open(); }
+            await queue.drain();
+        } catch (error) { process.stderr.write(`Collector spool: ${error.message}\n`); }
         if (!stopped) { timer = setTimeout(tick, 1000); timer.unref(); }
     }
     return {
