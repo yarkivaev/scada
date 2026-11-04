@@ -53,7 +53,7 @@ async function context(pool, machine, from, until, { padding, cutoff }) {
         WHERE machine=$1 AND start_time <= $3 AND end_time >= $2
             AND (COALESCE(tags,'') NOT IN ('','null','[]') OR COALESCE(properties,'') NOT IN ('','null','{}')) ORDER BY start_time,name`,
     [machine, new Date(from-padding), new Date(until+padding)]);
-    return { annotations: annotations.rows, available: from >= cutoff, items: result.rows.map((row) => { return { ...row, time: Number(row.time) }; }), segments: segments.rows, revision: revision(segments.rows), context: { from, until, paddingMs: padding } };
+    return { annotations: annotations.rows, available: from >= cutoff, items: result.rows.map((row) => { return { ...row, time: Number(row.time) }; }), segments: segments.rows, revision: revision({ segments: segments.rows, observations: result.rows }), context: { from, until, paddingMs: padding } };
 }
 async function unchanged(client, machine, base) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
@@ -97,6 +97,18 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now } =
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0) { throw new TypeError('Positive retentionDays required'); }
     function cutoff() { return now() - retentionDays * 86400000; }
     return {
+        configure(machine, topics, bucketMs = 30000) {
+            if (!Array.isArray(topics) || topics.length > 500 || !Number.isSafeInteger(bucketMs) || bucketMs <= 0) { throw new TypeError('Invalid history topics'); }
+            return transaction(pool, machine, async (client) => {
+                await client.query('DELETE FROM history_topics WHERE machine=$1', [machine]);
+                for (const item of topics) {
+                    if (typeof item.topic !== 'string' || !item.topic || typeof item.channel !== 'string' || !item.channel) { throw new TypeError('Invalid history topic'); }
+                    // eslint-disable-next-line no-await-in-loop
+                    await client.query('INSERT INTO history_topics(machine,topic,channel,bucket_ms,retention_days) VALUES($1,$2,$3,$4,$5)', [machine,item.topic,item.channel,bucketMs,retentionDays]);
+                }
+                return { configured: topics.length };
+            });
+        },
         async purge() {
             const result = await pool.query(`DELETE FROM history_observations o WHERE time_ms < $1
                 AND NOT EXISTS (SELECT 1 FROM history_work w WHERE w.machine=o.machine

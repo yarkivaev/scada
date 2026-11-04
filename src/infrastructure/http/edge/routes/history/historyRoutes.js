@@ -21,6 +21,7 @@ function endpoint(method, suffix, token, action) {
 export default function historyRoutes(token, history) {
     if (!history) { return []; }
     return [
+        endpoint('POST', 'config', token, (input) => { return history.configure(input.machine, input.topics, input.bucketMs); }),
         endpoint('POST', 'purge', token, () => { return history.purge(); }),
         endpoint('POST', 'observations', token, (input) => { return history.accept(input.machine, input.observations); }),
         endpoint('GET', 'work', token, (input) => { return history.work(input.machine); }),

@@ -16,6 +16,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             try { await pool.query('SELECT 1'); break; } catch { await new Promise((resolve) => { setTimeout(resolve, 300); }); }
         }
         await pool.query(await readFile(new URL('../../db/migrations/V0001__baseline.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0001__edge_metrics.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/V0010__historical_telemetry.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
@@ -49,6 +50,15 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await assert.rejects(store.commit('race',work.id,context.segments,{...context.context,revision:context.revision}), /context changed/u);
         assert.equal((await store.work('race')).items.length,1);
         assert.equal((await pool.query("SELECT tags FROM segments WHERE machine='race'")).rows[0].tags,'["manual"]');
+    });
+
+    it('creates historical work atomically when persisted telemetry arrives without supervisor', async () => {
+        const store = historyPg(pool);
+        await store.configure('offline', [{topic:'MX210/icht-1/GET/AI3/VALUE',channel:'power'}]);
+        const time=Date.now()-5000;
+        await pool.query('INSERT INTO metrics(topic,ts,value) VALUES($1,$2,$3)', ['MX210/icht-1/GET/AI3/VALUE',new Date(time),5]);
+        assert.equal((await store.work('offline')).items.length,1);
+        assert.equal((await store.context('offline',time,time)).items[0].value,5);
     });
 
 });
