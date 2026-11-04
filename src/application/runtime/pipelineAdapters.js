@@ -2,7 +2,7 @@ import { clickhouseSink, mqttSink } from '../../infrastructure/streams/index.js'
 import activityTracking from '../../infrastructure/ingest/activity/activityTracking.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import amqpMqttRelay from '../../infrastructure/ingest/telemetry/amqpMqttRelay.js';
-import modbusPublish from '../../infrastructure/ingest/mqtt/modbusPublish.js';
+import modbusDelivery from './modbusDelivery.js';
 import mqttMetrics from '../../infrastructure/ingest/mqtt/mqttMetrics.js';
 import { parseModbusDeviceSpec } from '../../infrastructure/ingest/mqtt/modbusDeviceSpec.js';
 import compositeLifecycle from './compositeLifecycle.js';
@@ -51,9 +51,7 @@ function metrics(spec, factory) {
 }
 export default function pipelineAdapters() {
     return new Map([
-        ['modbus', adapter((spec, context) => { return modbusPublish(spec.url, { ...spec.config, onFatal(error) {
-            context.report?.({ state: 'failed', fatal: true, reason: error.code ?? error.name });
-        } }); }, ['url', 'config'], modbusResources)],
+        ['modbus', adapter((spec, context) => { return modbusDelivery(spec, context); }, ['url', 'config'], modbusResources)],
         ['activity', adapter((spec) => { return activityTracking(spec.lokiUrl, spec.clickhouseUrl, spec.query, spec.config); }, ['lokiUrl', 'clickhouseUrl', 'query', 'config'])],
         ['amqp-relay', adapter((spec) => { return amqpMqttRelay(spec.url, spec.queue, mqttSink(spec.mqttUrl, spec.options), spec.options); }, ['url', 'queue', 'mqttUrl'])],
         ['amqp-metrics', adapter((spec) => { return metrics(spec, (sink) => { return amqpMetricsIngest(spec.url, spec.queue, sink, spec.options); }); }, ['url', 'queue', 'clickhouseUrl', 'table'])],
