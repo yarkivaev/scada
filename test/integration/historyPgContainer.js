@@ -16,6 +16,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             try { await pool.query('SELECT 1'); break; } catch { await new Promise((resolve) => { setTimeout(resolve, 300); }); }
         }
         await pool.query(await readFile(new URL('../../db/migrations/V0001__baseline.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/V0008__segments_updated_at.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0001__edge_metrics.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0006__historical_telemetry.sql', import.meta.url), 'utf8'));
     });
@@ -140,6 +141,15 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             assert.equal((await client.query('SELECT count(*) FROM history_work')).rowCount,1);
             await client.query("INSERT INTO history_topics(machine,topic,channel) VALUES('role','role/topic','value')");
         } finally { await client.query('RESET ROLE'); client.release(); }
+    });
+
+    it('refreshes pending segment write time for the existing silence watchdog', async () => {
+        const store=historyPg(pool); const time=Date.now()-10000;
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,updated_at) VALUES('fresh','phase','off',$1,$2,0,now()-interval '1 hour')",[new Date(time),new Date(time+1000)]);
+        await store.accept('fresh',[{eventId:'fresh',channel:'a',time,value:0}]);
+        const work=(await store.work('fresh')).items[0]; const context=await store.context('fresh',time,time);
+        await store.commit('fresh',work.id,context.segments,{...context.context,revision:context.revision,workToken:work.token});
+        assert.ok(Date.now()-new Date((await pool.query("SELECT updated_at FROM segments WHERE machine='fresh'")).rows[0].updated_at).getTime()<5000);
     });
 
 });

@@ -81,7 +81,7 @@ function commit(pool, machine, workId, segments, base) {
             // eslint-disable-next-line no-await-in-loop
             await client.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(machine,kind,start_time) DO UPDATE
-                SET name=EXCLUDED.name,end_time=EXCLUDED.end_time,duration=EXCLUDED.duration,options=EXCLUDED.options,
+                SET name=EXCLUDED.name,end_time=EXCLUDED.end_time,duration=EXCLUDED.duration,options=EXCLUDED.options,updated_at=clock_timestamp(),
                 tags=CASE WHEN segments.name=EXCLUDED.name THEN segments.tags ELSE EXCLUDED.tags END,
                 properties=CASE WHEN segments.name=EXCLUDED.name THEN segments.properties ELSE EXCLUDED.properties END,
                 resolved=CASE WHEN segments.name=EXCLUDED.name THEN segments.resolved ELSE EXCLUDED.resolved END`,
