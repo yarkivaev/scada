@@ -37,4 +37,18 @@ describe('Node delivery queue', () => {
         assert.deepEqual(received, ['good']);
         assert.equal(queue.status().pending, 1);
     });
+    it('does not starve a healthy later destination behind an offline batch', async () => {
+        const received = [];
+        const queue = deliveryQueue(directory, { maxBytes: 10000, batchSize: 1, factory(spec) {
+            return { async write() { if (spec.id === 'bad') { throw new Error('offline'); } received.push(spec.id); } };
+        } });
+        await queue.open();
+        await queue.accept({ eventId: 'a' }, [{ id: 'bad', type: 'amqp' }]);
+        await queue.accept({ eventId: 'b' }, [{ id: 'good', type: 'amqp' }]);
+        await queue.drain(); await queue.drain();
+        assert.deepEqual(received, ['good']);
+        await queue.close();
+        await assert.rejects(queue.accept({ eventId:'c' },[{id:'good',type:'amqp'}]),/closed/u);
+    });
+
 });

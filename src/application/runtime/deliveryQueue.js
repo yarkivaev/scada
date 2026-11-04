@@ -10,7 +10,7 @@ export default function deliveryQueue(directory, options) {
     const spool = deliverySpool(directory, options);
     const sessions = deliverySessions(options.factory, options.writeTimeoutMs);
     let chain = Promise.resolve();
-    const state = { pending: 0, draining: false };
+    const state = { pending: 0, draining: false, closed: false };
     function serialized(action) {
         if (state.pending >= (options.maxOperations ?? 32)) { return Promise.reject(new Error('Delivery operation capacity exceeded')); }
         state.pending += 1;
@@ -21,6 +21,7 @@ export default function deliveryQueue(directory, options) {
         return result;
     }
     async function send(record, id) {
+        if (state.closed) { throw new Error('Delivery queue closed'); }
         const descriptor = record.event.destinations.find((item) => { return item.id === id; });
         await sessions.write(descriptor, confirmed(record.event.observation));
         await serialized(() => { return spool.ack(record.event.eventId, id); });
@@ -29,6 +30,7 @@ export default function deliveryQueue(directory, options) {
     return {
         open() { return serialized(() => { return spool.open(); }); },
         accept(event, destinations) {
+            if (state.closed) { return Promise.reject(new Error('Delivery queue closed')); }
             if (!destinations?.length || destinations.some((item) => { return item.type !== 'amqp'; })) {
                 return Promise.reject(new TypeError('Queued delivery requires confirmed AMQP destinations'));
             }
@@ -37,7 +39,7 @@ export default function deliveryQueue(directory, options) {
             return serialized(() => { return spool.append(envelope, destinations.map((item) => { return item.id; })); });
         },
         async drain() {
-            if (state.draining) { return { delivered: 0, failed: 0 }; }
+            if (state.draining || state.closed) { return { delivered: 0, failed: 0 }; }
             state.draining = true;
             const result = { delivered: 0, failed: 0 };
             try {
@@ -54,7 +56,7 @@ export default function deliveryQueue(directory, options) {
                 return result;
             } finally { Object.assign(state, { draining: false }); }
         },
-        close() { return sessions.close(); },
+        close() { state.closed = true; return sessions.close(); },
         status() { return spool.status(); }
     };
 }

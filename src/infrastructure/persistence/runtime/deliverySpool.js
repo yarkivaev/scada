@@ -102,6 +102,8 @@ export default function deliverySpool(directory, { maxBytes } = {}) {
                     // eslint-disable-next-line no-await-in-loop
                     const { event, remaining } = await load(entry.name);
                     rows.push({ event, remaining });
+                    // Rotate the window so an offline recipient cannot starve later destinations.
+                    entries.delete(event.eventId); entries.set(event.eventId, entry);
                 }
                 return rows;
             });
