@@ -52,7 +52,6 @@ export default function assignmentAgent({ nodeId, file, store, runtime, validate
             if (saved) { await reconcile(saved, true); }
             await tick();
             state.timer = setInterval(() => { void tick(); }, intervalMs);
-            state.timer.unref();
         },
         async stop() { state.stopped = true; clearInterval(state.timer); await state.pending; }
     };
