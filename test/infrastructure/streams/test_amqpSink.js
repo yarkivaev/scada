@@ -211,7 +211,7 @@ it('cannot reuse a timed out sink when retiring its late connection fails', asyn
   await new Promise(resolve => { setTimeout(resolve, 45); });
   complete(late.connection);
   await new Promise(resolve => { setTimeout(resolve, 30); });
-  const refused = await sink.start().then(() => false, () => true);
+  const refused = await sink.start().then(() => { return false; }, () => { return true; });
   await sink.stop().catch(() => {});
   assert.equal(refused, true, 'Sink reused a connection after uncertain cleanup');
 });
