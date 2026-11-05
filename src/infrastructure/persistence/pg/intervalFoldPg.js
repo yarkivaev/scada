@@ -24,13 +24,23 @@ export default function intervalFoldPg(pool) {
             const start = new Date(sample.ts).toISOString();
             await pool.query(
                 `INSERT INTO segments (machine, kind, name, start_time, end_time, duration, resolved, consumed)
-                 VALUES ($1, $2, $3, $4, $4, 0, TRUE, TRUE)`,
+                 SELECT $1, $2, $3, $4::timestamptz, $4::timestamptz, 0, TRUE, TRUE
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM (
+                         SELECT start_time, end_time, duration FROM segments
+                         WHERE machine = $1 AND kind = $2
+                         ORDER BY start_time DESC LIMIT 1
+                     ) previous
+                     WHERE start_time >= $4::timestamptz OR end_time > $4::timestamptz
+                         OR (duration = 0 AND end_time >= $4::timestamptz)
+                 )
+                 ON CONFLICT (machine, kind, start_time) DO NOTHING`,
                 [sample.machine, sample.kind, sample.name, start]
             );
         },
         async extend(row, ts) {
             await pool.query(
-                `UPDATE segments SET end_time = $1
+                `UPDATE segments SET end_time = GREATEST(end_time, $1::timestamptz)
                  WHERE machine = $2 AND kind = $3 AND start_time = $4 AND duration = 0`,
                 [new Date(ts).toISOString(), row.machine, row.kind, row.start_time]
             );
@@ -41,7 +51,7 @@ export default function intervalFoldPg(pool) {
             const duration = Math.max(1, Math.round((end.getTime() - start.getTime()) / 1000));
             await pool.query(
                 `UPDATE segments SET end_time = $1, duration = $2
-                 WHERE machine = $3 AND kind = $4 AND start_time = $5 AND duration = 0`,
+                 WHERE machine = $3 AND kind = $4 AND start_time = $5 AND duration = 0 AND end_time < $1::timestamptz`,
                 [end.toISOString(), duration, row.machine, row.kind, row.start_time]
             );
         }

@@ -9,6 +9,11 @@ metadata:
     app: site-server
 spec:
   replicas: 1
+  {{- if .Values.site.recreate }}
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  {{- end }}
   selector:
     matchLabels:
       {{- include "scada.match" (dict "app" "site-server" "ctx" .) | nindent 6 }}

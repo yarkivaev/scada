@@ -74,3 +74,8 @@ describe('named processes in the scada chart', function() {
         assert.throws(() => { render({ processes }); }, /both claim \/dev\/ttyS1/u);
     });
 });
+
+it('cannot overlap a site that requests a single-writer rollout', function() {
+    const manifest=render({prefix:'single',site:{enabled:true,recreate:true},sink:{enabled:false},postgres:{enabled:false},rabbitmq:{enabled:false}});
+    assert.match(manifest,/strategy:\n {4}type: Recreate\n {4}rollingUpdate: null/u,'Site rollout still allows concurrent writers');
+});
