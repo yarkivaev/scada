@@ -81,6 +81,7 @@ async function topology(channel, queue, options) {
 export default function amqpSource(url, queue, collector, options = {}) {
     if (!collector || typeof collector.accept !== 'function') { throw new Error('Collector must have an accept() method'); }
     const settings = capacity(options);
+    if (![undefined, true, false].includes(settings.exclusive)) { throw new TypeError('AMQP exclusive must be boolean'); }
     const pending = new Set();
     const state = {};
     const session = amqpSession(url, async (channel) => {
@@ -89,7 +90,7 @@ export default function amqpSource(url, queue, collector, options = {}) {
             return state.session.active() && state.session.generation() === generation;
         } };
         const name = await topology(channel, queue, settings);
-        const result = await channel.consume(name, trackedConsume(channel, collector, config, pending), { noAck: false });
+        const result = await channel.consume(name, trackedConsume(channel, collector, config, pending), { noAck: false, ...(settings.exclusive ? { exclusive: true } : {}) });
         return result.consumerTag;
     }, { ...settings, drain() { return Promise.all([...pending]); } });
     state.session = session;
