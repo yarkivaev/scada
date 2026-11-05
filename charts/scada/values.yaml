@@ -4,7 +4,6 @@ prefix: ""
 createNamespace: false
 site:
   enabled: true
-  recreate: false
 sink:
   enabled: true
 # Labels for workloads that must stay outside immutable selectors.
