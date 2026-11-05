@@ -192,3 +192,26 @@ it('retires a late connection before reconnecting after its deadline', async () 
   await sink.stop();
   assert.deepEqual(result, { closed: true, active: true }, 'Late connection survived or recovery failed');
 });
+
+it('cannot reuse a timed out sink when retiring its late connection fails', async () => {
+  const initial = broker();
+  const late = broker();
+  const recovered = broker();
+  let complete;
+  let count = 0;
+  late.connection.close = async () => { throw new Error('uncertain cleanup'); };
+  const sink = amqpSink('amqp://test', { connectTimeoutMs: 15, retryMs: 5, connect() {
+    count += 1;
+    if (count === 1) { return Promise.resolve(initial.connection); }
+    if (count === 2) { return new Promise((resolve) => { complete = resolve; }); }
+    return Promise.resolve(recovered.connection);
+  } });
+  await sink.start();
+  initial.connection.emit('close');
+  await new Promise(resolve => { setTimeout(resolve, 45); });
+  complete(late.connection);
+  await new Promise(resolve => { setTimeout(resolve, 30); });
+  const refused = await sink.start().then(() => { return false; }, () => { return true; });
+  await sink.stop().catch(() => {});
+  assert.equal(refused, true, 'Sink reused a connection after uncertain cleanup');
+});
