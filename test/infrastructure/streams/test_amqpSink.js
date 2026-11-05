@@ -147,3 +147,48 @@ it('mandatory AMQP publications reject correlated returns before confirms', asyn
   await second;
   await sink.stop();
 });
+
+it('recovers after a timed out connection settles during a broker outage', async () => {
+  const initial = broker();
+  const recovered = broker();
+  let rejected;
+  let count = 0;
+  const sink = amqpSink('amqp://test', { connectTimeoutMs: 25, retryMs: 5, connect() {
+    count += 1;
+    if (count === 1) { return Promise.resolve(initial.connection); }
+    if (count === 2) { return new Promise((resolve, reject) => { rejected = reject; }); }
+    return Promise.resolve(recovered.connection);
+  } });
+  await sink.start();
+  initial.connection.emit('close');
+  await new Promise((resolve) => { setTimeout(resolve, 60); });
+  rejected(new Error('connect ETIMEDOUT'));
+  await new Promise((resolve) => { setTimeout(resolve, 35); });
+  const active = sink.active();
+  await sink.stop();
+  assert.equal(active, true, 'Sink stayed disconnected after the failed attempt settled');
+});
+
+it('retires a late connection before reconnecting after its deadline', async () => {
+  const initial = broker();
+  const late = broker();
+  const recovered = broker();
+  let complete;
+  let count = 0;
+  let closed = false;
+  late.connection.close = async () => { closed = true; };
+  const sink = amqpSink('amqp://test', { connectTimeoutMs: 20, retryMs: 5, connect() {
+    count += 1;
+    if (count === 1) { return Promise.resolve(initial.connection); }
+    if (count === 2) { return new Promise((resolve) => { complete = resolve; }); }
+    return Promise.resolve(recovered.connection);
+  } });
+  await sink.start();
+  initial.connection.emit('close');
+  await new Promise((resolve) => { setTimeout(resolve, 50); });
+  complete(late.connection);
+  await new Promise((resolve) => { setTimeout(resolve, 30); });
+  const result = { closed, active: sink.active() };
+  await sink.stop();
+  assert.deepEqual(result, { closed: true, active: true }, 'Late connection survived or recovery failed');
+});

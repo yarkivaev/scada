@@ -82,6 +82,12 @@ async function connect(state, epoch) {
         throw error;
     }
 }
+function recover(state, timeout) {
+    if (timeout && state.fatal === timeout) {
+        state.fatal = null;
+        retry(state, state.epoch);
+    }
+}
 export function begin(state) {
     if (state.fatal) { return Promise.reject(state.fatal); }
     if (state.live) { return Promise.resolve(); }
@@ -89,8 +95,11 @@ export function begin(state) {
     if (!state.wanted) { return Promise.resolve(); }
     clearTimeout(state.retry);
     state.retry = null;
-    state.opening = deadline(connect(state, state.epoch), state.options.connectTimeoutMs, 'AMQP connect', (error) => {
-        state.fatal = error; state.wanted = false; state.epoch += 1;
+    let timeout;
+    const attempt = connect(state, state.epoch);
+    void attempt.then(() => { recover(state, timeout); }, () => { recover(state, timeout); });
+    state.opening = deadline(attempt, state.options.connectTimeoutMs, 'AMQP connect', (error) => {
+        timeout = error; state.fatal = error; state.epoch += 1;
     }).finally(() => { state.opening = null; });
     return state.opening;
 }
