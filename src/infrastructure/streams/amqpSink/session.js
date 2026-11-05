@@ -77,7 +77,7 @@ async function connect(state, epoch) {
         if (live.dead) { throw new Error('AMQP session closed during initialization'); }
         await keep(state, live);
     } catch (error) {
-        await closeLive(live);
+        await closeLive(live).catch((failure) => { state.fatal = failure; throw failure; });
         retry(state, epoch);
         throw error;
     }
