@@ -90,4 +90,43 @@ describe('AMQP source and sink integration', function() {
         } finally { await sender.stop(); }
     });
 
+    it('keeps one exclusive consumer and retries its head before later deliveries', async function() {
+        this.timeout(60000);
+        const queue=`exclusive.${Date.now()}`;
+        const exchange='exclusive.integration';
+        const exchanges=[{name:exchange,type:'direct',options:{durable:true}}];
+        const bindings=[{exchange,pattern:'record'}];
+        let release;
+        const gate=new Promise(resolve=>{release=resolve;});
+        const received=[];
+        let rejected=false;
+        let accepted=false;
+        const first=amqpSource(url,queue,{accept:async()=>{accepted=true;await gate;}},{exclusive:true,prefetch:1,exchanges,bindings,onError:()=>{}});
+        const second=amqpSource(url,queue,{accept:async delivery=>{
+            const body=delivery.content.toString();
+            received.push(body);
+            if(body==='first'&&!rejected){rejected=true;throw new Error('transient fixture failure');}
+        }},{exclusive:true,prefetch:1,exchanges,bindings,onError:()=>{}});
+        const publisher=amqpSink(url,{exchanges});
+        let result;
+        try {
+            await first.start();
+            await publisher.start();
+            await publisher.write(['first','second'].map(body=>{return {exchange,routingKey:'record',body,options:{persistent:true}}}));
+            await until(()=>{return accepted;});
+            await second.start();
+            await pause(100);
+            const premature=received.length;
+            const stopped=first.stop();
+            release();
+            await stopped;
+            await until(()=>{return received.length===3;});
+            result={premature,received};
+        } finally {
+            release();
+            await Promise.all([first.stop(),second.stop(),publisher.stop()]);
+        }
+        assert.deepEqual(result,{premature:0,received:['first','first','second']},'Consumers overlapped or redelivery was overtaken');
+    });
+
 });
