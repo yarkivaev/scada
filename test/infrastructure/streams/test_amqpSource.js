@@ -151,3 +151,60 @@ describe('amqpSource', () => {
     });
 
 });
+
+it('restores a consumer after a timed out reconnect settles', async () => {
+    const initial = broker();
+    const recovered = broker();
+    const callbacks = [];
+    let reject;
+    let count = 0;
+    const source = amqpSource('amqp://test', 'queue', { accept: async () => {} }, {
+        connectTimeoutMs: 15, onError: () => {}, schedule(callback) { callbacks.push(callback); return callback; }, clear() {},
+        connect() {
+            count += 1;
+            if (count === 1) { return Promise.resolve(initial.connection); }
+            if (count === 2) { return new Promise((resolve, failure) => { reject = failure; }); }
+            return Promise.resolve(recovered.connection);
+        }
+    });
+    await source.start();
+    initial.connection.emit('close');
+    await new Promise(resolve => { setImmediate(resolve); });
+    await callbacks.shift()().catch(() => {});
+    reject(new Error('connect ETIMEDOUT'));
+    await new Promise(resolve => { setImmediate(resolve); });
+    const retry = callbacks.shift();
+    if (retry) { await retry(); }
+    const subscribed = typeof recovered.channel.deliver === 'function';
+    await source.stop().catch(() => {});
+    assert.equal(subscribed, true, 'Consumer stayed disconnected after its failed attempt settled');
+});
+
+it('disposes a late connection before opening its replacement consumer', async () => {
+    const initial = broker();
+    const late = broker();
+    const recovered = broker();
+    const callbacks = [];
+    let complete;
+    let count = 0;
+    const source = amqpSource('amqp://test', 'queue', { accept: async () => {} }, {
+        connectTimeoutMs: 15, onError: () => {}, schedule(callback) { callbacks.push(callback); return callback; }, clear() {},
+        connect() {
+            count += 1;
+            if (count === 1) { return Promise.resolve(initial.connection); }
+            if (count === 2) { return new Promise(resolve => { complete = resolve; }); }
+            return Promise.resolve(recovered.connection);
+        }
+    });
+    await source.start();
+    initial.connection.emit('close');
+    await new Promise(resolve => { setImmediate(resolve); });
+    await callbacks.shift()().catch(() => {});
+    complete(late.connection);
+    await new Promise(resolve => { setImmediate(resolve); });
+    const retry = callbacks.shift();
+    if (retry) { await retry(); }
+    const result = { closed: late.events.includes('connection.close'), subscribed: typeof recovered.channel.deliver === 'function' };
+    await source.stop();
+    assert.deepEqual(result, { closed: true, subscribed: true }, 'Late connection survived or replacement consumer was not subscribed');
+});

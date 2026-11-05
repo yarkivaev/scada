@@ -4,9 +4,9 @@ import brokerClose, { destroyConnection } from '../brokerClose.js';
 import deadline from '../deadline.js';
 import positive from '../positive.js';
 
-async function connectBroker(url) {
+async function connectBroker(url, options) {
     const { default: amqp } = await import('amqplib');
-    return amqp.connect(url, { heartbeat: 10 });
+    return amqp.connect(url, { heartbeat: 10, ...options });
 }
 function reportFailure(error) {
     process.stderr.write(`amqp consume failed ${error.message}\n`);
@@ -36,9 +36,7 @@ function retry(ctx, generation) {
     ctx.state.delay = Math.min(pause * 2, 30000);
     ctx.state.timer = ctx.schedule(() => {
         ctx.state.timer = undefined;
-        ctx.state.opening = deadline(ctx.open(generation), ctx.connectTimeoutMs, 'AMQP connect', (error) => {
-            ctx.state.fatal = error; ctx.state.running = false; ctx.state.generation += 1;
-        });
+        ctx.state.opening = ctx.attempt(generation);
         void ctx.state.opening.catch(ctx.report);
         return ctx.state.opening;
     }, pause);
@@ -65,7 +63,7 @@ async function open(ctx, generation) {
     let complete;
     const live = { closed: false, ready: new Promise((resolve) => { complete = resolve; }) };
     try {
-        live.connection = await ctx.connect(ctx.url);
+        live.connection = await ctx.connect(ctx.url, { timeout: ctx.connectTimeoutMs });
         bind(ctx, generation, live, live.connection);
         await subscribe(ctx, generation, live);
         if (!current(ctx, generation) || live.lost) { await dispose(live, ctx); return; }
@@ -77,6 +75,20 @@ async function open(ctx, generation) {
         retry(ctx, generation);
     } finally { complete(); }
 }
+function recover(ctx, timeout) {
+    if (timeout && ctx.state.fatal === timeout) {
+        ctx.state.fatal = undefined;
+        retry(ctx, ctx.state.generation);
+    }
+}
+function attempt(ctx, generation) {
+    let timeout;
+    const opening = ctx.open(generation);
+    void opening.then(() => { recover(ctx, timeout); }, () => { recover(ctx, timeout); });
+    return deadline(opening, ctx.connectTimeoutMs, 'AMQP connect', (error) => {
+        timeout = error; ctx.state.fatal = error; ctx.state.generation += 1;
+    });
+}
 async function begin(ctx) {
     if (ctx.state.fatal) { throw ctx.state.fatal; }
     if (ctx.state.running) { await ctx.state.opening; return; }
@@ -86,9 +98,7 @@ async function begin(ctx) {
     await ctx.state.stopping;
     await ctx.state.cleanup;
     if (current(ctx, generation)) {
-        ctx.state.opening = deadline(ctx.open(generation), ctx.connectTimeoutMs, 'AMQP connect', (error) => {
-            ctx.state.fatal = error; ctx.state.running = false; ctx.state.generation += 1;
-        });
+        ctx.state.opening = attempt(ctx, generation);
         await ctx.state.opening;
     }
 }
@@ -113,7 +123,8 @@ export default function amqpSession(url, subscribeChannel, options = {}) {
         clear: options.clear || clearTimeout,
         report: options.onError || options.report || reportFailure,
         state: { generation: 0, running: false, delay: 1000 },
-        open(generation) { return open(ctx, generation); }
+        open(generation) { return open(ctx, generation); },
+        attempt(generation) { return attempt(ctx, generation); }
     };
     return {
         start() { return begin(ctx); },
