@@ -1,4 +1,5 @@
 import http from 'http';
+import ingestHealthRoutes from './routes/ingestHealthRoutes.js';
 import checkpointRoutes from './routes/checkpoint/checkpointRoutes.js';
 import metricsRoutes from './routes/metrics/metricsRoutes.js';
 import retentionRoutes from './routes/retention/retentionRoutes.js';
@@ -25,6 +26,7 @@ export function createEdgeApi(dataAccess, options) {
         ? metricsRoutes(token, metrics)
         : [];
     return routes([
+        ...(opt.health ? ingestHealthRoutes(opt.health) : []),
         ...admin,
         ...checkpointRoutes(token, checkpoints),
         ...metricRoutes

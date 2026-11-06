@@ -1,5 +1,6 @@
 import stompit from 'stompit';
 import follow from './follow.js';
+import stompLifecycle from './stompLifecycle.js';
 import deadline from './deadline.js';
 import { acceptStomp, readStomp, stompSettings } from './stompBody.js';
 
@@ -85,7 +86,7 @@ async function deliver(ctx, body) {
     await deadline(Promise.resolve().then(() => {
       return acceptStomp(ctx, body, settle);
     }), ctx.lifecycle.acceptTimeoutMs, 'STOMP acceptance', (error) => {
-      ctx.lifecycle.fatal = error; ctx.lifecycle.active = false; ctx.lifecycle.controller.abort(error); ctx.channel.close();
+      ctx.lifecycle.fail(error);
     });
     if (!ctx.manualAck) {
       settle.ack();
@@ -113,25 +114,22 @@ function bind(channel, destination, collector, delivery) {
   let pending = Promise.resolve();
   channel.subscribe({ destination, ack: 'client-individual', 'prefetch-count': String(prefetch) }, (err, message) => {
     if (err) {
+      lifecycle.fail(err);
       return;
     }
     const ctx = { channel, message, destination, collector, manualAck, lifecycle };
     pending = follow(pending, () => {
       if (!lifecycle.active) { return Promise.reject(new Error('STOMP source stopped')); }
       return deadline(readStomp(message, lifecycle.maxMessageBytes), lifecycle.acceptTimeoutMs, 'STOMP read').catch((error) => {
-        lifecycle.fatal = error; lifecycle.active = false; channel.close(); throw error;
+        lifecycle.fail(error); throw error;
       });
     }, (body) => {
       const task = deliver(ctx, body);
       lifecycle.pending.add(task);
       return task.finally(() => { lifecycle.pending.delete(task); });
-    }, serial);
+    }, serial, (error) => { lifecycle.report(error); });
     lifecycle.chain = pending;
-    void pending.catch((error) => {
-      try { lifecycle.onError?.(error); } catch {
-        // Reporting cannot reject a transport callback.
-      }
-    });
+    void pending.catch((error) => { lifecycle.report(error); });
   });
 }
 
@@ -150,6 +148,12 @@ function bind(channel, destination, collector, delivery) {
  * @param {number} [options.prefetch=32] - Positive integer delivery window
  * @returns {object} Source with start() and stop() methods
  */
+function watchConnection(failover, lifecycle) {
+  failover.on('connect', () => { lifecycle.transition('running'); });
+  failover.on('connecting', () => { lifecycle.transition(lifecycle.connected ? 'degraded' : 'starting'); });
+  failover.on('error', (error) => { lifecycle.transition('degraded'); lifecycle.report(error); });
+}
+
 export default function stompSource(url, destination, collector, options = {}) {
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error('URL must be a non-empty string');
@@ -172,6 +176,7 @@ export default function stompSource(url, destination, collector, options = {}) {
   return {
     start() {
       if (state.subscribed()) {
+        if (state.delivery.fatal) { throw state.delivery.fatal; }
         return;
       }
       const failover = new stompit.ConnectFailover([serverConfig(parsed, options)], {
@@ -180,18 +185,18 @@ export default function stompSource(url, destination, collector, options = {}) {
         maxReconnects: -1
       });
       const channel = new stompit.Channel(failover);
-      const lifecycle = { ...settings, active: true, controller: new AbortController(), pending: new Set(), bytes: 0 };
+      const lifecycle = stompLifecycle(settings, channel, destination);
+      watchConnection(failover, lifecycle);
       bind(channel, destination, collector, { serial, manualAck, prefetch, lifecycle });
       state = subscribed(channel, lifecycle);
     },
+    // Asynchronous downstream work uses the same fence as delivery deadlines.
+    fail(error) { if (state.subscribed()) { state.delivery.fail(error); } },
+    health() { return state.subscribed() ? state.delivery.health() : { state: 'idle', reason: null }; },
     stop() {
-      if (!state.subscribed()) {
-        return Promise.resolve();
-      }
+      if (!state.subscribed()) { return Promise.resolve(); }
       const stopped = state;
-      stopped.delivery.active = false;
-      stopped.delivery.controller.abort(new Error('STOMP source stopped'));
-      stopped.channel().close();
+      stopped.delivery.halt();
       return deadline(Promise.allSettled([stopped.delivery.chain, ...stopped.delivery.pending]), options.stopTimeoutMs ?? 5000, 'STOMP stop').then(() => {
         if (stopped.delivery.fatal) { throw stopped.delivery.fatal; }
         if (state === stopped) { state = idle(); }

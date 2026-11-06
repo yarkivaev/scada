@@ -26,7 +26,7 @@ function resume(pending) {
  *   let pending = Promise.resolve();
  *   pending = follow(pending, () => Promise.resolve('a'), write, false);
  */
-export default function follow(pending, read, deliver, serial) {
+export default function follow(pending, read, deliver, serial, onError = (error) => { process.stderr.write(`Delivery failed: ${error.message}\n`); }) {
     return resume(pending).then(async () => {
         const body = await read();
         const run = deliver(body);
@@ -34,7 +34,9 @@ export default function follow(pending, read, deliver, serial) {
             return run;
         }
         void run.catch((error) => {
-            return error;
+            try { onError(error); } catch {
+                // Reporting cannot turn a detached delivery into an unhandled rejection.
+            }
         });
         return undefined;
     });

@@ -38,3 +38,12 @@ describe('readDeploymentConfig', function() {
         );
     });
 });
+
+it('passes explicit finite STOMP execution and cleanup deadlines', () => {
+    const config = readDeploymentConfig({ STOMP_ACCEPT_TIMEOUT_MS: '500', STOMP_STOP_TIMEOUT_MS: '1000' });
+    assert.equal(config.pipeline.acceptTimeoutMs, 500);
+    assert.equal(config.pipeline.stopTimeoutMs, 1000);
+    for (const value of ['0', '-1', 'NaN', 'Infinity']) {
+        assert.throws(() => {return readDeploymentConfig({ STOMP_ACCEPT_TIMEOUT_MS: value })}, /STOMP_ACCEPT_TIMEOUT_MS/u);
+    }
+});

@@ -1,4 +1,5 @@
 import stompOptions from './stompOptions.js';
+import deadline from '../../streams/deadline.js';
 import { postgresSink, stompSource } from '../../streams/index.js';
 import segmentDispatch from '../../../domain/segment/dispatch.js';
 import segmentCoalesce from '../../../domain/segment/segmentCoalesce.js';
@@ -42,8 +43,8 @@ function segmentSinks(postgres, pool) {
 /**
  * Pipeline for streaming STOMP segment data to PostgreSQL segments table.
  * Subscribes to the durable ingest queue so shovel traffic survives consumer gaps.
- * Pending heartbeats are coalesced per machine; machines persist in
- * parallel lanes. Arrivals enqueue in broker FIFO before coalesce.
+ * Pending heartbeats are coalesced per machine. Source acceptance is FIFO:
+ * queued lane work must not consume another delivery's execution deadline.
  *
  * @param {string} stomp - STOMP broker URL
  * @param {string} postgres - PostgreSQL connection URL
@@ -56,17 +57,26 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const { segmentSink, splitSink } = segmentSinks(postgres, pool);
     const continued = continuedSegments(segmentSink, pool, budget);
     const dispatch = segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
-    const coalesce = segmentCoalesce(segmentCodec(dispatch), {
+    // eslint-disable-next-line prefer-const -- The timer codec closes over the source constructed with that codec.
+    let source;
+    const codec = segmentCodec(dispatch);
+    const bounded = { accept(envelope) {
+        return deadline(Promise.resolve().then(() => { return codec.accept(envelope); }),
+            config.acceptTimeoutMs ?? 10000, 'STOMP acceptance', (error) => { source.fail(error); });
+    } };
+    // Heartbeat timer flushes outlive source.accept and need their own execution deadline.
+    const coalesce = segmentCoalesce(bounded, {
         size: config.size,
         deadLetter: config.deadLetter,
         interval: config.interval
     });
     const destination = config.segmentsDestination || segmentsIngestDestination;
-    const source = stompSource(stomp, destination, coalesce, stompOptions(config, { serial: false, manualAck: true }));
+    source = stompSource(stomp, destination, coalesce, stompOptions(config, { serial: true, manualAck: true }));
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
         intervalMs: (config.poll || 5) * 1000
     });
     return {
+        health() { return source.health(); },
         destination,
         async start() {
             const repair = abutSegments(pool, budget);
