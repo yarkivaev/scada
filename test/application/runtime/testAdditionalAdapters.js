@@ -1,3 +1,5 @@
+import pg from 'pg';
+import stompit from 'stompit';
 import assert from 'node:assert/strict';
 import additionalAdapters from '../../../src/application/runtime/additionalAdapters.js';
 
@@ -29,4 +31,24 @@ describe('embedded stream adapters', function () {
         await task.stop();
         await assert.rejects(task.start(), /stopped/u);
     });
+});
+
+it('propagates a terminal STOMP subscription error from the portable adapter', async () => {
+    const originalPool = pg.Pool; const originalChannel = stompit.Channel; const received = []; const reports = [];
+    pg.Pool = function Pool() { return { on() {}, query() { return Promise.resolve({ rows: [] }); }, end() { return Promise.resolve(); } }; };
+    stompit.Channel = function Channel() { return { subscribe(_headers, callback) { received.push(callback); }, close() {} }; };
+    const task = additionalAdapters().get('stomp-ingest').create({ stomp: 'stomp://test', postgres: 'postgres://unused', config: {} },
+        { signal: new AbortController().signal, report(event) { reports.push(event); } });
+    try {
+        await task.start();
+        received[0](new Error('subscription rejected'));
+        assert(reports.some(event => {return event.state === 'failed' && event.fatal === true}));
+        await assert.rejects(task.stop(), /subscription rejected/u);
+    } finally {
+        // Restore synchronous dependency boundaries after lifecycle cleanup.
+        // eslint-disable-next-line require-atomic-updates
+        pg.Pool = originalPool;
+        // eslint-disable-next-line require-atomic-updates
+        stompit.Channel = originalChannel;
+    }
 });

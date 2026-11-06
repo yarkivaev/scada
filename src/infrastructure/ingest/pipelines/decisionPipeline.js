@@ -29,6 +29,7 @@ export default function decisionPipeline(stomp, pool, config) {
     const source = stompSource(stomp, '/exchange/scada.user_decisions', codec,
         stompOptions(config));
     return {
+        health() { return source.health(); },
         /**
          * Starts consuming user decisions from RabbitMQ.
          */

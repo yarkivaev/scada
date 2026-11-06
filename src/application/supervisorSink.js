@@ -1,3 +1,4 @@
+import ingestHealth from './ingestHealth.js';
 import segmentPipeline, {
     segmentsIngestDestination
 } from '../infrastructure/ingest/pipelines/segmentPipeline.js';
@@ -21,6 +22,12 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
  * @param {NodeJS.ProcessEnv} env - process environment
  * @returns {object} deployment configuration
  */
+function milliseconds(env, key, fallback) {
+    const value = Number(env[key] ?? fallback);
+    if (!Number.isSafeInteger(value) || value < 1) { throw new TypeError(`${key} must be a positive integer`); }
+    return value;
+}
+
 export function readDeploymentConfig(env) {
     const root = path.join(appRoot, '../..');
     const prefetch = Number(env.STOMP_PREFETCH || '128');
@@ -44,6 +51,8 @@ export function readDeploymentConfig(env) {
         pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
             prefetch,
+            acceptTimeoutMs: milliseconds(env, 'STOMP_ACCEPT_TIMEOUT_MS', 10000),
+            stopTimeoutMs: milliseconds(env, 'STOMP_STOP_TIMEOUT_MS', 5000),
             deadLetter: env.SEGMENTS_DEAD_LETTER_ENABLED === 'true',
             size: parseInt(env.BATCH_SIZE || '50', 10),
             interval: parseInt(env.FLUSH_INTERVAL || '2', 10),
@@ -60,9 +69,10 @@ export function readDeploymentConfig(env) {
     };
 }
 
-function startPipelines(cfg, pool) {
+function startPipelines(cfg, pool, health) {
     const pipelines = [segmentPipeline(cfg.stomp, cfg.postgres, pool, cfg.pipeline),
         decisionPipeline(cfg.stomp, pool, cfg.pipeline), alertPipeline(cfg.stomp, pool, cfg.pipeline)];
+    health.track(pipelines);
     return Promise.all(pipelines.map((pipeline) => { return pipeline.start(); }));
 }
 
@@ -73,12 +83,15 @@ function startPipelines(cfg, pool) {
  * @param {NodeJS.ProcessEnv} [env] - process environment, defaults to process.env
  * @returns {object} sink runtime with pool, dataAccess, and run(httpServer?)
  */
-export default function supervisorSink(env = process.env) {
+export default function supervisorSink(env = process.env, options = {}) {
     const cfg = readDeploymentConfig(env);
+    const health = ingestHealth(options);
+    cfg.pipeline.onFatal = (error) => { health.fail(error); };
     const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres }));
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
     const dataAccess = stateDataFromPool(pool, { metricsEnabled });
     return {
+        health: () => {return health.status()},
         apiPort: cfg.apiPort,
         apiToken: cfg.apiToken,
         sinkDbProfile: cfg.sinkDbProfile,
@@ -100,8 +113,9 @@ export default function supervisorSink(env = process.env) {
                 await adminPool.end();
             }
             if (cfg.pipelines) {
-                await startPipelines(cfg, pool);
+                await startPipelines(cfg, pool, health);
             }
+            health.started();
             if (httpServer) {
                 httpServer.start();
             }

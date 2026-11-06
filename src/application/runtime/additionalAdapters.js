@@ -1,3 +1,4 @@
+import ingestHealth from '../ingestHealth.js';
 import { clickhouseSink } from '../../infrastructure/streams/index.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../../infrastructure/sync/operationSyncIngest.js';
@@ -70,12 +71,23 @@ function silent(spec, pool, context) {
 }
 function stomp(spec, pool, context) {
     const shared = borrowed(pool);
-    const config = { ...spec.config, ...boundedOptions({ ...spec, options: spec.config }), budget: context.budget };
-    return together([
-        segmentPipeline(spec.stomp, spec.postgres, shared, config),
-        decisionPipeline(spec.stomp, shared, config),
-        alertPipeline(spec.stomp, shared, config)
-    ]);
+    const health = ingestHealth({ onFatal(error) {
+        context.report?.({ state: 'failed', fatal: true, reason: error.code ?? error.name });
+    } });
+    function report() {
+        const status = health.status();
+        let state = status.ready ? 'running' : 'degraded';
+        if (!status.live) { state = 'failed'; }
+        context.report?.({ state, fatal: !status.live });
+    }
+    const config = { ...spec.config, ...boundedOptions({ ...spec, options: spec.config }), budget: context.budget,
+        onFatal(error) { health.fail(error); }, onState: report };
+    const items = [segmentPipeline(spec.stomp, spec.postgres, shared, config),
+        decisionPipeline(spec.stomp, shared, config), alertPipeline(spec.stomp, shared, config)];
+    health.track(items);
+    const group = together(items);
+    return { async start() { await group.start(); health.started(); report(); },
+        stop() { return group.stop(); } };
 }
 function close(state) {
     state.closing ??= Promise.resolve().then(async () => {

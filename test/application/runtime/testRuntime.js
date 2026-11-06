@@ -112,3 +112,18 @@ describe('runtime admission races', () => {
         assert.equal(starts, 0);
     });
 });
+
+it('makes an explicitly fatal asynchronous transport event sticky until executor replacement', async () => {
+    let report;
+    const registry = new Map([['test', { validate() {}, resources() { return []; }, create(_spec, ctx) {
+        report = ctx.report;return { start() {}, stop() {} };
+    } }]]);
+    const runtime = createRuntime({ registry });
+    await runtime.apply({ taskId: 'one', specVersion: 1, generation: 1, spec: { adapter: 'test' } });
+    report({ state: 'failed', fatal: true, reason: 'uncertain STOMP write' });
+    assert.equal(runtime.status().fatal, true);
+    report({ state: 'running' });
+    assert.equal(runtime.status().fatal, true);
+    await assert.rejects(runtime.apply({ taskId: 'two', specVersion: 1, generation: 1, spec: { adapter: 'test' } }), /fatal/u);
+    await runtime.stop();
+});

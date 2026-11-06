@@ -32,6 +32,7 @@ export default function alertPipeline(stomp, pool, config) {
     const source = stompSource(stomp, '/exchange/scada.alerts', codec,
         stompOptions(config));
     return {
+        health() { return source.health(); },
         /**
          * Starts the pipeline.
          */
