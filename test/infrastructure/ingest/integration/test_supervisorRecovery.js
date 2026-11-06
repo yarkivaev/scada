@@ -53,6 +53,20 @@ function message(index) {
         end: 1700000060000 + index * 60000, duration: 60, tags: [] }));
 }
 async function count(pool) { return Number((await pool.query('SELECT count(*) FROM segments')).rows[0].count); }
+async function drained(fixture) {
+    const response = await fetch(`${fixture.managementUrl}/api/queues/%2F/scada.segments.ingest`, {
+        headers: { authorization: `Basic ${Buffer.from('streams:streams').toString('base64')}` }, signal: AbortSignal.timeout(2000)
+    });
+    assert.equal(response.status, 200);
+    const queue = await response.json();
+    return queue.messages_ready === 0 && queue.messages_unacknowledged === 0 && queue.consumers === 1;
+}
+async function writtenAt(fixture, index) {
+    const result = await fixture.pool.query('SELECT updated_at FROM segments WHERE machine=$1 AND start_time=$2',
+        ['integration-machine', new Date(1700000000000 + index * 60000)]);
+    return result.rows[0]?.updated_at.getTime() ?? 0;
+}
+
 
 describe('supervisor sink durable recovery integration', function() {
     this.timeout(180000);
@@ -95,9 +109,7 @@ describe('supervisor sink durable recovery integration', function() {
             fixture.channel.publish('scada.segments', 'integration-machine', message(index), { persistent: true });
         }
         await until(async () => { return await count(fixture.pool) === 600; }, 60000);
-        await until(async () => {
-            const queue = await fixture.channel.checkQueue('scada.segments.ingest');return queue.messageCount === 0 && queue.consumerCount === 1;
-        });
+        await until(() => {return drained(fixture)});
         assert.equal(fixture.child.exitCode, null, fixture.output);
         await fixture.pool.query('UPDATE segments SET tags=$1 WHERE start_time=$2', ['["operator-label"]', new Date(1700000000000)]);
         const previous = (await fixture.pool.query('SELECT updated_at FROM segments WHERE start_time=$1', [new Date(1700000000000)])).rows[0].updated_at;
@@ -135,11 +147,11 @@ describe('supervisor sink durable recovery integration', function() {
         });
         // Let any uncertain server-side statement settle; replay is protected by the business key.
         await delay(2200);await fixture.pool.query('UPDATE test_ingest_delay SET ms=0');
+        const beforeReplay = await writtenAt(fixture, 600);
         processFor(fixture);await until(() => {return healthy(fixture.port)}, 60000);
+        await until(async () => { return await writtenAt(fixture, 600) > beforeReplay; });
         await until(async () => { return await count(fixture.pool) === 601; });
-        await until(async () => {
-            const queue = await fixture.channel.checkQueue('scada.segments.ingest');return queue.consumerCount === 1 && queue.messageCount === 0;
-        });
+        await until(() => {return drained(fixture)});
         assert.equal(await count(fixture.pool), 601, 'uncertain replay duplicated a segment');
         assert.equal(fixture.child.exitCode, null, fixture.output);
     });
@@ -156,12 +168,11 @@ describe('supervisor sink durable recovery integration', function() {
             return queue.consumerCount === 0 && queue.messageCount === 1;
         });
         await delay(2200);await fixture.pool.query('UPDATE test_ingest_delay SET ms=0');
+        const beforeReplay = await writtenAt(fixture, 601);
         processFor(fixture);await until(() => {return healthy(fixture.port)}, 60000);
+        await until(async () => { return await writtenAt(fixture, 601) > beforeReplay; });
         await until(async () => { return await count(fixture.pool) === 602; });
-        await until(async () => {
-            const queue = await fixture.channel.checkQueue('scada.segments.ingest');
-            return queue.consumerCount === 1 && queue.messageCount === 0;
-        });
+        await until(() => {return drained(fixture)});
         assert.equal(await count(fixture.pool), 602);
     });
 
@@ -176,16 +187,13 @@ describe('supervisor sink durable recovery integration', function() {
             return result.rows[0].total > 1;
         });
         await until(async () => { return await count(fixture.pool) === 852; });
-        await until(async () => {
-            const queue = await fixture.channel.checkQueue('scada.segments.ingest');
-            return queue.consumerCount === 1 && queue.messageCount === 0;
-        });
+        await until(() => {return drained(fixture)});
         assert.equal(fixture.child.exitCode, null, fixture.output);
     });
 
     describe('transaction batch policy', () => {
         async function empty() {
-            return (await fixture.channel.checkQueue('scada.segments.ingest')).messageCount === 0;
+            return drained(fixture);
         }
         function publish(record) {
             fixture.channel.publish('scada.segments', record.machine, Buffer.from(JSON.stringify(record)), { persistent: true });
@@ -194,6 +202,7 @@ describe('supervisor sink durable recovery integration', function() {
             return { type: 'segment', machine, name, start, end: start + 60000, duration, tags: [], properties: {} };
         }
         before(async () => {
+            await until(() => {return drained(fixture)});
             await stopChild(fixture.child);await fixture.pool.query('UPDATE test_ingest_delay SET ms=0');
             await fixture.pool.query(`CREATE TABLE test_segment_commits (tx bigint, machine text);
                 CREATE FUNCTION capture_segment_write() RETURNS trigger LANGUAGE plpgsql AS $$
