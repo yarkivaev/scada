@@ -56,7 +56,10 @@ export function telemetryConsumer(codec, channel, onSeen) {
  */
 export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
     const prefetch = options.prefetch || 32;
-    const collector = ingestBatch(sink, options);
+    // Unacknowledged deliveries occupy the broker window until the batch commits.
+    // A larger batch can never fill and would throttle ingestion to the flush timer.
+    const size = Math.min(options.size ?? 100, prefetch);
+    const collector = ingestBatch(sink, { ...options, size });
     const codec = metricsCodec(collector);
     const session = amqpSource(amqpUrl, queue, {
         accept(delivery) {
