@@ -82,4 +82,43 @@ describe('segment backlog admission', function() {
         }
     });
 
+    it('lets another machine commit while an earlier machine waits for storage', async () => {
+        const original = stompit.Channel;
+        let receive;
+        let release;
+        let waiting = true;
+        const acked = [];
+        stompit.Channel = function Channel() {
+            return { subscribe(_headers, callback) { receive = callback; },
+                ack(frame) { acked.push(frame.id); }, nack() {}, close() {} };
+        };
+        const pool = { query(_sql, values) {
+            if (values?.[0] === 'slow' && waiting) {
+                waiting = false;
+                return new Promise(resolve => { release = () => { resolve({ rows: [], rowCount: 0 }); }; });
+            }
+            return Promise.resolve({ rows: [], rowCount: 0 });
+        }, async end() {} };
+        const pipeline = segmentPipeline('stomp://example.invalid', 'postgres://unused', pool,
+            { acceptTimeoutMs: 500, onError() {} });
+        try {
+            await pipeline.start();
+            for (const machine of ['slow', 'fast']) {
+                const payload = JSON.stringify({ type: 'segment', machine, name: 'on',
+                    start: 1700000000000, end: 1700000060000, duration: 60 });
+                receive(null, { id: machine, readString(_encoding, done) { done(null, payload); } });
+            }
+            await delay(50);
+            assert.deepEqual(acked, ['fast'], 'unrelated machines must not wait for each other');
+            release();
+            await delay(30);
+            assert.deepEqual(acked, ['fast', 'slow']);
+        } finally {
+            release?.();
+            await pipeline.stop().catch(() => {});
+            // eslint-disable-next-line require-atomic-updates
+            stompit.Channel = original;
+        }
+    });
+
 });

@@ -85,7 +85,7 @@ async function deliver(ctx, body) {
   try {
     await deadline(Promise.resolve().then(() => {
       return acceptStomp(ctx, body, settle);
-    }), ctx.lifecycle.acceptTimeoutMs, 'STOMP acceptance', (error) => {
+    }), ctx.lifecycle.deliveryTimeoutMs, 'STOMP acceptance', (error) => {
       ctx.lifecycle.fail(error);
     });
     if (!ctx.manualAck) {
@@ -139,6 +139,8 @@ function bind(channel, destination, collector, delivery) {
  * Messages are `{destination, payload, settle}`. Default ack-after-accept;
  * with `manualAck` the collector owns settle. Arrivals enqueue in
  * subscribe order. With `serial: false` persist may overlap after enqueue.
+ * deliveryTimeoutMs optionally includes bounded collector queue wait; body reads
+ * retain acceptTimeoutMs. Collectors owning an execution deadline can separate them.
  * A finite prefetch (default 32) bounds unacknowledged broker deliveries.
  *
  * @param {string} url - STOMP broker URL
