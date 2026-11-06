@@ -3,8 +3,9 @@ import budgetAccept from './budgetAccept.js';
 
 export function stompSettings(options, prefetch) {
     const config = { acceptTimeoutMs: 10000, stopTimeoutMs: 5000, maxMessageBytes: 1048576, ...options };
+    config.deliveryTimeoutMs ??= config.acceptTimeoutMs;
     config.maxPendingBytes ??= prefetch * config.maxMessageBytes;
-    ['acceptTimeoutMs', 'stopTimeoutMs', 'maxMessageBytes', 'maxPendingBytes'].forEach((key) => { positive(config[key], key); });
+    ['acceptTimeoutMs', 'deliveryTimeoutMs', 'stopTimeoutMs', 'maxMessageBytes', 'maxPendingBytes'].forEach((key) => { positive(config[key], key); });
     if (!Number.isSafeInteger(config.maxMessageBytes) || !Number.isSafeInteger(config.maxPendingBytes)) {
         throw new TypeError('STOMP byte capacities must be safe integers');
     }

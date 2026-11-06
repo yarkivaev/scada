@@ -163,4 +163,22 @@ describe('supervisor sink durable recovery integration', function() {
         assert.equal(await count(fixture.pool), 602);
     });
 
+    it('overlaps storage for independent machines without adding queue consumers', async () => {
+        await fixture.pool.query('UPDATE test_ingest_delay SET ms=30');
+        for (let index = 0; index < 250; index += 1) {
+            const record = JSON.parse(message(index));record.machine = `parallel-${index % 5}`;
+            fixture.channel.publish('scada.segments', record.machine, Buffer.from(JSON.stringify(record)), { persistent: true });
+        }
+        await until(async () => {
+            const result = await fixture.pool.query("SELECT count(*)::int total FROM pg_stat_activity WHERE wait_event='PgSleep'");
+            return result.rows[0].total > 1;
+        });
+        await until(async () => { return await count(fixture.pool) === 852; });
+        await until(async () => {
+            const queue = await fixture.channel.checkQueue('scada.segments.ingest');
+            return queue.consumerCount === 1 && queue.messageCount === 0;
+        });
+        assert.equal(fixture.child.exitCode, null, fixture.output);
+    });
+
 });

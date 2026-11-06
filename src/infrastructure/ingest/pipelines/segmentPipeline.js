@@ -43,8 +43,8 @@ function segmentSinks(postgres, pool) {
 /**
  * Pipeline for streaming STOMP segment data to PostgreSQL segments table.
  * Subscribes to the durable ingest queue so shovel traffic survives consumer gaps.
- * Pending heartbeats are coalesced per machine. Source acceptance is FIFO:
- * queued lane work must not consume another delivery's execution deadline.
+ * Pending heartbeats are coalesced per machine. Machine lanes run in parallel;
+ * only storage execution consumes its watchdog, not bounded lane queue wait.
  *
  * @param {string} stomp - STOMP broker URL
  * @param {string} postgres - PostgreSQL connection URL
@@ -71,7 +71,10 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         interval: config.interval
     });
     const destination = config.segmentsDestination || segmentsIngestDestination;
-    source = stompSource(stomp, destination, coalesce, stompOptions(config, { serial: true, manualAck: true }));
+    // Each admitted frame can flush one heartbeat and then persist itself; prefetch bounds queue depth.
+    const deliveryTimeoutMs = Math.min(2147483647, (config.acceptTimeoutMs ?? 10000) * (config.prefetch ?? 32) * 2);
+    source = stompSource(stomp, destination, coalesce,
+        stompOptions(config, { serial: false, manualAck: true, deliveryTimeoutMs }));
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
         intervalMs: (config.poll || 5) * 1000
     });

@@ -56,4 +56,21 @@ describe('STOMP terminal failure visibility', () => {
             await assert.rejects(source.stop(), /subscription rejected/u);
         } finally { fake.restore(); }
     });
+    it('keeps body reads bounded even when a collector has a longer delivery queue budget', async () => {
+        const fake = harness(); const failures = [];
+        const source = stompSource('stomp://test', '/queue/test', { accept() {} },
+            { acceptTimeoutMs: 20, deliveryTimeoutMs: 1000, onFatal(error) { failures.push(error); }, onError() {} });
+        try {
+            source.start();fake.receive(null, { readString() {} });
+            await delay(60);
+            assert.equal(failures.length, 1);
+            assert.match(failures[0].message, /STOMP read.*timed out/u);
+            assert.equal(fake.closes, 1);
+            await assert.rejects(source.stop(), /STOMP read/u);
+        } finally { fake.restore(); }
+    });
+    it('rejects an invalid delivery queue budget', () => {
+        assert.throws(() => { stompSource('stomp://test', '/queue/test', { accept() {} }, { deliveryTimeoutMs: 0 }); }, /deliveryTimeoutMs/u);
+    });
+
 });

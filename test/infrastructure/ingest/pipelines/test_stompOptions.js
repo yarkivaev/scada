@@ -6,7 +6,7 @@ describe('STOMP pipeline lifecycle options', () => {
         const onError = () => {};
         const onFatal = () => {};
         const onState = () => {};
-        const settings = { acceptTimeoutMs: 300, stopTimeoutMs: 500, onError, onFatal, onState };
+        const settings = { acceptTimeoutMs: 300, deliveryTimeoutMs: 600, stopTimeoutMs: 500, onError, onFatal, onState };
         assert.deepEqual(stompOptions(settings), settings);
     });
 });
