@@ -1,5 +1,6 @@
 import assert from 'assert';
-import {
+import { EventEmitter } from 'node:events';
+import amqpMetricsIngest, {
     acceptTelemetryDeliver,
     telemetryConsumer
 } from '../../../../src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
@@ -71,4 +72,50 @@ describe('amqpMetricsIngest', function() {
         );
         assert.strictEqual(accepted.length, 1, 'telemetry was not accepted without onSeen');
     });
+});
+
+
+describe('AMQP telemetry batching capacity', function() {
+    for (const [size, prefetch, expected] of [[50, 32, 32], [8, 32, 8], [undefined, 32, 32]]) {
+        it(`flushes a full broker window without waiting for the timer (size=${size})`, async function() {
+            const channel = new EventEmitter();
+            const connection = new EventEmitter();
+            const writes = [];
+            const acked = [];
+            let consume;
+            let configuredPrefetch;
+            let release;
+            const blocked = new Promise((resolve) => { release = resolve; });
+            Object.assign(channel, {
+                assertQueue: async () => { return { queue: 'telemetry' }; },
+                prefetch: async (value) => { configuredPrefetch = value; },
+                consume: async (queue, callback) => { consume = callback; return { consumerTag: 'test' }; },
+                ack: (message) => { acked.push(message); },
+                nack: () => { assert.fail('valid telemetry must not be rejected'); },
+                cancel: async () => {}, close: async () => {}
+            });
+            connection.createChannel = async () => { return channel; };
+            connection.close = async () => {};
+            const ingest = amqpMetricsIngest('amqp://test', 'telemetry', {
+                async write(records) { writes.push(records); await blocked; }
+            }, { size, prefetch, maxWaitMs: 100, connect: async () => { return connection; } });
+            await ingest.start();
+            const pending = Array.from({ length: expected }, (unused, index) => { return consume({
+                fields: { routingKey: 'MX210.test.GET.AI1.VALUE' },
+                properties: {}, content: Buffer.from(JSON.stringify({ ts: Date.now(), value: index }))
+            }); });
+            try {
+                await new Promise((resolve) => { setImmediate(resolve); });
+                assert.strictEqual(configuredPrefetch, prefetch);
+                assert.strictEqual(writes.length, 1, 'broker window must flush before maxWaitMs');
+                assert.strictEqual(writes[0].length, expected);
+                assert.strictEqual(acked.length, 0, 'ACK must wait for durable sink completion');
+            } finally {
+                release();
+                await Promise.all(pending);
+                await ingest.stop();
+            }
+            assert.strictEqual(acked.length, expected);
+        });
+    }
 });
