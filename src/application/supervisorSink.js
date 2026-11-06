@@ -1,4 +1,6 @@
 import ingestHealth from './ingestHealth.js';
+import segmentTransactionConfig from './segmentTransactionConfig.js';
+import segmentBatchStats from './segmentBatchStats.js';
 import segmentPipeline, {
     segmentsIngestDestination
 } from '../infrastructure/ingest/pipelines/segmentPipeline.js';
@@ -34,7 +36,9 @@ export function readDeploymentConfig(env) {
     if (!Number.isSafeInteger(prefetch) || prefetch < 1) {
         throw new Error('STOMP_PREFETCH must be a positive safe integer');
     }
+    const dbPoolMax = milliseconds(env, 'SEGMENTS_DB_POOL_MAX', 10);
     return {
+        dbPoolMax,
         stomp: env.STOMP_URL,
         postgres: env.POSTGRES_URL,
         postgresAdmin: env.POSTGRES_ADMIN_URL,
@@ -50,6 +54,9 @@ export function readDeploymentConfig(env) {
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
         pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
+            transactions: segmentTransactionConfig(env, dbPoolMax),
+            maxMessageBytes: milliseconds(env, 'STOMP_MAX_MESSAGE_BYTES', 1048576),
+            maxPendingBytes: milliseconds(env, 'STOMP_MAX_PENDING_BYTES', prefetch * 1048576),
             prefetch,
             acceptTimeoutMs: milliseconds(env, 'STOMP_ACCEPT_TIMEOUT_MS', 10000),
             stopTimeoutMs: milliseconds(env, 'STOMP_STOP_TIMEOUT_MS', 5000),
@@ -87,7 +94,8 @@ export default function supervisorSink(env = process.env, options = {}) {
     const cfg = readDeploymentConfig(env);
     const health = ingestHealth(options);
     cfg.pipeline.onFatal = (error) => { health.fail(error); };
-    const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres }));
+    if (cfg.pipeline.transactions.enabled) { cfg.pipeline.onBatch = segmentBatchStats(cfg.pipeline.transactions.statsIntervalMs); }
+    const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres, max: cfg.dbPoolMax }));
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
     const dataAccess = stateDataFromPool(pool, { metricsEnabled });
     return {

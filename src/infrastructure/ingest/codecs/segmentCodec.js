@@ -25,28 +25,25 @@ function familyRecord(parsed) {
     };
 }
 
+/** Decode once before admission so invalid envelopes never enter a transaction batch. */
+export function decodeSegment(raw) {
+    try {
+        const parsed = JSON.parse(raw.payload);
+        return parsed.type === 'split-family' ? familyRecord(parsed) : segmentNormalize(parsed);
+    } catch (error) {
+        error.permanent = true;
+        throw error;
+    }
+}
+
 export default function segmentCodec(collector) {
     if (!collector || typeof collector.accept !== 'function') {
         throw new Error('Collector must have an accept() method');
     }
     return {
         async accept(raw) {
-            try {
-                let parsed;
-                let record;
-                try {
-                    parsed = JSON.parse(raw.payload);
-                    record = parsed.type === 'split-family' ? familyRecord(parsed) : segmentNormalize(parsed);
-                } catch (error) {
-                    error.permanent = true;
-                    throw error;
-                }
-                if (parsed.type === 'split-family') {
-                    await collector.accept(record);
-                    return;
-                }
-                await collector.accept(record);
-            } catch (error) {
+            try { await collector.accept(decodeSegment(raw)); }
+            catch (error) {
                 processingErrorLog('segment_codec', error, { destination: raw.destination, payload: raw.payload });
                 throw error;
             }

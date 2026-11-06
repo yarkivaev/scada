@@ -1,4 +1,7 @@
 import stompOptions from './stompOptions.js';
+import segmentTransactions from './segmentTransactions.js';
+import segmentBatchPolicy from './segmentBatchPolicy.js';
+import stopSegmentPipeline from './stopSegmentPipeline.js';
 import deadline from '../../streams/deadline.js';
 import { postgresSink, stompSource } from '../../streams/index.js';
 import segmentDispatch from '../../../domain/segment/dispatch.js';
@@ -53,7 +56,8 @@ function segmentSinks(postgres, pool) {
  * @returns {object} Pipeline with start() and stop() methods
  */
 export default function segmentPipeline(stomp, postgres, pool, config) {
-    const budget = silenceBudget(config.segmentWindow || 15);
+    const settings = config.transactions?.enabled ? { ...config, transactions: segmentBatchPolicy(config.transactions) } : config;
+    const budget = silenceBudget(settings.segmentWindow || 15);
     const { segmentSink, splitSink } = segmentSinks(postgres, pool);
     const continued = continuedSegments(segmentSink, pool, budget);
     const dispatch = segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
@@ -62,21 +66,24 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const codec = segmentCodec(dispatch);
     const bounded = { accept(envelope) {
         return deadline(Promise.resolve().then(() => { return codec.accept(envelope); }),
-            config.acceptTimeoutMs ?? 10000, 'STOMP acceptance', (error) => { source.fail(error); });
+            settings.acceptTimeoutMs ?? 10000, 'STOMP acceptance', (error) => { source.fail(error); });
     } };
     // Heartbeat timer flushes outlive source.accept and need their own execution deadline.
-    const coalesce = segmentCoalesce(bounded, {
-        size: config.size,
-        deadLetter: config.deadLetter,
-        interval: config.interval
+    const coalesce = settings.transactions?.enabled ? segmentTransactions(dispatch, pool, settings, error => { source.fail(error); }) : segmentCoalesce(bounded, {
+        size: settings.size,
+        deadLetter: settings.deadLetter,
+        interval: settings.interval
     });
-    const destination = config.segmentsDestination || segmentsIngestDestination;
+    const destination = settings.segmentsDestination || segmentsIngestDestination;
     // Each admitted frame can flush one heartbeat and then persist itself; prefetch bounds queue depth.
-    const deliveryTimeoutMs = Math.min(2147483647, (config.acceptTimeoutMs ?? 10000) * (config.prefetch ?? 32) * 2);
+    const executionMs = settings.transactions?.enabled ? settings.transactions.timeoutMs : settings.acceptTimeoutMs ?? 10000;
+    const deliveryTimeoutMs = Math.min(2147483647, executionMs * (settings.prefetch ?? 32) * 2 + (settings.transactions?.maxWaitMs ?? 0));
     source = stompSource(stomp, destination, coalesce,
-        stompOptions(config, { serial: false, manualAck: true, deliveryTimeoutMs }));
+        stompOptions(settings, { serial: false, manualAck: true, deliveryTimeoutMs, onFatal(error) {
+            coalesce.abort?.(error);settings.onFatal?.(error);
+        } }));
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
-        intervalMs: (config.poll || 5) * 1000
+        intervalMs: (settings.poll || 5) * 1000
     });
     return {
         health() { return source.health(); },
@@ -89,10 +96,8 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
             await source.start();
             await silence.start();
         },
-        async stop() {
-            await silence.stop();
-            await source.stop();
-            await pool.end();
+        stop() {
+            return stopSegmentPipeline(source, coalesce, silence, pool, settings.stopTimeoutMs ?? 5000);
         }
     };
 }
