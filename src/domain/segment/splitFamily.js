@@ -241,8 +241,13 @@ export function splitRows(machine, splits) {
  * @param {object} record - machine, origin millis, pieces
  * @returns {Promise<void>}
  */
-export async function replaceSplit(pool, record) {
+export async function replaceSplit(pool, record, transaction) {
     refuseEmpty(record);
+    if (transaction) {
+        await removeObsolete(transaction, record);
+        await writePieces(transaction, record.pieces);
+        return;
+    }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');

@@ -9,6 +9,10 @@ import { replaceSplit } from './splitFamily.js';
  * @param {object} record - normalized segment record
  * @returns {Promise<void>}
  */
+async function pendingInClient(segmentSink, closer, record, transaction) {
+    await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction);
+    await segmentSink.write([record], transaction);
+}
 async function persistPending(segmentSink, closer, pool, record) {
     const kind = record.kind || 'phase';
     if (!pool || typeof pool.connect !== 'function') {
@@ -47,36 +51,36 @@ async function persistPending(segmentSink, closer, pool, record) {
  *   const route = segmentDispatch(segmentSink, retag, splitSink, closer, pool);
  *   await route.accept({ type: 'segment', machine: 'm1', start_time: '...', duration: 0 });
  */
-async function acceptFamily(pool, record) {
-    if (!pool || typeof pool.connect !== 'function') {
+async function acceptFamily(pool, record, transaction) {
+    if (!transaction && (!pool || typeof pool.connect !== 'function')) {
         throw new Error('split-family requires a pool');
     }
-    await replaceSplit(pool, record);
+    await replaceSplit(pool, record, transaction);
 }
 
 export default function segmentDispatch(segmentSink, retag, splitSink, closer, pool) {
     return {
-        async accept(record) {
+        async accept(record, transaction) {
             if (record.type === 'retag') {
-                await retag.accept(record);
+                await retag.accept(record, transaction);
                 return;
             }
             if (record.type === 'split') {
-                await splitSink.write([record]);
+                await splitSink.write([record], transaction);
                 return;
             }
             if (record.type === 'split-family') {
-                await acceptFamily(pool, record);
+                await acceptFamily(pool, record, transaction);
                 return;
             }
             if (record.type !== 'segment') {
                 throw new Error(`Segment command type ${record.type} is not defined`);
             }
             if (record.duration !== 0) {
-                await segmentSink.write([record]);
+                await segmentSink.write([record], transaction);
                 return;
             }
-            await persistPending(segmentSink, closer, pool, record);
+            await (transaction ? pendingInClient(segmentSink, closer, record, transaction) : persistPending(segmentSink, closer, pool, record));
         }
     };
 }

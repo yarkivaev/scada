@@ -92,9 +92,7 @@ async function deliver(ctx, body) {
       settle.ack();
     }
   } catch (error) {
-    if (!ctx.manualAck) {
-      settle.nack();
-    }
+    settle.nack();
     throw error;
   }
 }

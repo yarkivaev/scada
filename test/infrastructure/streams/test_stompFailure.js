@@ -73,4 +73,15 @@ describe('STOMP terminal failure visibility', () => {
         assert.throws(() => { stompSource('stomp://test', '/queue/test', { accept() {} }, { deliveryTimeoutMs: 0 }); }, /deliveryTimeoutMs/u);
     });
 
+    it('requeues a manual-ack frame rejected before the collector can settle it', async () => {
+        const fake = harness();
+        const source = stompSource('stomp://test', '/queue/test', { accept() { throw new Error('admission rejected'); } },
+            { manualAck: true, serial: false, onError() {} });
+        try {
+            source.start();fake.receive(null, fake.message());await delay(10);
+            assert.equal(fake.nacks, 1);assert.equal(fake.acks, 0);
+            await source.stop();
+        } finally { fake.restore(); }
+    });
+
 });

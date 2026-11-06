@@ -26,11 +26,11 @@ export default function retagSink(pool) {
          *
          * @param {object} record - Record with machine, start_time, tags, properties
          */
-        async accept({ machine, start_time: startTime, tags, properties, options, resolved }) {
+        async accept({ machine, start_time: startTime, tags, properties, options, resolved }, transaction) {
             try {
                 const opts = options === undefined || options === null ? null : options;
                 const flag = typeof resolved === 'boolean' ? resolved : true;
-                await pool.query(
+                await (transaction || pool).query(
                     'UPDATE segments SET tags = $1, properties = $2, options = $3, resolved = $4 WHERE machine = $5 AND start_time = $6',
                     [tags, properties, opts, flag, machine, startTime]
                 );
