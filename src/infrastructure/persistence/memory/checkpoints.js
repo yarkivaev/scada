@@ -1,5 +1,9 @@
 import cycleLookback from '../../../domain/timeline/cycleLookback.js';
 
+function phases(store) {
+    return store.segments.filter((row) => { return (row.kind || 'phase') === 'phase'; });
+}
+
 function parseJsonField(raw) {
     if (!raw) {
         return null;
@@ -25,19 +29,19 @@ function segmentItem(row) {
 
 function segmentAt(store, machineId, startEpoch) {
     const startMs = startEpoch * 1000;
-    const row = store.segments.find((item) => {
+    const row = phases(store).find((item) => {
         return item.machine === machineId && new Date(item.start_time).getTime() === startMs;
     });
     return segmentItem(row);
 }
 
 function replayCursorFor(store, machineId) {
-    const closed = store.segments.filter((row) => {
+    const closed = phases(store).filter((row) => {
         return row.machine === machineId && Number(row.duration) > 0;
     }).map((row) => {
         return new Date(row.end_time).getTime() / 1000;
     });
-    const pending = store.segments.filter((row) => {
+    const pending = phases(store).filter((row) => {
         return row.machine === machineId && Number(row.duration) === 0;
     }).map((row) => {
         return new Date(row.start_time).getTime() / 1000;
@@ -67,7 +71,7 @@ export default function checkpointStateMemory(store) {
             return replayCursorFor(store, machineId);
         },
         pendingSegments() {
-            return store.segments.filter((row) => {
+            return phases(store).filter((row) => {
                 return Number(row.duration) === 0;
             }).map((row) => {
                 return {
@@ -98,7 +102,7 @@ export default function checkpointStateMemory(store) {
         },
         cyclePrior(machineId, beforeEpoch, resetTags) {
             const beforeMs = Number(beforeEpoch) * 1000;
-            const rows = store.segments.filter((row) => {
+            const rows = phases(store).filter((row) => {
                 return row.machine === machineId && new Date(row.start_time).getTime() < beforeMs;
             }).sort((a, b) => {
                 return new Date(b.start_time) - new Date(a.start_time);
