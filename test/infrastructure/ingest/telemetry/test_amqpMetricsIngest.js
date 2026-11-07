@@ -55,7 +55,7 @@ describe('amqpMetricsIngest', function() {
                 seen.push(name);
             }
         );
-        assert.deepStrictEqual(seen, [device], 'onSeen did not receive the telemetry stream name');
+        assert.deepStrictEqual(seen, [`MX210/${device}`], 'onSeen did not receive the telemetry stream name');
     });
 
     it('acceptTelemetryDeliver skips onSeen when the callback is omitted', function() {

@@ -395,7 +395,7 @@ describe('silentStreams', function() {
         await until(() => {
             return gate.live() >= 1;
         }, 2000);
-        streams.seen(label, clk.millis());
+        streams.seen(`MX210/${label}`, clk.millis());
         streams.pulse();
         await until(() => {
             return gate.live() === 0;
@@ -423,7 +423,7 @@ describe('silentStreams', function() {
         await until(() => {
             return gate.live() >= 1;
         }, 2000);
-        streams.seen(label, clk.millis());
+        streams.seen(`MX210/${label}`, clk.millis());
         streams.pulse();
         await until(() => {
             return gate.live() === 0;

@@ -14,11 +14,11 @@ function registersWithAi1() {
 }
 
 describe('mx210Tcp', function() {
-    it('exposes the stream name from the constructor', function() {
+    it('namespaces electrical freshness by MX210 and device', function() {
         const suffix = Math.random().toString(36).slice(2);
         const name = `m-${suffix}`;
         const stream = mx210Tcp(name, '127.0.0.1', 1502 + Math.floor(Math.random() * 100));
-        assert.strictEqual(stream.name(), name, 'mx210Tcp did not keep the stream name');
+        assert.strictEqual(stream.name(), `MX210/${name}`, 'mx210Tcp did not keep the stream name');
     });
 
     it('decodes mx210 registers into an AI1 metrics topic', function() {

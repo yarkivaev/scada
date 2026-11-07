@@ -59,12 +59,12 @@ export function mx210Metrics(device, collector) {
  * @param {string} name - Stream id (device name in MX210 topics)
  * @param {string} host - Modbus TCP host
  * @param {number} port - Modbus TCP port
- * @returns {object} Stream with name() and open(collector, clock, interval)
+ * @returns {object} Stream with family/device name() and open(collector, clock, interval)
  */
 export default function mx210Tcp(name, host, port) {
     return Object.freeze({
         name() {
-            return name;
+            return `MX210/${name}`;
         },
         open(collector, clk, interval) {
             return modbusSource(
