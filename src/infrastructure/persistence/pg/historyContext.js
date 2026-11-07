@@ -68,9 +68,9 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
         if (!pending.rowCount) { return {available:false,items:[],segments:[],annotations:[],context:range}; }
     }
     const left = cursor ?? from-padding;
-    const right = envelope ?? await boundary(pool,machine,from,until,padding);
+    const right = Math.max(envelope ?? until,await boundary(pool,machine,from,until,padding));
     const previous = await pool.query(`SELECT kind,name,start_time,end_time FROM segments WHERE machine=$1 AND kind='phase' AND start_time<=$2 ORDER BY start_time DESC LIMIT 1`,[machine,new Date(right)]);
-    const end = envelope ?? await segmentBoundary(pool,machine,right,previous.rows);
+    const end = Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows));
     // Fetch timestamp keys only, then read at most 250 complete groups. Never fetch the raw dependency tail.
     const page = await pageRange(pool,machine,left,end);
     const {next,until:pageEnd} = page;

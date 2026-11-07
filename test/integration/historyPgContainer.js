@@ -299,4 +299,84 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(snapshot.context.page.next,last+1000);
     });
 
+    it('does not retire a paged correction after it overwrites a newer live tail', async () => {
+        const machine='live-page'; const time=Math.floor((Date.now()-20000000)/30000)*30000;
+        const store=historyPg(pool);
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value) SELECT $1,'power',$2::bigint+n*1000,'live-page-'||n,CASE WHEN n=0 THEN 0 ELSE 5 END FROM generate_series(0,10001) n WHERE n<>1`,[machine,time]);
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,7000),($1,'phase','off',$3,$4,0)`,[machine,new Date(time),new Date(time+7000000),new Date(time+10001000)]);
+        await store.accept(machine,[{eventId:'late-heat',channel:'power',time:time+1000,value:20}]);
+        const original=(await store.work(machine)).items[0];
+        let work=original;
+        let snapshot=await store.context(machine,work.from,work.until,2000);
+        let sawLive=false;
+        function heatRows(context) {
+            const page=context.context.page;
+            const live=context.items.some((point)=>{return point.time===time+10002000&&point.value===0;});
+            sawLive ||= live;
+            const cut=time+7000000;
+            const end=live ? time+10001000 : page.until;
+            const ranges=end<=cut ? [[time+1000,end]] : [[time+1000,cut],[cut,end]];
+            const rows=ranges.map(([start,finish])=>{return {name:'heat',start_time:new Date(start),end_time:new Date(finish),duration:0};});
+            if (live) { rows.push({name:'off',start_time:new Date(time+10002000),end_time:new Date(time+10002000),duration:0}); }
+            return rows;
+        }
+        await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        await store.accept(machine,[{eventId:'live-off',channel:'power',time:time+10002000,value:0}]);
+        const live=(await store.work(machine)).items.find((item)=>{return item.id!==original.id;});
+        const current=await store.context(machine,live.from,live.until,2000);
+        await store.commit(machine,live.id,[{name:'off',start_time:new Date(time+7000000),end_time:new Date(time+10002000),duration:0}],{...current.context,revision:current.revision,workToken:live.token});
+        /* eslint-disable no-await-in-loop -- Reproduce live work overtaking the historical continuation. */
+        do {
+            work=(await store.work(machine)).items.find((item)=>{return item.id===original.id;});
+            snapshot=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
+            await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        } while (snapshot.context.page.next!==null);
+        /* eslint-enable no-await-in-loop */
+        assert.equal((await store.work(machine)).items.length,0);
+        assert.ok(sawLive,'final correction must classify the already-processed live observation');
+        const off=await pool.query('SELECT name FROM segments WHERE machine=$1 AND start_time=$2',[machine,new Date(time+10002000)]);
+        assert.equal(off.rows[0]?.name,'off');
+    });
+    it('recomputes carried multi-channel dependencies beyond a new live kind boundary', async () => {
+        const machine='composite-live-page'; const time=Math.floor((Date.now()-20000000)/30000)*30000;
+        const store=historyPg(pool);
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value) SELECT $1,'power',$2::bigint+n*1000,'live-page-'||n,CASE WHEN n=0 THEN 0 ELSE 5 END FROM generate_series(0,10001) n WHERE n<>1`,[machine,time]);
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,7000),($1,'phase','off',$3,$4,0)`,[machine,new Date(time),new Date(time+7000000),new Date(time+10001000)]);
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value) VALUES($1,'temperature',$2,'old-temp',10)`,[machine,time]);
+        await store.accept(machine,[{eventId:'late-temp',channel:'temperature',time:time+1000,value:100}]);
+        const original=(await store.work(machine)).items[0];
+        let work=original;
+        let snapshot=await store.context(machine,work.from,work.until,2000);
+        let sawLive=false;
+        function heatRows(context) {
+            const page=context.context.page;
+            const live=context.items.some((point)=>{return point.time===time+10003000&&point.value===0;});
+            sawLive ||= live;
+            const cut=time+7000000;
+            const end=page.until;
+            const ranges=end<=cut ? [[time+1000,end]] : [[time+1000,cut],[cut,end]];
+            const rows=ranges.map(([start,finish])=>{return {name:'heat',start_time:new Date(start),end_time:new Date(finish),duration:0};});
+            if (live) {
+                rows.splice(1,1,{name:'heat',start_time:new Date(cut),end_time:new Date(time+10002000),duration:0},{name:'heat',start_time:new Date(time+10002000),end_time:new Date(time+10003000),duration:0},{name:'heat',start_time:new Date(time+10003000),end_time:new Date(time+10003000),duration:0});
+            }
+            return rows;
+        }
+        await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        await store.accept(machine,[{eventId:'live-heat',channel:'power',time:time+10002000,value:20},{eventId:'live-off',channel:'power',time:time+10003000,value:0}]);
+        const live=(await store.work(machine)).items.find((item)=>{return item.id!==original.id;});
+        const current=await store.context(machine,live.from,live.until,2000);
+        await store.commit(machine,live.id,[{name:'heat',start_time:new Date(time+10002000),end_time:new Date(time+10002000),duration:0},{name:'off',start_time:new Date(time+10003000),end_time:new Date(time+10003000),duration:0}],{...current.context,revision:current.revision,workToken:live.token});
+        /* eslint-disable no-await-in-loop -- Reproduce live work overtaking the historical continuation. */
+        do {
+            work=(await store.work(machine)).items.find((item)=>{return item.id===original.id;});
+            snapshot=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
+            await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        } while (snapshot.context.page.next!==null);
+        /* eslint-enable no-await-in-loop */
+        assert.equal((await store.work(machine)).items.length,0);
+        assert.ok(sawLive,'final correction must classify the already-processed live observation');
+        const off=await pool.query('SELECT name FROM segments WHERE machine=$1 AND start_time=$2',[machine,new Date(time+10003000)]);
+        assert.equal(off.rows[0]?.name,'heat');
+    });
+
 });
