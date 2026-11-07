@@ -1,6 +1,7 @@
 import validateCatalog from './catalog.js';
 function same(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
 function eligible(task, node) { return (!task.pinnedNode || task.pinnedNode === node.id) && (!task.eligibleNodes || task.eligibleNodes.includes(node.id)); }
+function wanted(task, node) { return !node.retired && eligible(task, node); }
 function inEpoch(report, epoch) { return (report?.controlEpoch ?? 'initial') === epoch; }
 function clockSkew(value) {
     if (!Number.isFinite(value) || value <= 0) { throw new TypeError('Positive finite clock skew bound required'); }
@@ -19,14 +20,15 @@ function updateAllowed(task, node, slots, reports, { now, freshnessMs, controlEp
         const input = slot.assignments.find((row) => { return row.taskId === task.taskId; });
         return freshRead(reports.get(slot.id), input, { now, freshnessMs, controlEpoch, clockSkewMs });
     });
-    const outdated = owners.filter((slot) => { return !modern.includes(slot); });
+    const healthy = owners.filter((slot) => { return freshRead(reports.get(slot.id), slot.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
+    const outdated = owners.filter((slot) => { return wanted(task, slot) && !modern.includes(slot) && !(copies(task) > 1 && healthy.length === 1 && healthy[0].id === slot.id); });
     return (modern.length === 0 || ready) && outdated[0]?.id === node.id;
 }
 function snapshots(slots, taskMap, { version: catalogVersion, controlEpoch = 'initial' }, reports, timing) {
     return Object.fromEntries(slots.map((node) => {
         const base = node.assignments.map((row) => {
             const task = taskMap.get(row.taskId);
-            const update = node.live && task && !same(task.spec, row.spec) && updateAllowed(task, node, slots, reports, { ...timing, controlEpoch });
+            const update = node.live && task && wanted(task, node) && !same(task.spec, row.spec) && updateAllowed(task, node, slots, reports, { ...timing, controlEpoch });
             return update ? { ...row, spec: task.spec, assignedAt: timing.now } : row;
         });
         const complete = base.every((row) => { return same(row.spec, taskMap.get(row.taskId)?.spec); });
@@ -52,7 +54,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
     const nodes = [...catalog.nodes, ...Object.keys(current).filter((id) => { return !declared.has(id); }).map((id) => { return { id, capacity: 0, retired: true }; })];
     const slots = nodes.map((node) => {
         const previous = current[node.id] ?? { generation: 0, assignments: [] };
-        const assignments = previous.assignments.filter((row) => { return !live(node.id) || (!node.retired && taskMap.has(row.taskId) && eligible(taskMap.get(row.taskId), node)); });
+        const assignments = previous.assignments.filter((row) => { return !live(node.id) || taskMap.has(row.taskId); });
         return { ...node, previous, assignments: [...assignments], live: live(node.id), load: assignments.reduce((total, row) => { return total + (taskMap.get(row.taskId)?.cost ?? 1); }, 0) };
     });
     const tasks = [...catalog.tasks].sort((a, b) => { return Number(Boolean(b.pinnedNode)) - Number(Boolean(a.pinnedNode)) || a.taskId.localeCompare(b.taskId); });
@@ -67,11 +69,11 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
     }
     for (let round = 0; round < Math.max(1, ...tasks.map(copies)); round += 1) {
         for (const task of tasks) {
-            const active = owners(task);
+            const active = owners(task).filter((node) => { return wanted(task, node); });
             const missing = slots.filter((node) => { return !node.live && node.assignments.some((row) => { return row.taskId === task.taskId; }); });
             const surviving = active.some((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
             const waiting = surviving && missing.some((node) => { return now - (observed.get(node.id)?.receivedAt ?? 0) < replacementDelayMs; });
-            const candidates = slots.filter((node) => { return node.live && eligible(task, node) && !active.includes(node) && !node.assignments.some((row) => { return row.taskId === task.taskId; }) && node.load + (task.cost ?? 1) <= node.capacity; });
+            const candidates = slots.filter((node) => { return node.live && wanted(task, node) && !active.includes(node) && !node.assignments.some((row) => { return row.taskId === task.taskId; }) && node.load + (task.cost ?? 1) <= node.capacity; });
             candidates.sort((a, b) => { return a.load / a.capacity - b.load / b.capacity || a.id.localeCompare(b.id); });
             if (active.length <= round && active.length < copies(task) && !waiting && candidates.length) {
                 const node = candidates[0];
@@ -82,10 +84,10 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
     }
     for (const task of tasks) {
         const active = owners(task);
-        const confirmed = active.filter((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
+        const confirmed = active.filter((node) => { return wanted(task, node) && node.assignments.some((row) => { return row.taskId === task.taskId && same(row.spec, task.spec); }) && freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
         if (confirmed.length >= copies(task)) {
             const keep = new Set(confirmed.slice(0, copies(task)).map((node) => { return node.id; }));
-            active.filter((node) => { return !keep.has(node.id); }).forEach((node) => {
+            slots.filter((node) => { return node.live && !keep.has(node.id); }).forEach((node) => {
                 node.assignments = node.assignments.filter((row) => { return row.taskId !== task.taskId; });
             });
         }

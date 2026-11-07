@@ -126,3 +126,53 @@ describe('bounded executor clock skew', () => {
         for(const clockSkewMs of [-1,0,Infinity,NaN]) { assert.throws(()=>{return schedule(catalog,[],{},{clockSkewMs})},/clock skew/u); }
     });
 });
+
+describe('conservative placement policy handoff', () => {
+    const assignment = { taskId:'s', generation:1, assignedAt:0, specVersion:1, spec:{adapter:'test'} };
+    const current = { a:{generation:1,catalogVersion:'v1',assignments:[assignment]} };
+    const reading = (id, generation=1) => { return report(id,100000,[{taskId:'s',generation,state:'running',lastRead:100000}]); };
+    for (const policy of [{eligibleNodes:['b']},{pinnedNode:'b'}]) {
+        for (const retired of [false,true]) {
+        it(`keeps the old reader until an eligible replacement confirms reads (${JSON.stringify(policy)}, retired=${retired})`, () => {
+            const input={...catalog,version:'v2',nodes:catalog.nodes.filter(node=>{return !retired||node.id!=='a';}),tasks:[{...catalog.tasks[0],copies:1,...policy}]};
+            const offline=schedule(input,[reading('a')],current,{now:100000});
+            assert.equal(offline.a.assignments.length,1);
+            const starting=schedule(input,[reading('a'),report('b',100000)],offline,{now:100000});
+            assert.equal(starting.a.assignments.length,1);
+            assert.equal(starting.b.assignments.length,1);
+            const stale=schedule(input,[reading('a'),reading('b',0)],starting,{now:100000});
+            assert.equal(stale.a.assignments.length,1);
+            const confirmed=schedule(input,[reading('a'),reading('b',starting.b.assignments[0].generation)],starting,{now:100000});
+            assert.equal(confirmed.a.assignments.length,0);
+            assert.equal(confirmed.b.assignments.length,1);
+        });
+    }
+    }
+    it('does not restart the only healthy reader during a two-copy configuration update', () => {
+        const input={...catalog,version:'v2',tasks:[{...catalog.tasks[0],spec:{adapter:'test',value:2}}]};
+        const offline=schedule(input,[reading('a')],current,{now:100000});
+        assert.deepEqual(offline.a.assignments[0].spec,assignment.spec);
+        const starting=schedule(input,[reading('a'),report('b',100000)],offline,{now:100000});
+        assert.deepEqual(starting.a.assignments[0].spec,assignment.spec);
+        const confirmed=schedule(input,[reading('a'),reading('b',starting.b.assignments[0].generation)],starting,{now:100000});
+        assert.equal(confirmed.a.assignments[0].spec.value,2);
+    });
+    it('updates a failed replica before touching the only healthy reader', () => {
+        const input={...catalog,version:'v2',tasks:[{...catalog.tasks[0],spec:{adapter:'test',value:2}}]};
+        const state={...current,b:{generation:1,catalogVersion:'v1',assignments:[assignment]}};
+        const result=schedule(input,[reading('a'),report('b',100000,[{taskId:'s',generation:1,state:'failed'}])],state,{now:100000});
+        assert.deepEqual(result.a.assignments[0].spec,assignment.spec);
+        assert.equal(result.b.assignments[0].spec.value,2);
+    });
+    it('waits for the complete eligible replica count before retiring the old policy owner', () => {
+        const input={...catalog,version:'v2',tasks:[{...catalog.tasks[0],eligibleNodes:['b','c']}]};
+        const starting=schedule(input,[reading('a'),report('b',100000),report('c',100000)],current,{now:100000});
+        const one=schedule(input,[reading('a'),reading('b',starting.b.assignments[0].generation),report('c',100000)],starting,{now:100000});
+        assert.equal(one.a.assignments.length,1);
+        const both=schedule(input,[reading('a'),reading('b',one.b.assignments[0].generation),reading('c',one.c.assignments[0].generation)],one,{now:100000});
+        assert.equal(both.a.assignments.length,0);
+    });
+    it('honors explicit task deletion even if the old owner is ineligible', () => {
+        assert.equal(schedule({...catalog,version:'v2',tasks:[]},[reading('a')],current,{now:100000}).a.assignments.length,0);
+    });
+});
