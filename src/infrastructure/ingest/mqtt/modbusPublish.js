@@ -198,6 +198,32 @@ function oneWindow(rows, plans, config) {
  * @returns {Array<Array<{point: string, topic: string}>>} plans
  */
 function plansFor(rows, config) {
+    if (config.plans !== undefined) {
+        if (!Array.isArray(config.plans) || config.plans.length !== rows.length
+            || config.plans.some((plan) => { return !Array.isArray(plan) || plan.length === 0; })) {
+            throw new TypeError('Publish plans must contain one non-empty array per device');
+        }
+        if (config.maps?.length) { throw new TypeError('Explicit plans cannot be combined with MAPPING'); }
+        const topics = new Set();
+        return config.plans.map((plan) => {
+            return plan.map((item) => {
+                if (!item || typeof item.point !== 'string' || typeof item.topic !== 'string'
+                    || !item.topic.trim() || /[+#\0]/u.test(item.topic)) {
+                    throw new TypeError('Publish plan requires a register point and a concrete MQTT topic');
+                }
+                if (!/^holding:\d+(?::(?:abcd|cdab))?$/u.test(item.point)) {
+                    throw new TypeError(`Invalid register point: ${item.point}`);
+                }
+                const parsed = parsePoint(item.point);
+                if (!Number.isSafeInteger(parsed.address) || parsed.address + parsed.width > 65536) {
+                    throw new TypeError(`Register point exceeds holding-register bounds: ${item.point}`);
+                }
+                if (topics.has(item.topic)) { throw new TypeError(`Duplicate publish topic: ${item.topic}`); }
+                topics.add(item.topic);
+                return { point: item.point, topic: item.topic };
+            });
+        });
+    }
     return rows.map((row, index) => {
         return measurementPlans(streamOf(config, index), mapOf(config, index));
     });
@@ -225,7 +251,9 @@ function assertPublish(mqtt, config) {
 }
 
 /**
- * Polls Modbus and publishes measurements named by STREAM and MAPPING.
+ * Polls Modbus and publishes explicit per-device plans or STREAM and MAPPING.
+ * config.plans is an array of [{ point, topic }] arrays aligned with devices.
+ * Explicit plans replace generated mappings; combining the two is rejected.
  *
  * A point is `holding:<pdu>`, `holding:<pdu>:abcd`, or `holding:<pdu>:cdab`.
  * The topic is the document path `stream/parameter`. Devices come from

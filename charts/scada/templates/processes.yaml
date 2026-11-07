@@ -1,6 +1,7 @@
 {{- $names := dict }}
 {{- $devices := dict }}
 {{- range .Values.processes }}
+{{- $process := . }}
 {{- $name := required "process name is required" .name }}
 {{- if hasKey $names $name }}
 {{- fail (printf "duplicate process name %s" $name) }}
@@ -58,11 +59,22 @@ spec:
           image: {{ required "process image is required" (default $.Values.image .image) | quote }}
           imagePullPolicy: IfNotPresent
           command: {{ required "process command is required" .command | toJson }}
-          {{- with .health }}
+          {{- with .args }}
+          args: {{ toJson . }}
+          {{- end }}
+          {{- if or .ports .health }}
           ports:
+            {{- with .ports }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .health }}
             - name: health
               containerPort: {{ .port }}
               protocol: TCP
+            {{- end }}
+          {{- end }}
+          {{- with .health }}
+          {{- if not $process.livenessProbe }}
           livenessProbe:
             httpGet:
               path: {{ default "/live" .livenessPath | quote }}
@@ -71,6 +83,8 @@ spec:
             periodSeconds: {{ default 10 .periodSeconds }}
             timeoutSeconds: {{ default 2 .timeoutSeconds }}
             failureThreshold: {{ default 3 .failureThreshold }}
+          {{- end }}
+          {{- if not $process.readinessProbe }}
           readinessProbe:
             httpGet:
               path: {{ default "/ready" .readinessPath | quote }}
@@ -80,31 +94,50 @@ spec:
             timeoutSeconds: {{ default 2 .timeoutSeconds }}
             failureThreshold: {{ default 3 .failureThreshold }}
           {{- end }}
+          {{- end }}
+          {{- range $key := list "readinessProbe" "livenessProbe" "startupProbe" }}
+          {{- with index $process $key }}
+          {{ $key }}:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
           {{- if .hostDevices }}
           securityContext:
             privileged: true
+          {{- end }}
+          {{- if or .hostDevices .volumeMounts }}
           volumeMounts:
             {{- range $index, $path := .hostDevices }}
             - name: serial-{{ add1 $index }}
               mountPath: {{ $path | quote }}
+            {{- end }}
+            {{- with .volumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
           {{- with .env }}
           env:
             {{- range $key, $value := . }}
             - name: {{ $key }}
-              value: {{ $value | quote }}
+              {{- include "scada.envValue" $value | nindent 14 }}
             {{- end }}
+          {{- end }}
+          {{- with .envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           resources:
             {{- toYaml (default $.Values.resources .resources) | nindent 12 }}
-      {{- with .hostDevices }}
+      {{- if or .hostDevices .volumes }}
       volumes:
-        {{- range $index, $path := . }}
+        {{- range $index, $path := .hostDevices }}
         - name: serial-{{ add1 $index }}
           hostPath:
             path: {{ $path | quote }}
             type: CharDevice
+        {{- end }}
+        {{- with .volumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}
 {{- end }}

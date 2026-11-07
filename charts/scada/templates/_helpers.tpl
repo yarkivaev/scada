@@ -94,3 +94,12 @@ volumeMode: Filesystem
 {{- define "scada.brokerConfigName" -}}
 {{- default (printf "%s-rabbitmq" (include "scada.prefix" .)) .Values.rabbitmq.configName -}}
 {{- end }}
+
+{{/* Literal env values remain strings; Kubernetes valueFrom references stay opaque. */}}
+{{- define "scada.envValue" -}}
+{{- if kindIs "map" . }}
+{{- toYaml . }}
+{{- else }}
+value: {{ . | quote }}
+{{- end }}
+{{- end }}

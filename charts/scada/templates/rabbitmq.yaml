@@ -40,6 +40,9 @@ spec:
     matchLabels:
       {{- include "scada.match" (dict "app" "rabbitmq" "ctx" .) | nindent 6 }}
   template:
+    {{- if .Values.rabbitmq.podTemplate }}
+    {{- toYaml .Values.rabbitmq.podTemplate | nindent 4 }}
+    {{- else }}
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
@@ -47,9 +50,14 @@ spec:
         {{- with .Values.workloadLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- if .Values.rabbitmq.rolloutOnConfigChange }}
+      {{- if or .Values.rabbitmq.rolloutOnConfigChange .Values.rabbitmq.podAnnotations }}
       annotations:
+        {{- with .Values.rabbitmq.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.rabbitmq.rolloutOnConfigChange }}
         checksum/config: {{ include (print $.Template.BasePath "/rabbitmq-config.yaml") . | sha256sum }}
+        {{- end }}
       {{- end }}
     spec:
       {{- with .Values.pullSecret }}
@@ -103,19 +111,23 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ . }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ . }}
-  namespace: {{ $.Release.Namespace }}
-spec:
-  {{- include "scada.claim" (dict "size" $.Values.rabbitmq.storage "class" $.Values.rabbitmq.storageClass) | nindent 2 }}
-      {{- else }}
+      {{- end }}
+    {{- end }}
+  {{- if not .Values.rabbitmq.claimName }}
   volumeClaimTemplates:
     - metadata:
         name: data
       spec:
         {{- include "scada.claim" (dict "size" .Values.rabbitmq.storage "class" .Values.rabbitmq.storageClass) | nindent 8 }}
+  {{- end }}
+{{- if and .Values.rabbitmq.claimName .Values.rabbitmq.createClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.rabbitmq.claimName }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- include "scada.claim" (dict "size" .Values.rabbitmq.storage "class" .Values.rabbitmq.storageClass) | nindent 2 }}
 {{- end }}
 {{- end }}

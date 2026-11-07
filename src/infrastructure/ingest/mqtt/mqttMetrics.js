@@ -47,10 +47,17 @@ export default function mqttMetrics(mqtt, sink, topic, config) {
     if (!config || typeof config !== 'object') {
         throw new Error('Config must be an object');
     }
-    const collector = ingestBatch(sink, { ...config, size: 1 });
+    // The source owns one lease through durable acceptance. Reserving again in
+    // the batch would reject every message at a one-record runtime budget.
+    const { budget, ...batchConfig } = config;
+    const collector = ingestBatch(sink, { ...batchConfig, size: 1 });
     const transformer = metricsCodec(collector);
     const source = mqttSource(mqtt, topic, transformer, {
-        budget: config.budget,
+        budget,
+        onError: config.onError,
+        onReady: config.onReady,
+        ...(config.acceptTimeoutMs === undefined ? {} : { acceptTimeoutMs: config.acceptTimeoutMs }),
+        ...(config.stopTimeoutMs === undefined ? {} : { stopTimeoutMs: config.stopTimeoutMs }),
         prefetch: config.prefetch,
         maxPacketBytes: config.maxBytes,
         clientId: config.clientId,

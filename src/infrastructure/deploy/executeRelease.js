@@ -22,6 +22,13 @@ function validate(plan, action) {
     }
     const fields = action === 'render' ? ['chart', 'release', 'namespace'] : ['chart', 'release', 'namespace', 'context', 'fieldManager'];
     validateRetirements(plan);
+    if (plan.podsAbsentBeforeApply !== undefined && (!Array.isArray(plan.podsAbsentBeforeApply)
+        || plan.podsAbsentBeforeApply.some((selector) => {
+            return typeof selector !== 'string' || !/^[A-Za-z0-9_./-]+=[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_./-]+=[A-Za-z0-9_.-]+)*$/u.test(selector);
+        }))) { throw new Error('podsAbsentBeforeApply requires exact equality label selectors'); }
+    if (plan.beforeApply !== undefined && typeof plan.beforeApply !== 'function') {
+        throw new Error('beforeApply must be a function');
+    }
     fields.forEach((key) => {
         if (typeof plan[key] !== 'string' || !plan[key].trim()) { throw new Error(`release requires ${key}`); }
     });
@@ -63,8 +70,21 @@ function preflightRetirements(plan, action, kube, manifests) {
     }
 }
 
+/** Live gates run only for mutating actions, after all staged dry-runs. */
+function gateApply(plan, action, kube) {
+    if (['apply', 'adopt'].includes(action)) {
+        for (const selector of plan.podsAbsentBeforeApply || []) {
+            if (kube(['get', 'pods', '-l', selector, '-o', 'name'], undefined, true).trim()) {
+                throw new Error(`pods remain for ${selector}`);
+            }
+        }
+        plan.beforeApply?.(plan, kube);
+    }
+}
+
 /** Adopt legacy fields, then enforce the complete manifest before waiting for rollouts. */
 function applyRelease(plan, action, kube, manifests) {
+    gateApply(plan, action, kube);
     preflightRetirements(plan, action, kube, manifests);
     if (['adopt', 'check-adoption'].includes(action)) {
         applyWith(kube, manifests, ['--field-manager=kubectl-client-side-apply'], action === 'check-adoption');
@@ -86,6 +106,8 @@ function applyRelease(plan, action, kube, manifests) {
  * resource/name references. Optional retirements are { workload: "deployment/name",
  * selector: "app=label" }; callers bind these to the old declarative app. They are
  * removed after preflight and before any writes, with no selected pods remaining.
+ * podsAbsentBeforeApply equality selectors must have no pods before any mutation.
+ * beforeApply(plan, kube) provides caller-owned live gates; throwing stops writes.
  * afterReady(plan, kube) runs after a successful apply.
  */
 export default function executeRelease(plan, action = 'render', execute = execFileSync) {

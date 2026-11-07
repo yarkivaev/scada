@@ -3,8 +3,9 @@ import path from 'path';
 import { migrationApplies, migrationSinkRunnable } from './migrationProfile.js';
 /* eslint-disable no-await-in-loop */
 
-function migrationSelected(name, profile, privileged) {
-    if (!name.endsWith('.sql') || !migrationApplies(name, profile)) {
+function migrationSelected(name, profile, privileged, options) {
+    if (!name.endsWith('.sql') || !migrationApplies(name, profile)
+        || (name === 'V0009__collector_task_state.sql' && options.runtimeState !== true)) {
         return false;
     }
     const sinkRunnable = migrationSinkRunnable(name);
@@ -20,10 +21,10 @@ async function ensureMigrationsTable(pool) {
     `);
 }
 
-async function applyMigrationFiles(pool, migrationsDir, profile, privileged) {
+async function applyMigrationFiles(pool, migrationsDir, profile, privileged, options = {}) {
     const files = (await fs.readdir(migrationsDir))
         .filter((name) => {
-            return migrationSelected(name, profile, privileged);
+            return migrationSelected(name, profile, privileged, options);
         })
         .sort((left, right) => {
             return left.localeCompare(right);
@@ -52,16 +53,17 @@ async function applyMigrationFiles(pool, migrationsDir, profile, privileged) {
 }
 
 /**
- * Applies SQL migrations runnable as supervisor_sink.
+ * Applies SQL migrations runnable as supervisor_sink. Collector state is opt-in.
  *
  * @param {object} pool - pg.Pool instance.
  * @param {string} migrationsDir - absolute path to migration files.
  * @param {string} [profile] - central or edge; filters E/C prefixed files
+ * @param {object} [options] - runtimeState: true explicitly includes collector task state
  * @returns {Promise<void>}
  */
-export default async function migrate(pool, migrationsDir, profile = 'edge') {
+export default async function migrate(pool, migrationsDir, profile = 'edge', options = {}) {
     await ensureMigrationsTable(pool);
-    await applyMigrationFiles(pool, migrationsDir, profile, false);
+    await applyMigrationFiles(pool, migrationsDir, profile, false, options);
 }
 
 /**

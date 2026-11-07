@@ -160,6 +160,7 @@ function draftOne(server, paths, mappings) {
         id: server.id,
         objects,
         ownership: server.ownership,
+        modules: server.modules,
         patternsIn: remote,
         patternsOut: server.fan_out || [],
         profile: server.profile,
@@ -237,6 +238,9 @@ function materialize(server) {
     }
     if (server.service) {
         row.service = server.service;
+    }
+    if (server.modules) {
+        row.modules = server.modules;
     }
     return row;
 }

@@ -10,6 +10,11 @@ function report(options, error) {
 }
 function bind(live, collector, options) {
     live.client.on('error', (error) => { report(options, error); });
+    for (const event of ['offline', 'close']) {
+        live.client.on(event, () => {
+            if (live.active) { report(options, new Error('MQTT source disconnected')); }
+        });
+    }
     // MQTT.js serializes handleMessage and sends PUBACK/PUBCOMP only on successful completion.
     live.client.handleMessage = (packet, callback) => {
         const accepted = Promise.resolve().then(() => {
@@ -34,7 +39,17 @@ function open(url, list, collector, options) {
     const live = { client, active: true, pending: new Set(), controller: new AbortController() };
     bind(live, collector, options);
     client.on('connect', () => {
-        if (live.active) { client.subscribe(list, { qos: options.qos ?? (options.clientId ? 1 : 0) }); }
+        if (live.active) {
+            client.subscribe(list, { qos: options.qos ?? (options.clientId ? 1 : 0) }, (error, granted) => {
+                if (!live.active) { return; }
+                if (error || granted?.some((entry) => { return entry.qos >= 128; })) {
+                    report(options, error ?? new Error('MQTT subscription denied')); return;
+                }
+                try { options.onReady?.(); } catch {
+                    // Diagnostics cannot break transport callbacks.
+                }
+            });
+        }
     });
     return live;
 }

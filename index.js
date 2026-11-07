@@ -105,3 +105,5 @@ export { default as pointPaths } from './src/application/deploy/pointPaths.js';
 export { clusterOf, serverFor } from './src/application/deploy/releaseNodes.js';
 export { default as executeRelease } from './src/infrastructure/deploy/executeRelease.js';
 export { default as collectorProcesses } from './src/application/deploy/collectorProcesses.js';
+
+export { default as executeStages } from './src/infrastructure/deploy/executeStages.js';

@@ -1,3 +1,5 @@
+import { mergeMaps } from './mergeDocuments.js';
+
 /**
  * Reads an object entry as a path.
  *
@@ -114,7 +116,7 @@ export function profileFor(document, server) {
         throw new Error(`system document has no profile ${label}`);
     }
     const values = { ...(profile.variables || {}), ...(server.profile.variables || {}) };
-    return { ...profile, variables: values };
+    return { ...profile, ...(server.modules && { modules: mergeMaps(profile.modules, server.modules) }), variables: values };
 }
 
 /** Selects an explicitly named service or the sole service of the source. */

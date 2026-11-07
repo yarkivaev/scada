@@ -1,4 +1,6 @@
 import assert from 'node:assert';
+import mqtt from 'mqtt';
+import ModbusRTU from 'modbus-serial';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,5 +104,78 @@ describe('modbusPublish', () => {
             true,
             'modbus-to-mqtt took document paths from PATH'
         );
+    });
+});
+
+
+describe('explicit modbus wire plans', function () {
+    const config = { addresses: ['modbus://192.0.2.1:502'], interval: 5, threshold: 5, timeout: 60,
+        plans: [[{ point: 'holding:4000:abcd', topic: 'legacy/device/voltage' }]] };
+    it('derives the window from explicit plans without a generated mapping', function () {
+        assert.equal(typeof modbusPublish('mqtt://broker', config).start, 'function');
+    });
+    it('requires exactly one plan array per device', function () {
+        for (const plans of [[], {}, [null], [config.plans[0], config.plans[0]]]) {
+            assert.throws(() => { modbusPublish('mqtt://broker', { ...config, plans }); }, /plan/iu);
+        }
+    });
+    it('rejects ambiguous generated mappings and duplicate wire topics', function () {
+        assert.throws(() => { modbusPublish('mqtt://broker', { ...config, maps: [{ voltage: 'holding:4000:abcd' }] }); }, /plan|mapping/iu);
+        assert.throws(() => { modbusPublish('mqtt://broker', { ...config, plans: [[...config.plans[0], ...config.plans[0]]] }); }, /duplicate/iu);
+    });
+    it('validates explicit points, topics and poll window fit', function () {
+        for (const item of [{ point: 'no-point', topic: 'a' }, { point: 'holding:4000', topic: '' }, { point: 'holding:4000', topic: 'wild/#' }]) {
+            assert.throws(() => { modbusPublish('mqtt://broker', { ...config, plans: [[item]] }); });
+        }
+        assert.throws(() => { modbusPublish('mqtt://broker', { ...config, address: 0, count: 2 }); }, /outside/u);
+    });
+});
+
+
+describe('explicit Modbus wire publication', function () {
+    it('publishes the explicit topic and decoded value exactly once per sampled point', async function () {
+        const mqttOriginal = { connect: mqtt.MqttClient.prototype.connect, end: mqtt.MqttClient.prototype.end,
+            publish: mqtt.MqttClient.prototype.publish };
+        const modbusOriginal = { connectTCP: ModbusRTU.prototype.connectTCP, readHoldingRegisters: ModbusRTU.prototype.readHoldingRegisters };
+        const received = [];
+        let sampled;
+        const ready = new Promise((resolve) => { sampled = resolve; });
+        mqtt.MqttClient.prototype.connect = function () { setImmediate(() => { this.emit('connect'); }); return this; };
+        mqtt.MqttClient.prototype.end = function (force, options, done) { done?.(); return this; };
+        mqtt.MqttClient.prototype.publish = function (topic, payload, options, done) {
+            received.push({ topic, payload: JSON.parse(payload), qos: options.qos }); done(); return this;
+        };
+        ModbusRTU.prototype.connectTCP = function () { return Promise.resolve(); };
+        ModbusRTU.prototype.readHoldingRegisters = function (address, count) {
+            assert.equal(address, 4000); assert.equal(count, 2);
+            sampled(); return Promise.resolve({ data: [16256, 0] });
+        };
+        const pipeline = modbusPublish('mqtt://broker', { addresses: ['modbus://192.0.2.1:502'],
+            interval: 0.01, threshold: 5, timeout: 60,
+            plans: [[{ point: 'holding:4000:abcd', topic: 'legacy/device/voltage' }]] });
+        try {
+            await pipeline.start(); await ready; await new Promise(setImmediate);
+            await pipeline.stop();
+            assert.equal(received.length, 1);
+            assert.equal(received[0].topic, 'legacy/device/voltage');
+            assert.equal(received[0].payload.value, 1);
+            assert.equal(typeof received[0].payload.ts, 'number');
+            assert.equal(received[0].qos, 1);
+        } finally {
+            await pipeline.stop();
+            Object.assign(mqtt.MqttClient.prototype, mqttOriginal);
+            Object.assign(ModbusRTU.prototype, modbusOriginal);
+        }
+    });
+});
+
+
+describe('explicit Modbus plan point grammar', function () {
+    it('rejects partially parsed addresses, extra fields and register overflow', function () {
+        const config = { addresses: ['modbus://192.0.2.1:502'], interval: 5, threshold: 5, timeout: 60 };
+        for (const point of ['holding:4000oops', 'holding:4000.5', 'holding:4000:abcd:extra',
+            'holding:65536', 'holding:65535:abcd', 'holding:9007199254740992']) {
+            assert.throws(() => { modbusPublish('mqtt://broker', { ...config, plans: [[{ point, topic: 'legacy/value' }]] }); }, /point|register/iu);
+        }
     });
 });
