@@ -20,7 +20,7 @@ function wiredGate(device, started, stopped, clk, budget) {
         interval: 1,
         sources: [{
             name() {
-                return device;
+                return `MX210/${device}`;
             },
             open() {
                 return {
