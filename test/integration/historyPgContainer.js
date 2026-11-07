@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import { GenericContainer } from 'testcontainers';
 import { readFile } from 'node:fs/promises';
-import retainMetricReceipts from '../../src/infrastructure/ingest/db/retainMetricReceipts.js';
 import metricsStatePg, { metricsSinkFromPool } from '../../src/infrastructure/persistence/pg/metrics.js';
 import historyPg from '../../src/infrastructure/persistence/pg/history.js';
 
@@ -41,10 +40,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const old = Date.now() - 40 * 86400000;
         const recent = Date.now() - 86400000;
         await sink.write([{topic:'receipt-retention',ts:old,value:1},{topic:'receipt-retention',ts:recent,value:2}]);
-        await retainMetricReceipts(pool, 30);
+        await historyPg(pool).purge();
         assert.equal((await pool.query("SELECT count(*) FROM metric_receipts WHERE topic='receipt-retention'")).rows[0].count,'2');
         await pool.query("DELETE FROM metrics WHERE topic='receipt-retention'");
-        await retainMetricReceipts(pool, 30);
+        await historyPg(pool).purge();
         assert.deepEqual((await pool.query("SELECT value FROM metric_receipts WHERE topic='receipt-retention'")).rows,[{value:2}]);
     });
     it('preserves existing raw metrics when first-wins is enabled later', async () => {

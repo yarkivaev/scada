@@ -1,3 +1,4 @@
+import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
 import historyContext from './historyContext.js';
 import historyConfigure from './historyConfigure.js';
 
@@ -110,6 +111,7 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now } =
                     AND o.time_ms BETWEEN w.from_ms-86400000 AND w.until_ms+86400000)
                 AND EXISTS (SELECT 1 FROM history_observations newer WHERE newer.machine=o.machine
                     AND newer.channel=o.channel AND newer.time_ms>o.time_ms AND newer.time_ms<$1)`, [cutoff()]);
+            await retainMetricReceipts(pool, retentionDays);
             return result.rowCount;
         },
         accept(machine, items) { return accept(pool, machine, items, cutoff()); },
