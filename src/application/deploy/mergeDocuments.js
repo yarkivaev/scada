@@ -19,7 +19,7 @@ function isMap(value) {
  * @example
  *   mergeMaps({ secret: 'pg' }, { image: 'plant:1' });
  */
-function mergeMaps(left, right) {
+export function mergeMaps(left, right) {
     const value = { ...(left || {}) };
     Object.keys(right || {}).forEach((key) => {
         const next = right[key];

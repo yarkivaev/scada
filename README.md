@@ -420,7 +420,7 @@ await runtime.stop();
 
 Adapters include `stream` (registered source/transform/sinks), `modbus`,
 `activity`, `amqp-relay`, `amqp-metrics`, `mqtt-metrics`, `operation-sync`,
-`amqp-pg-metrics`, `silent-streams` and `stomp-ingest`. Plant packages extend the
+`amqp-pg-metrics`, `mqtt-pg-metrics`, `silent-streams` and `stomp-ingest`. Plant packages extend the
 registry with domain-specific adapters; OPC UA belongs here, not in
 source-to-sink. Constructors do not open connections. A task owns independent
 connections and must close them in `stop()`. Factories are trusted code, not
@@ -439,8 +439,11 @@ Secrets can be references such as `{ "$secret": "AMQP_URL" }`, resolved by the
 host immediately before adapter construction. Status excludes configuration and
 exception messages. Optional `COLLECTOR_HEALTH_PORT` and
 `COLLECTOR_HEALTH_HOST` (default `127.0.0.1`) expose read-only `/live`, `/ready`
-and `/status`. Readiness represents admission, not the health of every remote
-server. Fatal cleanup makes liveness fail. A blocked event loop cannot answer
+and `/status`. Readiness rejects failed or degraded tasks as well as runtime
+shutdown. Fatal cleanup or an uncertain MQTT acceptance/write timeout makes
+liveness fail; configure an external restart policy. Transient MQTT errors mark
+the task degraded until broker reconnect; terminal timeouts require a fresh
+executor after the old process drains its IO. A blocked event loop cannot answer
 an external probe; synchronous infinite loops/native crashes still affect the
 entire process. No hard CPU or native-memory isolation is claimed.
 
@@ -464,6 +467,23 @@ deduplicate. Sources with a non-null checkpoint must implement `restore()`;
 unsupported restoration fails closed. Live telemetry cannot replay downtime.
 Loki fails a saturated page rather than silently advancing across truncated data.
 
+`mqtt-pg-metrics` uses `{ mqtt, postgres, topic, options, limits }`. URLs may be
+secret references; `options.clientId` and `options.sessionExpiryInterval` preserve
+an existing persistent MQTT session. Records use the existing numeric/JSON metric
+decoder and are acknowledged after PostgreSQL writes. Runtime limits bound accepted
+records and bytes; a one-record budget works without reserving the record twice.
+
+The `modbus` adapter also accepts `config.plans`, one non-empty `[{ point, topic }]`
+array per device. For example, `plans: [[{ point: 'holding:4000:cdab',
+topic: 'existing/device/voltage' }]]` publishes that exact wire topic. Points must
+use `holding:<integer>[:abcd|cdab]` within the 16-bit register address range.
+Explicit plans replace `maps`; mixing the two or repeating a topic is rejected.
+All devices still share one poll window.
+
+Collector state is optional for live-only assignments. Ordinary supervisor-sink
+business migrations skip collector state and never delete an existing state table.
+Call `migrate(pool, migrationsDir, profile, { runtimeState: true })` only when
+explicitly enabling task-state storage, or apply its SQL separately.
 The runner accepts `COLLECTOR_STATE_URL` for PostgreSQL. Apply
 `db/migrations/V0009__collector_task_state.sql` explicitly and grant the service
 role access before starting stateful assignments; the runner never runs schema
@@ -522,3 +542,40 @@ for idempotent replay. WAL durability remains enabled.
 counts, SQL-call count, and maximum transaction/wait durations. They contain no payloads or tags.
 Compare these counters with RabbitMQ ACK/drain rates and process memory when tuning. More messages
 per batch reduce COMMIT frequency; the number of SQL writes still depends on command semantics.
+
+## Ordered release stages
+
+`executeStages(stages, action = 'render', execute?)` runs ordered generic release
+plans. For `apply`/`adopt`, every stage is preflighted before the first mutation;
+each rollout and `afterReady`/`beforeApply` gate must finish before the next stage.
+Read-only actions do not invoke mutation gates. A plan may declare exact Deployment
+`retirements: [{ workload: 'deployment/old-reader', selector: 'app=old-reader' }]`
+and `podsAbsentBeforeApply` selectors to fence old readers before a replacement.
+Retirement waits for foreground deletion and verifies no matching pods remain;
+failures stop execution. Context, namespace and field manager remain explicit.
+
+The application chart accepts existing PostgreSQL/RabbitMQ claims, secret-backed
+environment values, `envFrom`, config volumes, probes and extra Kubernetes objects.
+PostgreSQL honors the root `pullSecret`. Existing claims are referenced without
+creating or deleting storage; plant packages supply their precise deployment values.
+
+### Per-server module configuration
+
+A server may override its profile's `modules`. Maps merge recursively; omitted
+fields are inherited, arrays replace, and null removes an inherited key.
+`state_store.pgdata` selects PostgreSQL's existing data directory and takes
+precedence over the compatible `state_store.chart.data` setting.
+
+```yaml
+servers:
+  - id: cell-a
+    modules:
+      state_store:
+        pgdata: /var/lib/postgresql/data/pgdata
+    profile:
+      id: cell
+      variables:
+        cluster: cell-a
+```
+
+This changes the selected server only; it does not mutate the shared profile.

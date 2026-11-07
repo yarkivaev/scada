@@ -13,7 +13,8 @@ import { clusterOf, objectPath, serverById, serviceOf } from './releaseNodes.js'
  */
 function bindOne(name, spec, secret) {
     if (name === 'state_store') {
-        return ['postgres', { enabled: spec.enabled !== false, secret: secret || 'scada-postgres' }];
+        return ['postgres', { ...spec.chart, ...(spec.pgdata !== undefined && { data: spec.pgdata }),
+            enabled: spec.enabled !== false, secret: secret || 'scada-postgres' }];
     }
     if (name === 'message_bus') {
         return ['rabbitmq', { ...spec.chart, enabled: spec.enabled !== false,

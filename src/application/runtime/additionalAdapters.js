@@ -1,5 +1,6 @@
 import ingestHealth from '../ingestHealth.js';
 import { clickhouseSink } from '../../infrastructure/streams/index.js';
+import mqttMetrics from '../../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../../infrastructure/sync/operationSyncIngest.js';
 import operationsFromPg from '../../infrastructure/persistence/pg/operations.js';
@@ -14,7 +15,7 @@ import alertPipeline from '../../infrastructure/ingest/pipelines/alertPipeline.j
 import resolveSecrets from './resolveSecrets.js';
 
 function urlOptions(spec) {
-    const protocols = { amqp: ['amqp:', 'amqps:'], stomp: ['stomp:', 'stomps:'],
+    const protocols = { mqtt: ['mqtt:', 'mqtts:', 'ws:', 'wss:'], amqp: ['amqp:', 'amqps:'], stomp: ['stomp:', 'stomps:'],
         postgres: ['postgres:', 'postgresql:'], clickhouse: ['http:', 'https:'] };
     Object.entries(protocols).forEach(([key, allowed]) => {
         const value = spec[key];
@@ -57,6 +58,20 @@ function telemetry(spec, pool) {
 function metrics(spec, pool, context) {
     const sink = telemetry(spec, pool);
     return ownedSink(amqpMetricsIngest(spec.amqp, spec.queue, sink, { ...boundedOptions(spec), budget: context.budget }), sink);
+}
+function mqttPostgres(spec, pool, context) {
+    let failed = false;
+    context.report?.({ state: 'degraded' });
+    return mqttMetrics(spec.mqtt, metricsSinkFromPool(pool), spec.topic, {
+        ...boundedOptions(spec), budget: context.budget,
+        onReady() { if (!failed) { context.report?.({ state: 'running' }); } },
+        onError(error) {
+            // An uncertain write retires the executor. Reconnect cannot safely
+            // reuse the poisoned batch or overlap SQL still running in its pool.
+            failed ||= ['WRITE_TIMEOUT', 'OPERATION_TIMEOUT'].includes(error.code);
+            context.report?.({ state: failed ? 'failed' : 'degraded', fatal: failed });
+        }
+    });
 }
 function silent(spec, pool, context) {
     const sink = telemetry(spec, pool);
@@ -143,6 +158,7 @@ export default function additionalAdapters() {
             return operationSyncIngest(spec.amqp, spec.queue, operationsFromPg(pool), { ...boundedOptions(spec), budget: context.budget });
         }, ['amqp', 'queue', 'postgres'])],
         ['amqp-pg-metrics', descriptor(metrics, ['amqp', 'queue', 'postgres'])],
+        ['mqtt-pg-metrics', descriptor(mqttPostgres, ['mqtt', 'topic', 'postgres'])],
         ['silent-streams', descriptor(silent, ['amqp', 'queue', 'sources'], silentConfig, (spec) => {
             return [...new Set(spec.sources.map((source) => { return `modbus-tcp:${source.host}:${source.port}`; }))];
         })],

@@ -110,3 +110,18 @@ describe('migratePrivileged', function() {
         assert.strictEqual(grant, undefined, 'sink migrate must skip C0005');
     });
 });
+
+
+describe('runtime-state migration opt-in', function () {
+    it('skips collector state for ordinary business migrations', async function () {
+        const pool = fakePool();
+        await migrate(pool, path.resolve('db/migrations'), 'edge');
+        assert.equal(pool.calls.some(({ sql }) => { return sql.includes('collector_task_state'); }), false);
+    });
+    it('explicitly adds collector state without destructive rollback', async function () {
+        const pool = fakePool();
+        await migrate(pool, path.resolve('db/migrations'), 'edge', { runtimeState: true });
+        assert.ok(pool.calls.some(({ sql }) => { return sql.includes('CREATE TABLE IF NOT EXISTS collector_task_state'); }));
+        assert.equal(pool.calls.some(({ sql }) => { return /DROP.*collector_task_state/iu.test(sql); }), false);
+    });
+});

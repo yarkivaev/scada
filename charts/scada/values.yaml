@@ -10,6 +10,8 @@ sink:
 workloadLabels: {}
 # Named deployments with command, env, optional resources and hostDevices.
 processes: []
+# Raw Kubernetes manifests; template expressions are not evaluated.
+extraObjects: []
 image: ""
 command: []
 pullSecret: ""
@@ -17,6 +19,8 @@ machines: []
 sites: []
 collectors: []
 env: []
+# Kubernetes envFrom references for the site API.
+envFrom: []
 extraLabels: {}
 service:
   port: 3000
@@ -26,6 +30,18 @@ postgres:
   enabled: true
   image: postgres:16
   secret: scada-postgres
+  # Existing PVC: no PVC or volumeClaimTemplate is created.
+  existingClaim: ""
+  env: {}
+  envFrom: []
+  command: []
+  args: []
+  volumeMounts: []
+  volumes: []
+  readinessProbe: {}
+  livenessProbe: {}
+  startupProbe: {}
+  resources: {}
   database: scada
   storage: 10Gi
   storageClass: ""
@@ -35,6 +51,8 @@ rabbitmq:
   deadLetter: null
   # A named standalone PVC replaces the default volumeClaimTemplates when set.
   claimName: ""
+  createClaim: true
+  podAnnotations: {}
   configName: ""
   rolloutOnConfigChange: false
   definitions: null

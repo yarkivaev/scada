@@ -11,7 +11,7 @@ spec:
   ports:
     - name: postgres
       port: 5432
-      targetPort: postgres
+      targetPort: 5432
   selector:
     {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 4 }}
 ---
@@ -30,38 +30,75 @@ spec:
     matchLabels:
       {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 6 }}
   template:
+    {{- if .Values.postgres.podTemplate }}
+    {{- toYaml .Values.postgres.podTemplate | nindent 4 }}
+    {{- else }}
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
         {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 8 }}
     spec:
+      {{- with .Values.pullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
       containers:
         - name: postgres
           image: {{ .Values.postgres.image | quote }}
+          {{- with .Values.postgres.command }}
+          command: {{ toJson . }}
+          {{- end }}
+          {{- with .Values.postgres.args }}
+          args: {{ toJson . }}
+          {{- end }}
           ports:
             - name: postgres
               containerPort: 5432
           env:
-            - name: POSTGRES_DB
-              value: {{ .Values.postgres.database | quote }}
-            - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.postgres.secret }}
-                  key: user
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.postgres.secret }}
-                  key: password
-            - name: PGDATA
-              value: {{ .Values.postgres.data | quote }}
+            {{- $env := dict "POSTGRES_DB" .Values.postgres.database "PGDATA" .Values.postgres.data
+              "POSTGRES_USER" (dict "valueFrom" (dict "secretKeyRef" (dict "name" .Values.postgres.secret "key" "user")))
+              "POSTGRES_PASSWORD" (dict "valueFrom" (dict "secretKeyRef" (dict "name" .Values.postgres.secret "key" "password"))) }}
+            {{- range $key, $value := .Values.postgres.env }}
+            {{- $_ := set $env $key $value }}
+            {{- end }}
+            {{- $order := concat (list "POSTGRES_DB" "POSTGRES_USER" "POSTGRES_PASSWORD" "PGDATA") (without (keys $env | sortAlpha) "POSTGRES_DB" "POSTGRES_USER" "POSTGRES_PASSWORD" "PGDATA") }}
+            {{- range $key := $order }}
+            - name: {{ $key }}
+              {{- include "scada.envValue" (index $env $key) | nindent 14 }}
+            {{- end }}
+          {{- with .Values.postgres.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- range $key := list "readinessProbe" "livenessProbe" "startupProbe" "resources" }}
+          {{- with index $.Values.postgres $key }}
+          {{ $key }}:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            {{- with .Values.postgres.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      {{- if or .Values.postgres.existingClaim .Values.postgres.volumes }}
+      volumes:
+        {{- if .Values.postgres.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.postgres.existingClaim }}
+        {{- end }}
+        {{- with .Values.postgres.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+  {{- end }}
+  {{- if not .Values.postgres.existingClaim }}
   volumeClaimTemplates:
     - metadata:
         name: data
       spec:
         {{- include "scada.claim" (dict "size" .Values.postgres.storage "class" .Values.postgres.storageClass) | nindent 8 }}
+{{- end }}
 {{- end }}
