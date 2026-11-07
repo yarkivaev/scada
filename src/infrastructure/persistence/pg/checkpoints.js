@@ -37,12 +37,12 @@ function replayCursor(pool, machineId) {
         `WITH closed AS (
             SELECT MAX(EXTRACT(EPOCH FROM end_time)) AS ts
             FROM segments
-            WHERE machine = $1 AND duration > 0
+            WHERE machine = $1 AND kind = 'phase' AND duration > 0
         ),
         pending AS (
             SELECT MAX(EXTRACT(EPOCH FROM start_time)) AS ts
             FROM segments
-            WHERE machine = $1 AND duration = 0
+            WHERE machine = $1 AND kind = 'phase' AND duration = 0
         )
         SELECT COALESCE(LEAST(closed.ts, pending.ts), pending.ts, closed.ts, 0.0) AS cursor
         FROM closed, pending`,
@@ -58,7 +58,7 @@ function pendingSegments(pool) {
                 EXTRACT(EPOCH FROM start_time) AS start,
                 EXTRACT(EPOCH FROM end_time) AS end
          FROM segments
-         WHERE duration = 0`
+         WHERE kind = 'phase' AND duration = 0`
     ).then((result) => {
         return result.rows.map((row) => {
             return {
@@ -116,7 +116,7 @@ export default function checkpointStatePg(pool, metricsEnabled = true) {
             return pool.query(
                 `SELECT name, start_time, end_time, duration, tags, options, properties
                  FROM segments
-                 WHERE machine = $1 AND start_time < $2
+                 WHERE machine = $1 AND kind = 'phase' AND start_time < $2
                  ORDER BY start_time DESC`,
                 [machineId, new Date(beforeEpoch * 1000)]
             ).then((result) => {
