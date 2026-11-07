@@ -40,7 +40,7 @@ function accept(pool, machine, items, cutoff) {
             // eslint-disable-next-line no-await-in-loop
             await client.query(`INSERT INTO history_work(id,machine,from_ms,until_ms)
                 VALUES(md5($1||':'||$2::text)::uuid,$1,$3,$3)
-                ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
+                ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
             [machine,Math.floor(time/bucket),time]);
         }
         return { inserted: added.length };
@@ -52,32 +52,41 @@ function context(pool,machine,from,until,options) {
 }
 async function unchanged(client, machine, base) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
-    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity });
+    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null });
     if (latest.revision !== base.revision) {
         const error = new Error('History context changed');
         error.statusCode = 409;
         throw error;
     }
+    return latest;
 }
 function checkClaim(work, base) {
-    if (String(work.token) !== base?.workToken || Number(work.from_ms)<base.from || Number(work.until_ms)>base.until) {
+    if (String(work.token) !== base?.workToken || Number(work.from_ms)<base.from || Number(work.until_ms)>base.until || (work.cursor_ms === null ? null : Number(work.cursor_ms)) !== (base.cursor ?? null) || (work.end_ms === null ? null : Number(work.end_ms)) !== (base.end ?? null)) {
         const error = new Error('History work claim changed');
         error.statusCode=409;
         throw error;
     }
 }
+async function advance(client,machine,workId,page) {
+    if (page?.next !== null && page?.next !== undefined) {
+        await client.query('UPDATE history_work SET cursor_ms=$3,end_ms=$4,token=gen_random_uuid() WHERE id=$1 AND machine=$2',[workId,machine,page.next,page.end]);
+    } else { await client.query('DELETE FROM history_work WHERE id=$1 AND machine=$2', [workId, machine]); }
+}
 function commit(pool, machine, workId, segments, base) {
     if (!Array.isArray(segments) || segments.length > 1000) { throw new TypeError('Bounded segments required'); }
     return transaction(pool, machine, async (client) => {
-        const work = await client.query('SELECT id,token,from_ms,until_ms FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE', [workId, machine]);
+        const work = await client.query('SELECT id,token,from_ms,until_ms,cursor_ms,end_ms FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE', [workId, machine]);
         if (!work.rowCount) { return { applied: false }; }
         checkClaim(work.rows[0],base);
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
-        if (base?.revision) { await unchanged(client, machine, base); }
+        const latest = base?.revision ? await unchanged(client, machine, base) : null;
+        if (latest && segments.some((item) => { return new Date(item.end_time).getTime()>latest.context.page.until; })) {
+            throw new TypeError('Segment extends beyond bounded history page; upgrade history worker');
+        }
         await client.query(`INSERT INTO history_annotations(machine,kind,start_time,name,end_time,duration,tags,properties,resolved)
             SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
-            WHERE machine=$1
-            ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=EXCLUDED.end_time,duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine]);
+            WHERE machine=$1 AND start_time<=$3 AND end_time>=$2
+            ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine,new Date(latest?.context.page.from ?? base.from),new Date(latest?.context.page.until ?? base.until)]);
         for (const item of segments) {
             // Only computed fields change. User cuts/labels must be applied by caller before commit.
             // eslint-disable-next-line no-await-in-loop
@@ -92,7 +101,7 @@ function commit(pool, machine, workId, segments, base) {
                 typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags ?? null),
                 typeof item.properties === 'string' ? item.properties : JSON.stringify(item.properties ?? null), item.resolved ?? true]);
         }
-        await client.query('DELETE FROM history_work WHERE id=$1 AND machine=$2', [workId, machine]);
+        await advance(client,machine,workId,latest?.context.page);
         return { applied: true };
     });
 }
@@ -108,18 +117,20 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now } =
         async purge() {
             const result = await pool.query(`DELETE FROM history_observations o WHERE time_ms < $1
                 AND NOT EXISTS (SELECT 1 FROM history_work w WHERE w.machine=o.machine
-                    AND o.time_ms BETWEEN w.from_ms-86400000 AND w.until_ms+86400000)
+                    AND (o.time_ms BETWEEN w.from_ms-86400000 AND greatest(w.until_ms,COALESCE(w.end_ms,w.until_ms))+86400000
+                    OR (o.time_ms<w.from_ms-86400000 AND NOT EXISTS (SELECT 1 FROM history_observations anchor
+                        WHERE anchor.machine=o.machine AND anchor.channel=o.channel AND anchor.time_ms>o.time_ms AND anchor.time_ms<w.from_ms-86400000))))
                 AND EXISTS (SELECT 1 FROM history_observations newer WHERE newer.machine=o.machine
                     AND newer.channel=o.channel AND newer.time_ms>o.time_ms AND newer.time_ms<$1)`, [cutoff()]);
             await retainMetricReceipts(pool, retentionDays);
             return result.rowCount;
         },
         accept(machine, items) { return accept(pool, machine, items, cutoff()); },
-        context(machine, from, until, padding = 60000) { return context(pool, machine, from, until, { padding, cutoff: cutoff() }); },
+        context(machine, from, until, padding = 60000, page = {}) { return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page }); },
         async work(machine) {
             machineName(machine);
-            const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until" FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
-            return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until) }; }) };
+            const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
+            return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until),cursor:row.cursor === null ? null : Number(row.cursor),end:row.end === null ? null : Number(row.end) }; }) };
         },
         commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, base); }
     };

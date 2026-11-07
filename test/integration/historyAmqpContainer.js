@@ -32,7 +32,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
         postgres = await new GenericContainer('postgres:16-alpine').withEnvironment({ POSTGRES_PASSWORD: 'test' }).withExposedPorts(5432).start();
         pool = new pg.Pool({ host: postgres.getHost(), port: postgres.getMappedPort(5432), user: 'postgres', password: 'test' });
         await until(async () => { try { await pool.query('SELECT 1'); return true; } catch { return false; } });
-        for (const name of ['V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql', 'E0007__metric_receipts.sql']) {
+        for (const name of ['V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql', 'E0007__metric_receipts.sql', 'E0009__history_continuation.sql']) {
             await pool.query(await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8'));
         }
         await historyPg(pool).configure('icht1', [{ topic: 'MX210/icht-1/GET/AI3/VALUE', channel: 'power' }]);

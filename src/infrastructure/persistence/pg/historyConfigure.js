@@ -19,7 +19,7 @@ export default async function historyConfigure(client,machine,topics,bucketMs,re
             ORDER BY m.ts,m.ctid ON CONFLICT DO NOTHING RETURNING time_ms
         ) INSERT INTO history_work(id,machine,from_ms,until_ms)
             SELECT md5($1||':'||(time_ms/$4)::text)::uuid,$1,min(time_ms),max(time_ms) FROM imported GROUP BY time_ms/$4
-            ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
+            ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
         [machine,added,retentionDays,bucketMs]);
     }
     return {configured:topics.length};

@@ -21,6 +21,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0001__edge_metrics.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0006__historical_telemetry.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0007__metric_receipts.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0009__history_continuation.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('keeps first local metric before history registration and across receiver restarts', async () => {
@@ -203,6 +204,99 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await store.accept('priority',[{eventId:'latest',channel:'a',time:now,value:20}]);
         const work=(await store.work('priority')).items;
         assert.equal(work.length,8); assert.equal(work[0].until,now);
+    });
+
+    it('durably pages more than 10000 changing observations with restart, response loss and context CAS', async () => {
+        const machine='paged'; const time=Math.floor((Date.now()-20000000)/30000)*30000+10000;
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value)
+            SELECT $1,'power',$2::bigint+n*1000+CASE WHEN n>=6000 THEN 30000 ELSE 0 END,'page-power-'||n,n%2 FROM generate_series(0,12000) n`,[machine,time]);
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','off',$2,$3,12000,'["repair"]')`,[machine,new Date(time),new Date(time+12030000)]);
+        let store=historyPg(pool);
+        await store.accept(machine,[{eventId:'carried',channel:'carried',time:time-1000,value:5}]);
+        let work=(await store.work(machine)).items[0];
+        let context=await store.context(machine,work.from,work.until,2000);
+        assert.equal(context.rightClosed,false);
+        assert.ok(context.context.page.next>time);
+        assert.ok(context.items.length<=500);
+        await assert.rejects(store.commit(machine,work.id,[{name:'off',start_time:new Date(time),end_time:new Date(time+12000000)}],{...context.context,revision:context.revision,workToken:work.token}),/beyond bounded/u);
+        const firstClaim={...context.context,revision:context.revision,workToken:work.token};
+        await store.commit(machine,work.id,[],firstClaim);
+        await assert.rejects(store.commit(machine,work.id,[],firstClaim),(error)=>{return error.statusCode===409;});
+        // A newly accepted point invalidates durable progress and the outstanding token.
+        await store.accept(machine,[{eventId:'late-carried',channel:'carried',time:time-500,value:7}]);
+        store=historyPg(pool);
+        work=(await store.work(machine)).items[0];
+        assert.equal(work.cursor,null);
+        const seen=new Set(); let pages=0;
+        /* eslint-disable no-await-in-loop -- Durable page sequencing is the behavior under test. */
+        while ((await store.work(machine)).items.length) {
+            work=(await store.work(machine)).items[0];
+            context=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
+            assert.ok(context.items.length<=500);
+            if (work.cursor!==null && work.cursor<time+6030000) { assert.equal(context.initial.values.carried,7); }
+            if (work.cursor>time+6030000) { assert.equal(context.initial.values.carried,undefined); }
+            const points=context.items.filter((point)=>{return point.channel==='power';});
+            points.forEach((point)=>{seen.add(point.time);});
+            const rows=points.map((point)=>{return {kind:'phase',name:point.value===0?'off':'heat',start_time:new Date(point.time).toISOString(),end_time:new Date(point.time).toISOString(),duration:0};});
+            const claim={...context.context,revision:context.revision,workToken:work.token};
+            if (pages===1) {
+                await pool.query(`UPDATE segments SET tags='["manual-cut"]' WHERE machine=$1`,[machine]);
+                await assert.rejects(store.commit(machine,work.id,rows,claim),(error)=>{return error.statusCode===409;});
+                context=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
+            }
+            await store.commit(machine,work.id,rows,{...context.context,revision:context.revision,workToken:work.token});
+            // Restart loses all application memory between every page.
+            store=historyPg(pool);
+            pages+=1;
+            assert.ok(pages<60);
+        }
+        /* eslint-enable no-await-in-loop */
+        const original=(await pool.query('SELECT end_time,tags FROM history_annotations WHERE machine=$1 AND start_time=$2',[machine,new Date(time)])).rows[0];
+        assert.equal(original.end_time.getTime(),time+12030000);
+        assert.equal(seen.size,12001);
+        assert.equal(Number((await pool.query('SELECT count(*) FROM segments WHERE machine=$1',[machine])).rows[0].count),12001);
+        assert.ok(pages>40);
+    });
+
+    it('finishes only persisted continuation after retention boundary and receiver restart', async () => {
+        const machine='retention-page'; const start=Date.now()-30*86400000+1000;
+        let clock=start+30*86400000-500;
+        let store=historyPg(pool,{now:()=>{return clock;}});
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value) SELECT $1,'power',$2::bigint+n*1000,'retention-page-'||n,n%2 FROM generate_series(0,600) n`,[machine,start]);
+        await store.accept(machine,[{eventId:'retention-carry',channel:'carry',time:start,value:7}]);
+        let work=(await store.work(machine)).items[0];
+        let snapshot=await store.context(machine,work.from,work.until,1000);
+        await store.commit(machine,work.id,[],{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        clock+=60000;
+        await store.purge();
+        store=historyPg(pool,{now:()=>{return clock;}});
+        assert.equal((await store.context(machine,work.from,work.until,1000)).available,false);
+        assert.equal((await store.context(machine,work.from,work.until,1000,{cursor:start+1,end:start+600000})).available,false);
+        /* eslint-disable no-await-in-loop -- Persisted restart pages must finish serially. */
+        while ((await store.work(machine)).items.length) {
+            work=(await store.work(machine)).items[0];
+            snapshot=await store.context(machine,work.from,work.until,1000,{cursor:work.cursor,end:work.end});
+            assert.equal(snapshot.available,true);
+            assert.ok(snapshot.items.length>0);
+            assert.equal(snapshot.initial.values.carry,7);
+            await store.commit(machine,work.id,[],{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        }
+        /* eslint-enable no-await-in-loop */
+    });
+
+    it('pages dense multi-channel timestamps without splitting a timestamp group', async () => {
+        const machine='dense-page'; const time=Date.now()-200000;
+        await pool.query(`INSERT INTO history_observations(machine,channel,time_ms,event_id,value)
+            SELECT $1,'channel-'||c,$2::bigint+n*1000,'dense-'||c||'-'||n,n%2 FROM generate_series(0,100) n CROSS JOIN generate_series(1,100) c`,[machine,time]);
+        const store=historyPg(pool);
+        await store.accept(machine,[{eventId:'dense-carry',channel:'carry',time:time-1000,value:7}]);
+        const work=(await store.work(machine)).items[0];
+        const snapshot=await store.context(machine,work.from,work.until,1000);
+        assert.ok(snapshot.items.length<=10000);
+        assert.ok(snapshot.context.page.next!==null);
+        const last=snapshot.items.at(-1).time;
+        assert.equal(snapshot.items.filter((point)=>{return point.time===last;}).length,100);
+        assert.equal(snapshot.context.page.next,last+1000);
     });
 
 });
