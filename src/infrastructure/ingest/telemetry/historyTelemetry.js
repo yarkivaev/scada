@@ -20,7 +20,7 @@ export default function historyTelemetry(env, pool) {
     if (!Array.isArray(bindings) || !bindings.length || bindings.some((pattern) => { return typeof pattern !== 'string' || !pattern; })) {
         throw new TypeError('Local telemetry binding patterns required');
     }
-    const sink = metricsSinkFromPool(pool);
+    const sink = metricsSinkFromPool(pool, { firstWins: true });
     return amqpSource(url, env.HISTORY_AMQP_QUEUE ?? 'scada.telemetry.history', {
         accept(delivery) { return persistTelemetry(sink, delivery); }
     }, {

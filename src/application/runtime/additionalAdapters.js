@@ -52,7 +52,7 @@ function borrowed(pool) {
         end() { return Promise.resolve(); } };
 }
 function telemetry(spec, pool) {
-    const inner = spec.clickhouse ? clickhouseSink(spec.clickhouse, spec.table ?? 'scada.metrics') : metricsSinkFromPool(pool);
+    const inner = spec.clickhouse ? clickhouseSink(spec.clickhouse, spec.table ?? 'scada.metrics') : metricsSinkFromPool(pool, { firstWins: spec.firstWins === true });
     return foldedMetricsSink(inner, pool, spec.devices);
 }
 function metrics(spec, pool, context) {
@@ -62,7 +62,7 @@ function metrics(spec, pool, context) {
 function mqttPostgres(spec, pool, context) {
     let failed = false;
     context.report?.({ state: 'degraded' });
-    return mqttMetrics(spec.mqtt, metricsSinkFromPool(pool), spec.topic, {
+    return mqttMetrics(spec.mqtt, metricsSinkFromPool(pool, { firstWins: spec.firstWins === true }), spec.topic, {
         ...boundedOptions(spec), budget: context.budget,
         onReady() { if (!failed) { context.report?.({ state: 'running' }); } },
         onError(error) {

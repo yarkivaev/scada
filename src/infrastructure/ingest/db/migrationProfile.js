@@ -24,7 +24,8 @@ const privilegedOnly = new Set([
     'E0002__edge_retention_delete.sql',
     'E0003__edge_operations_grants.sql',
     'E0004__edge_operations_delete.sql',
-    'E0005__historical_telemetry_grants.sql'
+    'E0005__historical_telemetry_grants.sql',
+    'E0008__metric_receipts_grants.sql'
 ]);
 
 /**

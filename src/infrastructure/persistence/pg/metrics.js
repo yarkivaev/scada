@@ -1,3 +1,4 @@
+import metricsInsertSql from './metricsInsertSql.js';
 import risesSql from './risesSql.js';
 import changesSql from './changesSql.js';
 import holdsSql from './holdsSql.js';
@@ -14,7 +15,7 @@ async function pollRows(pool, topic, afterIso, untilIso) {
     });
 }
 
-export default function metricsStatePg(pool) {
+export default function metricsStatePg(pool, { firstWins = false } = {}) {
     return {
         async latestForTopic(topic) {
             const result = await pool.query(
@@ -55,7 +56,7 @@ export default function metricsStatePg(pool) {
                 return row.value;
             });
             await pool.query(
-                'INSERT INTO metrics (topic, ts, value) SELECT * FROM unnest($1::text[], $2::timestamptz[], $3::float8[])',
+                metricsInsertSql(firstWins),
                 [topics, tss, values]
             );
         }
@@ -68,8 +69,8 @@ export default function metricsStatePg(pool) {
  * @param {object} pool - PostgreSQL pool
  * @returns {object} sink with write(records)
  */
-export function metricsSinkFromPool(pool) {
-    const metrics = metricsStatePg(pool);
+export function metricsSinkFromPool(pool, options = {}) {
+    const metrics = metricsStatePg(pool, options);
     return {
         async write(records) {
             if (records.length === 0) {

@@ -1,3 +1,4 @@
+import retainMetricReceipts from './retainMetricReceipts.js';
 function intervalFor(days) {
     return `${days} days`;
 }
@@ -53,6 +54,7 @@ async function vacuumTables(pool) {
  */
 export default async function runRetention(pool, days) {
     const deleted = await deleteStale(pool, days);
+    await retainMetricReceipts(pool, days);
     await vacuumTables(pool);
     return { retentionDays: days, deleted };
 }

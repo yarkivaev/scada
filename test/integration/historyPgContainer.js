@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import { GenericContainer } from 'testcontainers';
 import { readFile } from 'node:fs/promises';
+import retainMetricReceipts from '../../src/infrastructure/ingest/db/retainMetricReceipts.js';
+import metricsStatePg, { metricsSinkFromPool } from '../../src/infrastructure/persistence/pg/metrics.js';
 import historyPg from '../../src/infrastructure/persistence/pg/history.js';
 
 describe('Historical telemetry PostgreSQL', function historyTests() {
@@ -19,8 +21,38 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/V0008__segments_updated_at.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0001__edge_metrics.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0006__historical_telemetry.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0007__metric_receipts.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
+    it('keeps first local metric before history registration and across receiver restarts', async () => {
+        const topic = 'first-wins/power';
+        const ts = Date.now() - 1000;
+        const first = metricsSinkFromPool(pool, { firstWins: true });
+        await first.write([{ topic, ts, value: 11 }]);
+        await metricsSinkFromPool(pool, { firstWins: true }).write([{ topic, ts, value: 99 }]);
+        await historyPg(pool).configure('first-wins', [{ topic, channel: 'power' }]);
+        await Promise.all([first.write([{ topic, ts, value: 33 }]), first.write([{ topic, ts, value: 44 }])]);
+        assert.equal((await metricsStatePg(pool).latestForTopic(topic)).value, 11);
+        assert.deepEqual((await pool.query('SELECT value FROM metrics WHERE topic=$1', [topic])).rows, [{ value: 11 }]);
+        assert.equal((await historyPg(pool).context('first-wins', ts, ts)).items[0].value, 11);
+    });
+    it('retains receipts while raw metrics remain and expires only beyond history retention', async () => {
+        const sink = metricsSinkFromPool(pool, { firstWins: true });
+        const old = Date.now() - 40 * 86400000;
+        const recent = Date.now() - 86400000;
+        await sink.write([{topic:'receipt-retention',ts:old,value:1},{topic:'receipt-retention',ts:recent,value:2}]);
+        await retainMetricReceipts(pool, 30);
+        assert.equal((await pool.query("SELECT count(*) FROM metric_receipts WHERE topic='receipt-retention'")).rows[0].count,'2');
+        await pool.query("DELETE FROM metrics WHERE topic='receipt-retention'");
+        await retainMetricReceipts(pool, 30);
+        assert.deepEqual((await pool.query("SELECT value FROM metric_receipts WHERE topic='receipt-retention'")).rows,[{value:2}]);
+    });
+    it('preserves existing raw metrics when first-wins is enabled later', async () => {
+        const topic='legacy-receipt'; const ts=Date.now()-1000;
+        await metricsSinkFromPool(pool).write([{topic,ts,value:7}]);
+        await metricsSinkFromPool(pool,{firstWins:true}).write([{topic,ts,value:77}]);
+        assert.deepEqual((await pool.query('SELECT value FROM metrics WHERE topic=$1',[topic])).rows,[{value:7}]);
+    });
     it('atomically accepts first value, ignores conflicts and records persistent work', async () => {
         const store = historyPg(pool);
         const time = Date.now() - 10000;
@@ -134,11 +166,14 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
 
     it('supports the existing receiver role with only required local history privileges', async () => {
         await pool.query('CREATE ROLE supervisor_sink');
+        await pool.query('GRANT SELECT, INSERT ON metrics TO supervisor_sink');
         await pool.query(await readFile(new URL('../../db/migrations/E0005__historical_telemetry_grants.sql', import.meta.url),'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0008__metric_receipts_grants.sql', import.meta.url),'utf8'));
         const client=await pool.connect();
         try {
             await client.query('SET ROLE supervisor_sink');
             assert.equal((await client.query('SELECT count(*) FROM history_work')).rowCount,1);
+            await metricsSinkFromPool(client,{firstWins:true}).write([{topic:'role/metric',ts:Date.now(),value:1}]);
             await client.query("INSERT INTO history_topics(machine,topic,channel) VALUES('role','role/topic','value')");
         } finally { await client.query('RESET ROLE'); client.release(); }
     });

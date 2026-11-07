@@ -17,10 +17,10 @@ describe('control placement', () => {
     });
     it('waits 30 seconds with a surviving reader, then replaces without revoking isolated node', () => {
         const current = { a: { generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }, b: { generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] } };
-        const reports = [report('a', 0), report('b', 20000, [{ taskId: 's', state: 'running', lastRead: 20000 }]), report('c', 20000)];
+        const reports = [report('a', 0), report('b', 20000, [{ taskId: 's', generation: 1, state: 'running', lastRead: 20000 }]), report('c', 20000)];
         const before = schedule(catalog, reports, current, { now: 20000, freshnessMs: 10000 });
         assert.equal(before.c.assignments.length, 0);
-        const after = schedule(catalog, [report('a', 0), report('b', 31000, [{ taskId: 's', state: 'running', lastRead: 20000 }]), report('c', 31000)], current, { now: 31000, freshnessMs: 10000 });
+        const after = schedule(catalog, [report('a', 0), report('b', 31000, [{ taskId: 's', generation: 1, state: 'running', lastRead: 20000 }]), report('c', 31000)], current, { now: 31000, freshnessMs: 10000 });
         assert.equal(after.c.assignments.length, 1);
         assert.equal(after.a.assignments.length, 1);
     });
@@ -37,7 +37,7 @@ describe('control placement', () => {
 describe('placement recovery', () => {
     it('removes excess only after two remaining copies confirm reads', () => {
         const current = Object.fromEntries(['a', 'b', 'c'].map((id) => { return [id, { generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
-        const reports = ['a', 'b', 'c'].map((id) => { return report(id, 1000, [{ taskId: 's', state: 'running', lastRead: 1000 }]); });
+        const reports = ['a', 'b', 'c'].map((id) => { return report(id, 1000, [{ taskId: 's', generation: 1, state: 'running', lastRead: 1000 }]); });
         const result = schedule(catalog, reports, current, { now: 1000 });
         assert.equal(Object.values(result).flatMap((row) => { return row.assignments; }).length, 2);
     });
@@ -87,4 +87,21 @@ describe('recovery epoch read evidence', () => {
         const result = schedule({ ...catalog, controlEpoch: 'new', tasks: [{ ...catalog.tasks[0], spec: { adapter: 'test', value: 2 } }] }, reports, current, { now: 1000 });
         assert.equal(result.b.assignments[0].spec.value, 1);
     });
+});
+
+describe('assignment read evidence fencing', () => {
+    for (const evidence of [{ generation: 0, lastRead: 40000 }, { generation: 1, lastRead: 40001 }]) {
+        it(`replaces readers with stale generation or future read: ${JSON.stringify(evidence)}`, () => {
+            const current = Object.fromEntries(['a', 'b'].map((id) => { return [id, { generation: 1, assignments: [{ taskId: 's', generation: 1, assignedAt: 0, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
+            const reports = ['a', 'b'].map((id) => { return report(id, 40000, [{ taskId: 's', state: 'running', ...evidence }]); });
+            const result = schedule(catalog, [...reports, report('c', 40000)], current, { now: 40000 });
+            assert.equal(result.c.assignments.length, 1);
+        });
+        it(`retains recovery copies until current-generation reads: ${JSON.stringify(evidence)}`, () => {
+            const current = Object.fromEntries(['a', 'b', 'c'].map((id) => { return [id, { generation: 1, assignments: [{ taskId: 's', generation: 1, assignedAt: 40000, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
+            const reports = ['a', 'b', 'c'].map((id) => { return report(id, 40000, [{ taskId: 's', state: 'running', ...evidence }]); });
+            const result = schedule(catalog, reports, current, { now: 40000 });
+            assert.equal(Object.values(result).flatMap((row) => { return row.assignments; }).length, 3);
+        });
+    }
 });

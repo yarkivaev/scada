@@ -32,7 +32,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
         postgres = await new GenericContainer('postgres:16-alpine').withEnvironment({ POSTGRES_PASSWORD: 'test' }).withExposedPorts(5432).start();
         pool = new pg.Pool({ host: postgres.getHost(), port: postgres.getMappedPort(5432), user: 'postgres', password: 'test' });
         await until(async () => { try { await pool.query('SELECT 1'); return true; } catch { return false; } });
-        for (const name of ['V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql']) {
+        for (const name of ['V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql', 'E0007__metric_receipts.sql']) {
             await pool.query(await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8'));
         }
         await historyPg(pool).configure('icht1', [{ topic: 'MX210/icht-1/GET/AI3/VALUE', channel: 'power' }]);
@@ -86,7 +86,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
         release();
         assert.equal((await rabbit.exec(['rabbitmqctl', 'start_app'])).exitCode, 0);
         await until(async () => { return (await pool.query('SELECT count(*) AS n FROM history_observations')).rows[0].n === '3'; });
-        await until(async () => { return Number((await pool.query('SELECT count(*) AS n FROM metrics')).rows[0].n) >= 4; });
+        await until(async () => { return Number((await pool.query('SELECT count(*) AS n FROM metrics')).rows[0].n) === 3; });
         assert.equal((await pool.query('SELECT count(*) AS n FROM history_observations WHERE time_ms=$1', [time + 2])).rows[0].n, '1');
     });
 });
