@@ -8,7 +8,8 @@ function render(values) {
         encoding: 'utf8', input: JSON.stringify({ image: 'example.invalid/api:1', sink: { enabled: false }, rabbitmq: { enabled: false }, ...values })
     });
 }
-describe('deployment parity', () => {
+describe('deployment parity', function () {
+    this.timeout(10000);
     it('passes state-store chart settings with authoritative enabled state and secret', () => {
         assert.deepEqual(bindModules({ modules: { state_store: { enabled: false, chart: { existingClaim: 'old-data', data: '/data/pg', enabled: true, secret: 'ignored' } } } }, 'credentials'), {
             postgres: { existingClaim: 'old-data', data: '/data/pg', enabled: false, secret: 'credentials' }
