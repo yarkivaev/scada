@@ -90,7 +90,7 @@ describe('recovery epoch read evidence', () => {
 });
 
 describe('assignment read evidence fencing', () => {
-    for (const evidence of [{ generation: 0, lastRead: 40000 }, { generation: 1, lastRead: 40001 }]) {
+    for (const evidence of [{ generation: 0, lastRead: 40000 }, { generation: 1, lastRead: 45001 }]) {
         it(`replaces readers with stale generation or future read: ${JSON.stringify(evidence)}`, () => {
             const current = Object.fromEntries(['a', 'b'].map((id) => { return [id, { generation: 1, assignments: [{ taskId: 's', generation: 1, assignedAt: 0, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
             const reports = ['a', 'b'].map((id) => { return report(id, 40000, [{ taskId: 's', state: 'running', ...evidence }]); });
@@ -104,4 +104,25 @@ describe('assignment read evidence fencing', () => {
             assert.equal(Object.values(result).flatMap((row) => { return row.assignments; }).length, 3);
         });
     }
+});
+
+describe('bounded executor clock skew', () => {
+    for (const offset of [-5000, 1, 5000]) {
+        it(`keeps a reachable executor eligible with ${offset}ms clock offset`, () => {
+            const input = { ...catalog, nodes: [{id:'a',capacity:10}] };
+            assert.equal(schedule(input,[report('a',10000+offset)],{},{now:10000}).a.assignments.length,1);
+        });
+        it(`accepts current generation read evidence with ${offset}ms clock offset`, () => {
+            const current=Object.fromEntries(['a','b','c'].map(id=>{return [id,{generation:1,assignments:[{taskId:'s',generation:1,assignedAt:10000,specVersion:1,spec:{adapter:'test'}}]}]}));
+            const reports=['a','b','c'].map(id=>{return report(id,10000+offset,[{taskId:'s',generation:1,state:'running',lastRead:10000+offset}])});
+            assert.equal(Object.values(schedule(catalog,reports,current,{now:10000})).flatMap(row=>{return row.assignments}).length,2);
+        });
+    }
+    it('rejects a report after an excessive forward clock jump and supports a configured bound', () => {
+        assert.equal(schedule(catalog,[report('a',15001)],{},{now:10000}).a.assignments.length,0);
+        assert.equal(schedule(catalog,[report('a',11001)],{},{now:10000,clockSkewMs:1000}).a.assignments.length,0);
+    });
+    it('rejects invalid clock skew bounds', () => {
+        for(const clockSkewMs of [-1,0,Infinity,NaN]) { assert.throws(()=>{return schedule(catalog,[],{},{clockSkewMs})},/clock skew/u); }
+    });
 });

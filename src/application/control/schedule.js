@@ -2,19 +2,22 @@ import validateCatalog from './catalog.js';
 function same(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
 function eligible(task, node) { return (!task.pinnedNode || task.pinnedNode === node.id) && (!task.eligibleNodes || task.eligibleNodes.includes(node.id)); }
 function inEpoch(report, epoch) { return (report?.controlEpoch ?? 'initial') === epoch; }
+function clockSkew(value) {
+    if (!Number.isFinite(value) || value <= 0) { throw new TypeError('Positive finite clock skew bound required'); }
+}
 function copies(task) { return task.pinnedNode ? 1 : task.copies ?? 2; }
-function freshRead(report, input, { now, freshnessMs, controlEpoch }) {
+function freshRead(report, input, { now, freshnessMs, controlEpoch, clockSkewMs }) {
     return inEpoch(report, controlEpoch) && report?.tasks?.some((row) => {
         return row.taskId === input.taskId && row.generation === input.generation && row.state === 'running'
-            && Number.isFinite(row.lastRead) && row.lastRead <= now && now - row.lastRead <= freshnessMs;
+            && Number.isFinite(row.lastRead) && row.lastRead <= now + clockSkewMs && now - row.lastRead <= freshnessMs;
     });
 }
-function updateAllowed(task, node, slots, reports, { now, freshnessMs, controlEpoch }) {
+function updateAllowed(task, node, slots, reports, { now, freshnessMs, controlEpoch, clockSkewMs }) {
     const owners = slots.filter((slot) => { return slot.live && slot.assignments.some((row) => { return row.taskId === task.taskId; }); });
     const modern = owners.filter((slot) => { return slot.assignments.some((row) => { return row.taskId === task.taskId && same(row.spec, task.spec); }); });
     const ready = modern.some((slot) => {
         const input = slot.assignments.find((row) => { return row.taskId === task.taskId; });
-        return freshRead(reports.get(slot.id), input, { now, freshnessMs, controlEpoch });
+        return freshRead(reports.get(slot.id), input, { now, freshnessMs, controlEpoch, clockSkewMs });
     });
     const outdated = owners.filter((slot) => { return !modern.includes(slot); });
     return (modern.length === 0 || ready) && outdated[0]?.id === node.id;
@@ -39,11 +42,11 @@ function snapshots(slots, taskMap, { version: catalogVersion, controlEpoch = 'in
 }
 /** Conservative coverage-first placement. Unreachable executors retain their last snapshot. */
 // eslint-disable-next-line max-statements
-export default function schedule(catalog, reports, current, { now = Date.now(), freshnessMs = 15000, replacementDelayMs = 30000 } = {}) {
-    validateCatalog(catalog);
+export default function schedule(catalog, reports, current, { now = Date.now(), freshnessMs = 15000, replacementDelayMs = 30000, clockSkewMs = 5000 } = {}) {
+    validateCatalog(catalog); clockSkew(clockSkewMs);
     const controlEpoch = catalog.controlEpoch ?? 'initial';
     const observed = new Map(reports.map((row) => { return [row.nodeId, row]; }));
-    function live(id) { const at = observed.get(id)?.receivedAt; return Number.isFinite(at) && at <= now && now - at <= freshnessMs; }
+    function live(id) { const at = observed.get(id)?.receivedAt; return Number.isFinite(at) && at <= now + clockSkewMs && now - at <= freshnessMs; }
     const taskMap = new Map(catalog.tasks.map((task) => { return [task.taskId, task]; }));
     const declared = new Set(catalog.nodes.map((node) => { return node.id; }));
     const nodes = [...catalog.nodes, ...Object.keys(current).filter((id) => { return !declared.has(id); }).map((id) => { return { id, capacity: 0, retired: true }; })];
@@ -57,7 +60,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
         return slots.filter((node) => {
             const input = node.assignments.find((row) => { return row.taskId === task.taskId; });
             const status = observed.get(node.id)?.tasks?.find((row) => { return row.taskId === task.taskId; });
-            const progressing = input && freshRead(observed.get(node.id), input, { now, freshnessMs, controlEpoch });
+            const progressing = input && freshRead(observed.get(node.id), input, { now, freshnessMs, controlEpoch, clockSkewMs });
             const starting = input && now - (input.assignedAt ?? now) <= replacementDelayMs;
             return node.live && input && status?.state !== 'failed' && (progressing || starting);
         });
@@ -66,7 +69,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
         for (const task of tasks) {
             const active = owners(task);
             const missing = slots.filter((node) => { return !node.live && node.assignments.some((row) => { return row.taskId === task.taskId; }); });
-            const surviving = active.some((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch }); });
+            const surviving = active.some((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
             const waiting = surviving && missing.some((node) => { return now - (observed.get(node.id)?.receivedAt ?? 0) < replacementDelayMs; });
             const candidates = slots.filter((node) => { return node.live && eligible(task, node) && !active.includes(node) && !node.assignments.some((row) => { return row.taskId === task.taskId; }) && node.load + (task.cost ?? 1) <= node.capacity; });
             candidates.sort((a, b) => { return a.load / a.capacity - b.load / b.capacity || a.id.localeCompare(b.id); });
@@ -79,7 +82,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
     }
     for (const task of tasks) {
         const active = owners(task);
-        const confirmed = active.filter((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch }); });
+        const confirmed = active.filter((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
         if (confirmed.length >= copies(task)) {
             const keep = new Set(confirmed.slice(0, copies(task)).map((node) => { return node.id; }));
             active.filter((node) => { return !keep.has(node.id); }).forEach((node) => {
@@ -87,5 +90,5 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
             });
         }
     }
-    return snapshots(slots, taskMap, catalog, observed, { now, freshnessMs });
+    return snapshots(slots, taskMap, catalog, observed, { now, freshnessMs, clockSkewMs });
 }
