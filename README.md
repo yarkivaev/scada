@@ -579,3 +579,7 @@ servers:
 ```
 
 This changes the selected server only; it does not mutate the shared profile.
+
+### Central backup freshness
+
+Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP telemetry tracks `<source-family>/<device>`, so cooling for a device cannot hide missing MX210 electrical samples. Measurement topic paths are unchanged. Custom freshness callbacks must pass the source’s full identity to `seen()`.

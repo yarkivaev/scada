@@ -2,10 +2,10 @@
  * Extracts the stream id from a metrics MQTT/AMQP topic path.
  *
  * @example
- *   streamNameFromTopic('MX210/m-1/GET/AI1/VALUE') === 'm-1'
+ *   streamNameFromTopic('MX210/m-1/GET/AI1/VALUE') === 'MX210/m-1'
  *
  * @param {string} topic - Slash-separated topic
- * @returns {string|undefined} Device/stream id
+ * @returns {string|undefined} Source-family/device id
  */
 export default function streamNameFromTopic(topic) {
     if (typeof topic !== 'string' || topic.length === 0) {
@@ -17,5 +17,5 @@ export default function streamNameFromTopic(topic) {
     if (parts.length < 2) {
         return undefined;
     }
-    return parts[1];
+    return `${parts[0]}/${parts[1]}`;
 }
