@@ -30,6 +30,14 @@ function milliseconds(env, key, fallback) {
     return value;
 }
 
+function historyRepair(value) {
+    if (value === undefined) { return true; }
+    if (value !== 'true' && value !== 'false') {
+        throw new TypeError('SEGMENT_REPAIR_HISTORY_ON_START must be true or false');
+    }
+    return value === 'true';
+}
+
 export function readDeploymentConfig(env) {
     const root = path.join(appRoot, '../..');
     const prefetch = Number(env.STOMP_PREFETCH || '128');
@@ -54,6 +62,7 @@ export function readDeploymentConfig(env) {
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
         pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
+            repairHistoryOnStart: historyRepair(env.SEGMENT_REPAIR_HISTORY_ON_START),
             transactions: segmentTransactionConfig(env, dbPoolMax),
             maxMessageBytes: milliseconds(env, 'STOMP_MAX_MESSAGE_BYTES', 1048576),
             maxPendingBytes: milliseconds(env, 'STOMP_MAX_PENDING_BYTES', prefetch * 1048576),

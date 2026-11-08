@@ -1,5 +1,5 @@
 import assert from 'assert';
-import {
+import segmentPipeline, {
     segmentConflict,
     segmentUpdateColumns,
     segmentUpdateWhere,
@@ -179,4 +179,10 @@ describe('segmentPipeline monotonic upsert', function() {
             'completed close did not overwrite the orphan one-second stub'
         );
     });
+});
+
+it('rejects malformed startup history policy before connecting',()=>{
+    for(const repairHistoryOnStart of ['false',null,0]){
+        assert.throws(()=>{return segmentPipeline('stomp://fixture','postgres://fixture',{}, {repairHistoryOnStart})},/repairHistoryOnStart must be boolean/u);
+    }
 });

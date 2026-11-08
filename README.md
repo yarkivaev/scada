@@ -219,6 +219,7 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 | `POSTGRES_ADMIN_URL` | Admin user for migrations |
 | `SINK_DB_PROFILE` | `central` or `edge` |
 | `SINK_PIPELINES` | `false` skips STOMP segment, decision, and alert consumers. The site container sets this and a `supervisor-sink` container keeps the default |
+| `SEGMENT_REPAIR_HISTORY_ON_START` | `false` preserves closed historical boundaries at ingest startup. Omitted or `true` retains the existing same-name gap repair. Live ingest and silent-open handling remain active. |
 | `STATE_HTTP_PORT` / `STATE_HTTP_TOKEN` | Edge internal API |
 | `MQTT_URL`, `MQTT_TOPICS` | Optional metrics ingest |
 | `CLICKHOUSE_URL` | Central metrics sink |
