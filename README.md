@@ -583,3 +583,7 @@ This changes the selected server only; it does not mutate the shared profile.
 ### Central backup freshness
 
 Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP telemetry tracks `<source-family>/<device>`, so cooling for a device cannot hide missing MX210 electrical samples. Measurement topic paths are unchanged. Custom freshness callbacks must pass the source’s full identity to `seen()`.
+
+### MQTT publisher recovery
+
+An unexpected MQTT publisher close/offline/error retires the session and notifies `onFatal` once. Intentional `stop()` does not notify failure. Modbus runtime tasks propagate publisher failure to collector `/ready` and `/live` (503). Run the collector under its liveness supervisor: it must retire the failed executor and create a fresh one, which reconnects after the broker returns. Uncertain publications are not automatically replayed. Broker restart regression covers failed health, old poll cleanup, and confirmed fresh measurements from the replacement executor.

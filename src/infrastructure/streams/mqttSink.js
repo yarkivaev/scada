@@ -46,6 +46,7 @@ export default function mqttSink(url, options = {}) {
         write(records, { signal } = {}) { return write(live, records, signal); },
         stop() {
             const stopped = live;
+            if (stopped) { stopped.stopping = true; }
             return (stopped ? terminate(stopped, new Error('MQTT sink stopped')) : Promise.resolve()).then(() => {
                 if (live === stopped) { live = undefined; }
             });
