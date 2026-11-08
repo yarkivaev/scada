@@ -610,6 +610,8 @@ Its frozen central `admittedAt` and per-topic policy survive retries. The worker
 uses synchronous ClickHouse inserts and commits its bounded metadata counter
 only after point/rejection writes, before source ACK.
 
+Central point admission and endpoint publication use RowBinary to preserve Float64 values and UInt128 revisions exactly. The writer drains the complete synchronous ClickHouse response before committing the admission cursor.
+
 Ordinary `scada.metrics_points_v3` rows use ReplacingMergeTree(revision), keyed by
 (topic, original millisecond timestamp). Last durable admission wins, including
 array order within a batch. The user removed the previous first-value rule.

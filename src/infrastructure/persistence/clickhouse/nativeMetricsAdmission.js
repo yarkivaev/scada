@@ -1,3 +1,4 @@
+import nativeMetricsInsert from './nativeMetricsInsert.js';
 import {createHash} from 'node:crypto';
 import nativeMetricsClock from './nativeMetricsClock.js';
 import centralPoint from '../../ingest/telemetry/centralPoint.js';
@@ -56,7 +57,7 @@ async function committedState(client,points,admittedAt) {
     return {states,seq};
 }
 async function persist(client,unique,rejected,states,options) {
-    if(unique.size){await client.insert({table:'scada.metrics_points_v3',values:[...unique.values()],format:'JSONEachRow',clickhouse_settings:settings});}
+    if(unique.size){await nativeMetricsInsert(client,[...unique.values()]);}
     if(rejected.length){await client.insert({table:'scada.metrics_rejected_v3',values:rejected,format:'JSONEachRow',clickhouse_settings:settings});}
     const publishedAt=await nativeMetricsClock(client,options);
     for(const state of states){if(state.published_at===null||state.key===''){state.published_at=publishedAt;}}

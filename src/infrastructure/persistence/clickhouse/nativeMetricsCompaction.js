@@ -1,3 +1,4 @@
+import nativeMetricsInsert from './nativeMetricsInsert.js';
 import nativeMetricsClock from './nativeMetricsClock.js';
 import {effectiveNativePoints,nativeMetricCertificateMatches,OBSOLETE_NATIVE_POINT_SQL} from './nativeMetricPoints.js';
 /** One shared definition of window overlap for reads and physical cleanup. */
@@ -51,6 +52,6 @@ export default async function nativeMetricsCompaction(client,options={}) {
     await deleteObsolete(client,stale);
     const candidates=await client.query({query:`SELECT * FROM (${NATIVE_COMPACTION_WINDOWS_SQL}) WHERE published_at<={mature:Int64} LIMIT {limit:UInt32}`,query_params:params,format:'JSONEachRow'});
     const windows=await candidates.json();
-    if(windows.length){await client.insert({table:'scada.metrics_points_v3',values:endpointRows(windows,await nativeMetricsClock(client,options)),format:'JSONEachRow',clickhouse_settings:{async_insert:0,wait_for_async_insert:1}});}
+    if(windows.length){await nativeMetricsInsert(client,endpointRows(windows,await nativeMetricsClock(client,options)));}
     return stale.length+windows.length;
 }

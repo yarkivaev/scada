@@ -26,6 +26,19 @@ describe('native point storage physical compaction',function(){
         assert.equal(Number((await rows("SELECT count() n FROM scada.metrics_points_v3 WHERE topic='mixed'"))[0].n),4);
         const engine=(await rows("SELECT engine FROM system.tables WHERE database='scada' AND name='metrics_points_v3'"))[0].engine;assert.equal(engine,'ReplacingMergeTree');
     });
+    it('preserves neighboring Float64 values and constant endpoint bits after physical compaction',async()=>{
+        clock=20000;
+        await sink.write([p('binary-constant',10000,1.586),p('binary-constant',10100,1.586),p('binary-constant',10200,1.586),
+            p('binary-adjacent',10000,1.586),p('binary-adjacent',10100,1.5860000000000003),p('binary-adjacent',10200,1.586)],context());
+        const bits=async(topic)=>{return (await rows(`SELECT toString(reinterpretAsUInt64(value)) AS bits FROM scada.metrics_points_v3 FINAL WHERE topic='${topic}' AND ts<fromUnixTimestamp64Milli(11000) ORDER BY ts`)).map(row=>{return row.bits;});};
+        assert.deepEqual(await bits('binary-constant'),['4609821528181656519','4609821528181656519','4609821528181656519']);
+        assert.deepEqual(await bits('binary-adjacent'),['4609821528181656519','4609821528181656520','4609821528181656519']);
+        clock=40000;await sink.write([p('binary-constant',40000,1.586),p('binary-adjacent',40000,1.586)],context());
+        clock=200000;await sink.runCompaction();clock=400000;await sink.runCompaction();
+        await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v3 FINAL'});
+        assert.deepEqual(await bits('binary-constant'),['4609821528181656519','4609821528181656519']);
+        assert.deepEqual(await bits('binary-adjacent'),['4609821528181656519','4609821528181656520','4609821528181656519']);
+    });
     it('keeps last admitted timestamp conflicts and rejects attempts to rewrite sealed history',async()=>{
         clock=20000;await sink.write([p('winner',19000,1),p('winner',19000,2)],context());await sink.write([p('winner',19000,3)],context());
         assert.equal((await rows("SELECT value FROM scada.metrics_points_v3 FINAL WHERE topic='winner'"))[0].value,3);

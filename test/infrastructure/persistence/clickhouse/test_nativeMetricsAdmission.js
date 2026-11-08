@@ -1,9 +1,24 @@
 import assert from 'node:assert/strict';
+import {Readable} from 'node:stream';
 import admission from '../../../../src/infrastructure/persistence/clickhouse/nativeMetricsAdmission.js';
 
 function memory() {
     const writes=[];
-    return { writes, query:async () => {return {json:async () => {return []}}}, insert:async (request) => { writes.push(request); } };
+    const client={ writes, query:async () => {return {json:async () => {return []}}}, insert:async (request) => { writes.push(request); } };
+    client.exec=async(request)=>{
+        const chunks=[];for await(const chunk of request.values){chunks.push(chunk);}const data=Buffer.concat(chunks);const rows=[];let offset=0;
+        while(offset<data.length){
+            let length=0;let shift=0;let byte;
+            do{byte=data[offset];offset+=1;length+=(byte%128)*(2**shift);shift+=7;}while(byte>=128);
+            const topic=data.subarray(offset,offset+length).toString();offset+=length;
+            const ts=new Date(Number(data.readBigInt64LE(offset))).toISOString().replace('T',' ').slice(0,-1);offset+=8;
+            const value=data.readDoubleLE(offset);offset+=8;const compact_ms=Number(data.readBigUInt64LE(offset));offset+=8;
+            const revision=(data.readBigUInt64LE(offset)+(data.readBigUInt64LE(offset+8)*(2n**64n))).toString();offset+=16;
+            offset+=25;rows.push({topic,ts,value,compact_ms,revision});
+        }
+        await client.insert({table:'scada.metrics_points_v3',values:rows});return {stream:Readable.from([])};
+    };
+    return client;
 }
 const policy={compactWindowMs:1000,historyWindowMs:10000,maxHistoryAgeMs:100000,futureSkewMs:1000};
 const point=(ts,value=42) => {return {topic:'sensor',ts,value,...policy}};
