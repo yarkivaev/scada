@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import modbusPublish from '../../infrastructure/ingest/mqtt/modbusPublish.js';
 
+function runtimeConfig(spec,context) {
+    return {...spec.config,onFatal(error) {
+        context.report?.({state:'failed',fatal:true,reason:error.code??error.name});
+        spec.config.onFatal?.(error);
+    }};
+}
+
 /** Preserve the telemetry wire contract while moving durable buffering ahead of the network. */
 export default function modbusDelivery(spec, context, publish = modbusPublish) {
-    if (spec.delivery !== 'spooled') { return publish(spec.url, spec.config); }
+    const config=runtimeConfig(spec,context);
+    if (spec.delivery !== 'spooled') { return publish(spec.url, config); }
     if (!context.deliveryQueue || !spec.sinks?.length || spec.sinks.some((sink) => { return sink.type !== 'amqp'; })) {
         throw new TypeError('Spooled Modbus requires node queue and AMQP destinations');
     }
@@ -24,5 +32,5 @@ export default function modbusDelivery(spec, context, publish = modbusPublish) {
             }
         }
     };
-    return publish(spec.url, { ...spec.config, size: 1, output });
+    return publish(spec.url, { ...config, size: 1, output });
 }
