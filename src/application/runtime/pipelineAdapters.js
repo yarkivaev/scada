@@ -28,7 +28,7 @@ function adapter(factory, required, resourceKeys = () => { return []; }) {
                 start() {
                     context.signal.throwIfAborted();
                     if (stopped) { throw new Error('Pipeline stopped'); }
-                    pipeline ??= factory(configured(spec, context));
+                    pipeline ??= factory(configured(spec, context), context);
                     return pipeline.start();
                 },
                 stop() { stopped = true; return pipeline?.stop(); }
@@ -51,7 +51,9 @@ function metrics(spec, factory) {
 }
 export default function pipelineAdapters() {
     return new Map([
-        ['modbus', adapter((spec) => { return modbusPublish(spec.url, spec.config); }, ['url', 'config'], modbusResources)],
+        ['modbus', adapter((spec, context) => { return modbusPublish(spec.url, { ...spec.config, onFatal(error) {
+            context.report?.({ state: 'failed', fatal: true, reason: error.code ?? error.name });
+        } }); }, ['url', 'config'], modbusResources)],
         ['activity', adapter((spec) => { return activityTracking(spec.lokiUrl, spec.clickhouseUrl, spec.query, spec.config); }, ['lokiUrl', 'clickhouseUrl', 'query', 'config'])],
         ['amqp-relay', adapter((spec) => { return amqpMqttRelay(spec.url, spec.queue, mqttSink(spec.mqttUrl, spec.options), spec.options); }, ['url', 'queue', 'mqttUrl'])],
         ['amqp-metrics', adapter((spec) => { return metrics(spec, (sink) => { return amqpMetricsIngest(spec.url, spec.queue, sink, spec.options); }); }, ['url', 'queue', 'clickhouseUrl', 'table'])],

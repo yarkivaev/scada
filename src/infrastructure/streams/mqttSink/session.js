@@ -10,6 +10,11 @@ export function terminate(live, error) {
     }), live.options.stopTimeoutMs, 'MQTT disconnect');
     // An event callback cannot surface a rejected shutdown. stop() still returns it.
     void live.closing.catch(() => { return undefined; });
+    if (!live.stopping) {
+        try { live.options.onFatal?.(error || new Error('MQTT connection closed')); } catch {
+            // Observability must not prevent closing the retired session.
+        }
+    }
     return live.closing;
 }
 export function connect(live) {

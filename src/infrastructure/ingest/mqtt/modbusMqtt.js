@@ -177,7 +177,8 @@ export default function modbusMqtt(mqtt, devices, config) {
     const clk = clock();
     const sink = mqttSink(mqtt, {
         clientId: config.clientId || 'scada-modbus',
-        qos: 1
+        qos: 1,
+        onFatal: config.onFatal
     });
     const collector = ingestBatch(sink, { ...config, size: config.size ?? 5 });
     const sources = buildSources(devices, config, collector, clk);
