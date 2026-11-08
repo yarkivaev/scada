@@ -23,6 +23,10 @@ function bindOne(name, spec, secret) {
     if (name === 'telemetry_store') {
         return ['clickhouse', { enabled: spec.enabled !== false }];
     }
+    if (name === 'mdmesh') {
+        return ['mdmesh', { ...spec.chart, ...(spec.namespace !== undefined && { namespace: spec.namespace }),
+            enabled: spec.enabled !== false }];
+    }
     throw new Error(`system document has no module ${name}`);
 }
 
@@ -31,7 +35,7 @@ function bindOne(name, spec, secret) {
  *
  * @param {object} profile - server profile
  * @param {string|undefined} secret - state-store Secret name
- * @returns {object} postgres, rabbitmq, and clickhouse fragments
+ * @returns {object} postgres, rabbitmq, clickhouse, and mdmesh fragments
  * @example
  *   bindModules({ modules: { telemetry_store: { enabled: true } } }, 'pg');
  */

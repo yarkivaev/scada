@@ -580,6 +580,14 @@ servers:
 
 This changes the selected server only; it does not mutate the shared profile.
 
+The optional `mdmesh` module projects `chart` settings into `releases(...).scada.mdmesh`,
+with its explicit `namespace` and `enabled` (default `true`) taking precedence.
+It uses the same profile inheritance and server overrides. A consuming application
+owns the MDMesh chart and deployment; the generic application chart does not install it.
+An optional root `hmi` catalog passes through reading, includes, expansion, and release
+projection as `releases(...).hmi` without interpretation. Catalog validation belongs
+to the consuming application.
+
 ### Central backup freshness
 
 Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP telemetry tracks `<source-family>/<device>`, so cooling for a device cannot hide missing MX210 electrical samples. Measurement topic paths are unchanged. Custom freshness callbacks must pass the source’s full identity to `seen()`.

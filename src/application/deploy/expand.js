@@ -41,6 +41,7 @@ export default function expand(document) {
     assertProfiles(document.servers || [], profiles);
     const servers = expandServers(document.servers || [], paths, document.mappings || {});
     return frozen({
+        ...(document.hmi !== undefined && { hmi: document.hmi }),
         mappings: document.mappings || {},
         namespace,
         profiles,
