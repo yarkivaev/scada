@@ -110,6 +110,7 @@ export default function releases(document, cluster) {
     const profile = profileFor(expanded, host);
     assertHeld(expanded, links);
     return frozen({
+        ...(expanded.hmi !== undefined && { hmi: expanded.hmi }),
         ...(profile.target && { target: profile.target }),
         apps: passedApps(profile),
         scada: scadaRelease(expanded, host, profile, links)
