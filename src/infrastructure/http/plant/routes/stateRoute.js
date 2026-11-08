@@ -35,7 +35,7 @@ function overlay(items, rows) {
     }));
     rows.forEach((row) => {
         const item = byKey.get(row.kind);
-        if (!item) {
+        if (!item || (item.found && Date.parse(item.timestamp) > row.end_time.getTime())) {
             return;
         }
         item.found = true;

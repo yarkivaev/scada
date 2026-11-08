@@ -97,7 +97,8 @@ export default function supervisorSink(env = process.env, options = {}) {
     if (cfg.pipeline.transactions.enabled) { cfg.pipeline.onBatch = segmentBatchStats(cfg.pipeline.transactions.statsIntervalMs); }
     const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres, max: cfg.dbPoolMax }));
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
-    const dataAccess = stateDataFromPool(pool, { metricsEnabled });
+    const data = stateDataFromPool(pool, { metricsEnabled });
+    const dataAccess = options.stateData ? options.stateData(data, pool) : data;
     return {
         health: () => {return health.status()},
         apiPort: cfg.apiPort,
