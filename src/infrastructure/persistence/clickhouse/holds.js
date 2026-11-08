@@ -1,3 +1,5 @@
+import { rawMetricsRange } from './metricsRelation.js';
+
 /**
  * Coverage holds of one ClickHouse metric.
  *
@@ -20,7 +22,7 @@ function formatDateTime(date) {
 
 const HOLDS_SQL = `WITH windowed AS (
     SELECT ts, value
-    FROM scada.metrics_read
+    FROM ${rawMetricsRange('toUnixTimestamp64Milli({start:DateTime64(3)})', 'toUnixTimestamp64Milli({end:DateTime64(3)})')}
     WHERE topic = {topic:String}
       AND ts >= {start:DateTime64(3)}
       AND ts < {end:DateTime64(3)}

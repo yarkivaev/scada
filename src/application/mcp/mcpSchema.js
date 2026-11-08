@@ -92,7 +92,12 @@ export function clickhouseSchema() {
                 { name: 'topic', type: 'String' },
                 { name: 'ts', type: 'DateTime64(3)' },
                 { name: 'value', type: 'Float64' }
-            ], ['topic is the only series key', 'Legacy history and canonical telemetry; one row per topic and timestamp'])
+            ], ['topic is the only series key', 'Legacy history and canonical telemetry; one row per topic and timestamp']),
+            table('scada.metrics_raw_read', [
+                { name: 'topic', type: 'String' },
+                { name: 'ts', type: 'DateTime64(3)' },
+                { name: 'value', type: 'Float64' }
+            ], ['Every first-wins timestamp, including adaptive-hidden points; use for count/gap analytics'])
         ]
     };
 }

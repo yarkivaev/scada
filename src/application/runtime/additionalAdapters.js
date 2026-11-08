@@ -16,7 +16,7 @@ import resolveSecrets from './resolveSecrets.js';
 
 function urlOptions(spec) {
     const protocols = { mqtt: ['mqtt:', 'mqtts:', 'ws:', 'wss:'], amqp: ['amqp:', 'amqps:'], stomp: ['stomp:', 'stomps:'],
-        postgres: ['postgres:', 'postgresql:'], clickhouse: ['http:', 'https:'] };
+        postgres: ['postgres:', 'postgresql:'], clickhouse: ['http:', 'https:'], telemetryAmqp: ['amqp:', 'amqps:'] };
     Object.entries(protocols).forEach(([key, allowed]) => {
         const value = spec[key];
         if (value === undefined || value?.$secret) { return; }
@@ -52,7 +52,7 @@ function borrowed(pool) {
         end() { return Promise.resolve(); } };
 }
 function telemetry(spec, pool) {
-    const inner = spec.clickhouse ? telemetrySink(spec, pool) : metricsSinkFromPool(pool, { firstWins: spec.firstWins === true });
+    const inner = spec.clickhouse ? telemetrySink(spec) : metricsSinkFromPool(pool, { firstWins: spec.firstWins === true });
     return foldedMetricsSink(inner, pool, spec.devices);
 }
 function metrics(spec, pool, context) {
@@ -138,6 +138,9 @@ function task(factory, spec, context) {
 function required(spec, keys) {
     keys.forEach((key) => { if (!spec[key]) { throw new TypeError(`Missing ingest ${key}`); } });
 }
+function silentConfigStorage(spec) {
+    if (!spec.clickhouse && !spec.postgres) { throw new TypeError('Missing metrics storage'); }
+}
 function silentConfig(spec) {
     if (!spec.clickhouse && !spec.postgres) { throw new TypeError('Missing silent metrics storage'); }
     if (spec.devices && Object.keys(spec.devices).length && !spec.postgres) { throw new TypeError('Missing folding postgres'); }
@@ -158,8 +161,8 @@ export default function additionalAdapters() {
         ['operation-sync', descriptor((spec, pool, context) => {
             return operationSyncIngest(spec.amqp, spec.queue, operationsFromPg(pool), { ...boundedOptions(spec), budget: context.budget });
         }, ['amqp', 'queue', 'postgres'])],
-        ['amqp-pg-metrics', descriptor(metrics, ['amqp', 'queue', 'postgres'])],
-        ['mqtt-pg-metrics', descriptor(mqttPostgres, ['mqtt', 'topic', 'postgres'])],
+        ['amqp-pg-metrics', descriptor(metrics, ['amqp', 'queue'], silentConfigStorage)],
+        ['mqtt-pg-metrics', descriptor(mqttPostgres, ['mqtt', 'topic'], silentConfigStorage)],
         ['silent-streams', descriptor(silent, ['amqp', 'queue', 'sources'], silentConfig, (spec) => {
             return [...new Set(spec.sources.map((source) => { return `modbus-tcp:${source.host}:${source.port}`; }))];
         })],

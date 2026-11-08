@@ -597,40 +597,73 @@ Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP tel
 
 An unexpected MQTT publisher close/offline/error retires the session and notifies `onFatal` once. Intentional `stop()` does not notify failure. Modbus runtime tasks propagate publisher failure to collector `/ready` and `/live` (503). Run the collector under its liveness supervisor: it must retire the failed executor and create a fresh one, which reconnects after the broker returns. Uncertain publications are not automatically replayed. Broker restart regression covers failed health, old poll cleanup, and confirmed fresh measurements from the replacement executor.
 
-### Central canonical telemetry
+### Central canonical telemetry, version 2
 
-Central can opt into durable exact deduplication with `CENTRAL_TELEMETRY_POLICY`.
-The plant deployment DSL owns this JSON declaration; application-specific defaults
-belong downstream. Enabled policies retain the first durable observation for each
-logical topic and original source timestamp. Optional `thinWindowMs` keeps the
-first arrival per fixed source-time window; zero preserves every distinct timestamp.
+Central admission is configured by `CENTRAL_TELEMETRY_POLICY`; plant defaults and
+exact-topic overrides live in the deployment DSL. `centralTelemetryVersion === 2`
+distinguishes this implementation from the superseded PostgreSQL receipt design.
+There are no telemetry receipt/window/outbox tables or per-point identities in
+PostgreSQL. Existing PostgreSQL application domains remain independent.
 
-PostgreSQL receipts, thinning windows and the pending projection queue survive
-restarts. Complete central-profile migrations before enabling the policy. Receipts
-have no automatic expiry: sizing must include their keys and window indexes as well
-as pending values. Successful projection removes the queued value. A full bounded
-queue rejects new admission rather than discarding previously accepted data.
+Every protected AMQP/MQTT/sync/runtime ingress publishes a validated immutable
+batch to ONE durable RabbitMQ classic queue. Publisher confirm is the durable
+admission boundary. The queue uses single-active-consumer and prefetch 1, without
+TTL or priorities, and rejects new publication on overflow rather than dropping
+old messages. Its worker must finish the current head before any later batch.
 
-The optional central `intervalDevices` folding configuration is rejected with
-an enabled admission policy; Sokol central already classifies at edge and does
-not use this fold. This avoids computing intervals from rejected conflicts or
-thinned input.
+The worker resolves `(topic, original millisecond timestamp)` against ClickHouse
+before appending new observations. First means first in this durable admission
+order, including array order within a batch; timestamps from different process
+clocks do not select the winner. ACK follows successful ClickHouse insertion.
+A lost response leaves the same head unacknowledged. Retried or delayed old-head
+writes are identical bitmap unions, never different winning values.
 
-New ClickHouse records use additive `scada.metrics_canonical` storage. Its
-`ReplacingMergeTree` hides repeated projection attempts through canonical reads;
-physical retry copies remain until background merges. The original `scada.metrics`
-is retained as legacy history. It no longer represents the complete dataset after
-activation. Use **`scada.metrics_read`** for ad hoc SQL and MCP: this read view combines
-legacy history and canonical records with one logical row per topic/timestamp.
-Legacy data takes precedence at overlapping keys; original arrival order among
-pre-existing conflicting legacy values cannot be reconstructed.
+Canonical data uses an additive AggregatingMergeTree with one numeric value and
+compressed timestamp bitmaps per topic/window/value group. This is the actual
+telemetry representation, not a second permanent point-key registry. `thinWindowMs`
+zero exposes every unique observation. Positive windows behave conservatively:
 
-Once receipts exist, startup/write preflight rejects disabling or removing the
-policy: otherwise accepted backlog could be stranded and legacy writes could
-bypass prior decisions. Re-enable the policy to resume projection; reverting to
-legacy ingestion requires a separate data migration.
+- A constant-value window exposes its first and last timestamp (one if identical).
+- A window containing different values exposes EVERY canonical observation.
+- A late new differing observation expands the window again, preserving returns
+  such as 42 -> 43 -> 42 and repeated oscillations. Compact timestamp evidence
+  remains available for this purpose. A conflict at an existing timestamp still
+  loses to the original value.
 
-Upgrade all central writers before claiming the new admission guarantee. Do not
-mix old writers to the legacy table with the enabled policy. Read-only consumers
-need no DDL privilege; schema preparation belongs to the writer. No deployment,
-registry publication or database migration is performed by opening this PR.
+The effective window is frozen in the queued envelope. Membership checks include
+all historical policy windows, so a policy change cannot forget old winners.
+Do not group only by `(window,value)`: that would lose repeated returns.
+
+Use `scada.metrics_read` for adaptive output and `scada.metrics_raw_read` for
+full canonical timestamp density. Coverage/gap and burst/minPoints analytics use
+the raw view; they must not invent holes or lose valid constant-value bursts
+when adaptive output has only endpoints. Both are SELECT views over the same
+bitmap storage, without another data copy. Bounded adapter queries use
+`clickhouseMetricsRawRange` to filter stored time buckets before bitmap expansion;
+outer timestamp predicates remain authoritative. Free SQL over the full raw view
+can reconstruct the requested history and should still use bounded ranges.
+The views merge states before exposing points, independent of physical merges. Old production
+`scada.metrics` remains legacy history, with precedence on overlapping keys.
+Read-only clients need no DDL privilege and support a schema-first-reader rollout;
+permission or incompatible-schema errors are not hidden by legacy fallback.
+
+Every protected writer must share one RabbitMQ admission domain and one ClickHouse
+destination. The canonical table atomically records the admission-domain identity;
+a different queue/broker/vhost cannot race an independent first-wins writer into
+it. Destination mismatches and malformed/oversize heads fail closed without ACK.
+Queue limits are immutable declaration arguments: changing them or changing the
+admission domain requires a planned drain/migration, not silent replacement.
+
+Disabling after the canonical queue or v2 table exists is rejected, including an
+empty activated queue/table: pending data must not be stranded or routed around
+prior winners. Stop/upgrade all old direct writers before activation. No release,
+package/image publication, running-database migration or deployment is performed
+by opening this PR.
+
+The physical bitmap grid is always 60000 ms, including when adaptive thinning is
+configured. Logical `thinWindowMs` windows are derived only for the explicit
+adaptive read view; enabling a small output window does not multiply physical
+value rows. Standard read ports use the full canonical view, with time-bucket
+pruning on bounded queries. Central starts its archive worker independently of
+external collector mode; a temporary broker outage is reported and retried in
+the background while the read API can start.

@@ -1,5 +1,6 @@
 import centralMetricsSink from '../infrastructure/ingest/telemetry/centralMetricsSink.js';
 import centralTelemetryPreflight from '../infrastructure/ingest/telemetry/centralTelemetryPreflight.js';
+import centralPolicy from '../infrastructure/ingest/telemetry/centralPolicy.js';
 import supervisorSink from './supervisorSink.js';
 import plantServer from './plantServer.js';
 import plantOperations from './plantOperations.js';
@@ -45,7 +46,7 @@ function mqttSinkForProfile(sink, env) {
     if (!url) {
         throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for central MQTT metrics');
     }
-    return centralMetricsSink(env, sink.pool);
+    return centralMetricsSink(env);
 }
 
 function startMqtt(sink, env) {
@@ -111,9 +112,16 @@ function siteExtraRoutes(catalog, extraRoutes, syncRoutes) {
     };
 }
 
+function startCentralArchive(env) {
+    if (env.SINK_DB_PROFILE !== 'central' || !centralPolicy(env.CENTRAL_TELEMETRY_POLICY ?? {}).enabled) { return undefined; }
+    const archive = centralMetricsSink(env);
+    void archive.start().catch(() => { return undefined; });
+    return archive;
+}
 async function runSiteSink(sink, http, env) {
     await sink.run(http);
-    if (env.SINK_DB_PROFILE === 'central') { await centralTelemetryPreflight(env, sink.pool); }
+    if (env.SINK_DB_PROFILE === 'central') { await centralTelemetryPreflight(env); }
+    return startCentralArchive(env);
 }
 
 /**
@@ -139,7 +147,7 @@ export default async function siteServer(config) {
         pool: sink.pool,
         runRetention
     });
-    await runSiteSink(sink, http, env);
+    const centralTelemetry = await runSiteSink(sink, http, env);
     const mqtt = startCollection(config, () => { return startMqtt(sink, env); });
     const telemetry = startCollection(config, () => { return startTelemetryIngest(
         env,
@@ -168,5 +176,5 @@ export default async function siteServer(config) {
         owners: config.owners,
         decorateTimeline: config.decorateTimeline
     });
-    return { sink, plant, mqtt, telemetry, operationSync, operatorsSync: catalog.sync };
+    return { sink, sinkHttp:http, plant, mqtt, telemetry, centralTelemetry, operationSync, operatorsSync: catalog.sync };
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import metricsCodec from '../../../../src/infrastructure/ingest/mqtt/metricsTransformer.js';
-import { centralMetricPoint } from '../../../../src/infrastructure/persistence/pg/centralMetrics.js';
+import centralMetricPoint from '../../../../src/infrastructure/ingest/telemetry/centralPoint.js';
 
 describe('central original timestamps', function() {
     it('preserves epoch zero through the broker codec', function() {

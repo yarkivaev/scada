@@ -381,6 +381,22 @@ describe('analyticsMcp', function() {
         );
     });
 
+    it('advertises full canonical timestamps for gap and count analytics', async function() {
+        const { address, mcp, token } = await started();
+        const { body } = await post(address.port, token, {
+            id: 16,
+            jsonrpc: '2.0',
+            method: 'resources/read',
+            params: { uri: 'plant://schema/clickhouse' }
+        });
+        await mcp.close();
+        const payload = JSON.parse(body.result.contents[0].text);
+        const raw = payload.tables.find((entry) => { return entry.name === 'scada.metrics_raw_read'; });
+        assert.ok(raw, 'MCP must expose full canonical timestamp density for analytics');
+        assert.deepStrictEqual(raw.columns.map((column) => { return column.name; }), ['topic', 'ts', 'value']);
+        assert.ok(raw.notes.some((note) => { return note.includes('count/gap'); }));
+    });
+
     it('puts the overlapping timeline name on a coverage span', async function() {
         const from = '2024-11-02T03:04:05.137Z';
         const to = '2024-11-02T03:04:45.137Z';

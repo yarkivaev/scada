@@ -15,10 +15,10 @@ function settings(value, fallback) {
     if (!Number.isSafeInteger(window) || window < 0) { throw new TypeError('Invalid thinning window'); }
     return { deduplicate: true, thinWindowMs: window };
 }
-/** Exact logical timestamps are always first-wins when enabled; thinning is explicit. */
+/** Exact timestamps are first-wins; adaptive thinning preserves all differing values. */
 export default function centralPolicy(input = {}) {
     const config = typeof input === 'string' ? JSON.parse(input) : input;
-    keys(config, ['enabled', 'default', 'topics', 'maxPendingRecords', 'flushIntervalMs', 'batchSize']);
+    keys(config, ['enabled', 'default', 'topics', 'queue', 'queueMaxBytes', 'maxPendingBatches', 'batchSize']);
     if (config.enabled !== undefined && typeof config.enabled !== 'boolean') { throw new TypeError('Invalid central policy enabled'); }
     keys(config.default ?? {}, ['deduplicate', 'thinWindowMs']);
     const defaults = settings(config.default ?? {}, { thinWindowMs: 0 });
@@ -33,8 +33,12 @@ export default function centralPolicy(input = {}) {
         }
         topics.set(entry.topic, settings(entry, defaults));
     });
-    return { enabled: config.enabled === true, forTopic(topic) { return topics.get(topic) ?? defaults; },
-        maxPendingRecords: positive(config.maxPendingRecords ?? 100000, 'pending records', 2147483647),
-        flushIntervalMs: positive(config.flushIntervalMs ?? 1000, 'flush interval', 2147483647),
+    const queue = config.queue ?? 'scada.telemetry.canonical';
+    if (typeof queue !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$/u.test(queue) || queue.startsWith('amq.')) {
+        throw new TypeError('Invalid central policy queue');
+    }
+    return { enabled: config.enabled === true, queue, forTopic(topic) { return topics.get(topic) ?? defaults; },
+        queueMaxBytes: positive(config.queueMaxBytes ?? 1073741824, 'queue bytes'),
+        maxPendingBatches: positive(config.maxPendingBatches ?? 100000, 'pending batches', 2147483647),
         batchSize: positive(config.batchSize ?? 500, 'batch size', 1000) };
 }

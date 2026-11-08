@@ -63,7 +63,7 @@ describe('clickhouseSensor holds', function() {
             end: new Date('2026-10-04T00:00:00.000Z')
         }, 3000);
         assert.ok(
-            sql.includes('ts >= {start:DateTime64(3)}') && sql.indexOf('UNION ALL') < 0,
+            sql.includes('ts >= {start:DateTime64(3)}') && !/\bprior\s+AS\s*\(/iu.test(sql),
             'holds query still unioned a prior sample'
         );
     });

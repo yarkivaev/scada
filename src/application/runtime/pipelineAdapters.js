@@ -1,5 +1,4 @@
 import { mqttSink } from '../../infrastructure/streams/index.js';
-import postgresPool from '../../infrastructure/persistence/postgresPool.js';
 import telemetrySink, { validateTelemetryPolicy } from './telemetrySink.js';
 import activityTracking from '../../infrastructure/ingest/activity/activityTracking.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
@@ -49,10 +48,9 @@ function modbusResources(spec) {
     return [...new Set(paths)];
 }
 function metrics(spec, factory) {
-    const pool = spec.telemetryPolicy && spec.postgres ? postgresPool({ connectionString: spec.postgres }) : null;
-    const sink = telemetrySink(spec, pool);
+    const sink = telemetrySink(spec);
     return compositeLifecycle({ outputs: [{ start() { return sink.start?.(); }, async stop() {
-        try { await sink.stop(); } finally { await pool?.end(); }
+        await sink.stop();
     } }], inputs: [factory(sink)] });
 }
 export default function pipelineAdapters() {

@@ -1,3 +1,4 @@
+/* eslint-disable no-await-in-loop */
 import amqpSession from './amqpSource/session.js';
 import budgetAccept from './budgetAccept.js';
 
@@ -14,6 +15,7 @@ function deliveryFor(channel, message, options) {
     let settled = false;
     return {
         content: message.content, fields: message.fields, properties: message.properties,
+        active() {return !settled && options.active();},
         ack() {
             if (!settled && options.active()) { channel.ack(message); settled = true; }
         },
@@ -48,6 +50,16 @@ function consume(channel, collector, options) {
         }
     };
 }
+async function rejectCapacity(channel,message,options) {
+    reportFailure(options,new Error(options.preserveOnCapacity ? 'AMQP payload capacity exceeded; retained for retry' : 'AMQP payload capacity exceeded; rejected without requeue'));
+    if (options.preserveOnCapacity) {
+        // Never NACK a canonical head into the ready queue behind later data.
+        while(options.active()) {await new Promise((resolve) => {setTimeout(resolve,250);});}
+        return;
+    }
+    try {channel.nack(message,false,false);}
+    catch(error) {reportFailure(options,error);}
+}
 function trackedConsume(channel, collector, options, pending) {
     const accept = consume(channel, collector, options);
     const state = { bytes: 0 };
@@ -55,9 +67,7 @@ function trackedConsume(channel, collector, options, pending) {
         if (!options.active()) { return Promise.resolve(); }
         const bytes = message?.content?.length ?? 0;
         if (bytes > options.maxMessageBytes || state.bytes + bytes > options.maxPendingBytes) {
-            try { channel.nack(message, false, false); } catch (error) { reportFailure(options, error); }
-            reportFailure(options, new Error('AMQP payload capacity exceeded; rejected without requeue'));
-            return Promise.resolve();
+            return rejectCapacity(channel,message,options);
         }
         state.bytes += bytes;
         const delivery = accept(message);
@@ -86,8 +96,11 @@ export default function amqpSource(url, queue, collector, options = {}) {
     const state = {};
     const session = amqpSession(url, async (channel) => {
         const generation = state.session.generation();
+        const live = {closed:false};
+        channel.on('close',() => {live.closed=true;});
+        channel.on('error',() => {live.closed=true;});
         const config = { ...settings, active() {
-            return state.session.active() && state.session.generation() === generation;
+            return !live.closed && state.session.active() && state.session.generation() === generation;
         } };
         const name = await topology(channel, queue, settings);
         const result = await channel.consume(name, trackedConsume(channel, collector, config, pending), { noAck: false, ...(settings.exclusive ? { exclusive: true } : {}) });

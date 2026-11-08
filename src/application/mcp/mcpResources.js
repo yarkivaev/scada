@@ -144,5 +144,5 @@ export default function registerResources(server, tree, catalog) {
         return tags(catalog);
     });
     publish(server, 'schema-postgres', 'plant://schema/postgres', 'Postgres tables from scada migrations', postgresSchema);
-    publish(server, 'schema-clickhouse', 'plant://schema/clickhouse', 'ClickHouse canonical scada.metrics_read', clickhouseSchema);
+    publish(server, 'schema-clickhouse', 'plant://schema/clickhouse', 'ClickHouse adaptive and full canonical metric views', clickhouseSchema);
 }

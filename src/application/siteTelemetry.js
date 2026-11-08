@@ -62,7 +62,7 @@ export default function startTelemetryIngest(env, streams, batchConfig, pool, de
     if (!url) {
         throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for AMQP telemetry ingest');
     }
-    const sink = foldedMetricsSink(centralMetricsSink(env, pool), pool, devices);
+    const sink = foldedMetricsSink(centralMetricsSink(env), pool, devices);
     const onSeen = bindSilentStreams(streams, sink);
     const ingest = startAmqpMetrics(env, sink, onSeen, batchConfig);
     if (streams) {

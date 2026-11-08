@@ -1,3 +1,5 @@
+import { rawMetricsRange } from './metricsRelation.js';
+
 /**
  * Level changes of one ClickHouse metric, including the sample held at the start.
  *
@@ -18,13 +20,13 @@ function formatDateTime(date) {
 
 const CHANGES_SQL = `WITH prior AS (
     SELECT ts, value
-    FROM scada.metrics_read
+    FROM scada.metrics_raw_read
     WHERE topic = {topic:String} AND ts < {start:DateTime64(3)}
     ORDER BY ts DESC
     LIMIT 1
 ), windowed AS (
     SELECT ts, value
-    FROM scada.metrics_read
+    FROM ${rawMetricsRange('toUnixTimestamp64Milli({start:DateTime64(3)})', 'toUnixTimestamp64Milli({end:DateTime64(3)})')}
     WHERE topic = {topic:String}
       AND ts >= {start:DateTime64(3)}
       AND ts <= {end:DateTime64(3)}

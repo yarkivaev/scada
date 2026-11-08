@@ -39,7 +39,7 @@ function metricsOf(sink, env) {
     if (!url) {
         return undefined;
     }
-    return centralMetricsSink(env, sink.pool);
+    return centralMetricsSink(env);
 }
 
 function queryFor(site) {
