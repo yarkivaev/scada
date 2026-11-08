@@ -101,6 +101,22 @@ describe('stateRoute', function() {
         assert.strictEqual(item.timestamp, later.toISOString(), 'state did not overlay interval end_time');
     });
 
+    it('keeps a current sensor reading newer than the latest interval', async function() {
+        const current = new Date('2026-10-29T08:19:23.000Z');
+        const scene = buildApi({ voltage: sensor(237.5, current) }, {
+            latest: async () => {
+                return [{ kind: 'voltage', name: '19.7', end_time: new Date('2026-10-28T14:51:07.000Z') }];
+            }
+        });
+        const res = mockRes();
+        await scene.api.handle(
+            mockReq({ method: 'GET', url: `/api/v1/machines/${scene.machineId}/state` }), res
+        );
+        assert.deepStrictEqual(JSON.parse(res.body).items[0], {
+            key: 'voltage', found: true, value: 237.5, timestamp: current.toISOString(), unit: 'V'
+        }, 'old interval overwrote the newer sensor reading');
+    });
+
     it('returns empty items for an unknown machine', async function() {
         const scene = buildApi({ voltage: sensor(1, new Date()) });
         const res = mockRes();

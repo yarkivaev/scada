@@ -120,7 +120,7 @@ function siteExtraRoutes(catalog, extraRoutes, syncRoutes) {
  */
 export default async function siteServer(config) {
     const env = collectionEnvironment(config);
-    const sink = supervisorSink(env);
+    const sink = supervisorSink(env, { stateData: config.stateData });
     const ops = bindSiteOperations(sink, config.kindSources || config.operationSources);
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,
