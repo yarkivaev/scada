@@ -43,6 +43,14 @@ function segmentSinks(postgres, pool) {
     };
 }
 
+function pipelineSettings(config) {
+    const settings = config.transactions?.enabled ? { ...config, transactions: segmentBatchPolicy(config.transactions) } : config;
+    if (settings.repairHistoryOnStart !== undefined && typeof settings.repairHistoryOnStart !== 'boolean') {
+        throw new TypeError('repairHistoryOnStart must be boolean');
+    }
+    return settings;
+}
+
 /**
  * Pipeline for streaming STOMP segment data to PostgreSQL segments table.
  * Subscribes to the durable ingest queue so shovel traffic survives consumer gaps.
@@ -56,7 +64,7 @@ function segmentSinks(postgres, pool) {
  * @returns {object} Pipeline with start() and stop() methods
  */
 export default function segmentPipeline(stomp, postgres, pool, config) {
-    const settings = config.transactions?.enabled ? { ...config, transactions: segmentBatchPolicy(config.transactions) } : config;
+    const settings = pipelineSettings(config);
     const budget = silenceBudget(settings.segmentWindow || 15);
     const { segmentSink, splitSink } = segmentSinks(postgres, pool);
     const continued = continuedSegments(segmentSink, pool, budget);
@@ -89,10 +97,12 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         health() { return source.health(); },
         destination,
         async start() {
-            const repair = abutSegments(pool, budget);
-            void repair.catch((error) => {
-                processingErrorLog('abut_segments', error, { budgetSeconds: budget });
-            });
+            if (settings.repairHistoryOnStart !== false) {
+                const repair = abutSegments(pool, budget);
+                void repair.catch((error) => {
+                    processingErrorLog('abut_segments', error, { budgetSeconds: budget });
+                });
+            }
             await source.start();
             await silence.start();
         },

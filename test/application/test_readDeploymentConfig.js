@@ -47,3 +47,12 @@ it('passes explicit finite STOMP execution and cleanup deadlines', () => {
         assert.throws(() => {return readDeploymentConfig({ STOMP_ACCEPT_TIMEOUT_MS: value })}, /STOMP_ACCEPT_TIMEOUT_MS/u);
     }
 });
+
+it('makes startup history repair an explicit boolean while preserving existing deployments by default',()=>{
+    assert.equal(readDeploymentConfig({}).pipeline.repairHistoryOnStart,true);
+    assert.equal(readDeploymentConfig({SEGMENT_REPAIR_HISTORY_ON_START:'true'}).pipeline.repairHistoryOnStart,true);
+    assert.equal(readDeploymentConfig({SEGMENT_REPAIR_HISTORY_ON_START:'false'}).pipeline.repairHistoryOnStart,false);
+    for(const value of ['', 'FALSE', '0', false, null]){
+        assert.throws(()=>{return readDeploymentConfig({SEGMENT_REPAIR_HISTORY_ON_START:value})},/SEGMENT_REPAIR_HISTORY_ON_START/u);
+    }
+});
