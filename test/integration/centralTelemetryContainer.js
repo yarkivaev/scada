@@ -6,7 +6,7 @@ import clickhouseSeries from '../../src/infrastructure/persistence/clickhouse/se
 import { GenericContainer, Wait } from 'testcontainers';
 import { createClient } from '@clickhouse/client';
 import canonicalMetrics from '../../src/infrastructure/persistence/clickhouse/canonicalMetrics.js';
-import metricsRelation, { rawMetricsRelation } from '../../src/infrastructure/persistence/clickhouse/metricsRelation.js';
+import metricsRelation from '../../src/infrastructure/persistence/clickhouse/metricsRelation.js';
 import clickhouseHolds from '../../src/infrastructure/persistence/clickhouse/holds.js';
 import clickhouseConnection from '../../src/infrastructure/persistence/clickhouse/connection.js';
 import centralMetricsSink from '../../src/infrastructure/ingest/telemetry/centralMetricsSink.js';
@@ -32,7 +32,7 @@ async function eventually(action, expected, timeout = 10000) {
     assert.deepEqual(actual, expected);
 }
 
-describe('ClickHouse ordered central admission and adaptive thinning', function() {
+describe('ClickHouse native admission and immutable compact history', function() {
     this.timeout(180000);
     let clickhouse;
     let rabbit;
@@ -42,7 +42,9 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
     let connection;
     let channel;
     let domain;
-    const policy = { enabled: true, topics: [{ topic: 'thin', thinWindowMs: 1000 }] };
+    const BASE = Math.floor(Date.now()/60000)*60000-3600000;
+    const rule = {compactWindowMs:1000,historyWindowMs:2000,maxHistoryAgeMs:2592000000,futureSkewMs:300000};
+    const policy = { enabled: true, default:rule };
     function env(extra = {}) { return { CLICKHOUSE_URL: url, AMQP_URL: broker, CENTRAL_TELEMETRY_POLICY: JSON.stringify({ ...policy, ...extra }) }; }
     before(async function() {
         [clickhouse, rabbit] = await Promise.all([
@@ -58,6 +60,8 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
         await client.command({ query: 'CREATE TABLE scada.metrics(topic String,ts DateTime64(3),value Float64) ENGINE=MergeTree ORDER BY(topic,ts)' });
         connection = await amqp.connect(broker);
         channel = await connection.createChannel();
+        await client.command({query:"CREATE USER reader IDENTIFIED BY 'test'"});
+        await client.command({query:'GRANT SELECT ON scada.* TO reader'});
     });
     after(async function() {
         await Promise.allSettled([connection?.close(), client?.close()]);
@@ -65,60 +69,70 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
     });
     async function rows(topic) {
         const response = await client.query({ query: `SELECT toUnixTimestamp64Milli(ts) AS ts,value FROM ${metricsRelation} WHERE topic={topic:String} ORDER BY ts`, query_params: { topic }, format: 'JSONEachRow' });
-        return (await response.json()).map((row) => { return { ts: Number(row.ts), value: row.value }; });
+        return (await response.json()).map((row) => { return { ts: Number(row.ts)-BASE, value: row.value }; });
     }
-    function point(topic, ts, value, thinWindowMs = 0) { return { topic, ts, value, thinWindowMs }; }
+    function point(topic, ts, value, compactWindowMs = 1000) { return { topic, ts:BASE+ts, value, ...rule, compactWindowMs, historyWindowMs:Math.max(2000,compactWindowMs*2) }; }
     it('keeps legacy-only read-only consumers working before additive schema installation', async function() {
-        await client.command({ query: "CREATE USER reader IDENTIFIED BY 'test'" });
-        await client.command({ query: 'GRANT SELECT ON scada.* TO reader' });
         const reader = await clickhouseConnection(clickhouse.getHost(), { port: clickhouse.getMappedPort(8123), username: 'reader', password: 'test' });
         try { assert.deepEqual(await reader.query('SELECT * FROM scada.metrics_read'), []); }
         finally { await reader.close(); }
     });
-    it('physically compacts equal values but restores every old timestamp when a different late value arrives', async function() {
-        const sink = canonicalMetrics(url, domain);
+    it('physically reduces offset collector observations only after the edit horizon closes', async function() {
+        let clock=Date.now();
+        const sink=canonicalMetrics(url,domain,{cleanupIntervalMs:0,now:()=>{return clock;}});
+        const samples=[0,37,100,137,200,237].map(ts=>{return point('thin',ts,42);});
         try {
-            await sink.write([point('thin', 0, 42, 1000), point('thin', 100, 42, 1000), point('thin', 200, 42, 1000), point('thin', 400, 42, 1000)]);
-            assert.deepEqual(await rows('thin'), [{ ts: 0, value: 42 }, { ts: 400, value: 42 }]);
-            await sink.write([point('thin', 100, 99, 1000)]);
-            assert.deepEqual(await rows('thin'), [{ ts: 0, value: 42 }, { ts: 400, value: 42 }]);
-            await sink.write([point('thin', 150, 43, 1000)]);
-            assert.deepEqual(await rows('thin'), [{ ts: 0, value: 42 }, { ts: 100, value: 42 }, { ts: 150, value: 43 }, { ts: 200, value: 42 }, { ts: 400, value: 42 }]);
-            await sink.write([point('thin', 100, 99, 0)]);
-            assert.equal((await rows('thin'))[1].value, 42, 'Changing policy cannot overwrite an earlier observation');
-            await client.command({query:'OPTIMIZE TABLE scada.metrics_compact_v2 FINAL'});
-            const result = await client.query({ query: "SELECT count() AS n FROM scada.metrics_compact_v2 WHERE topic='thin'", format: 'JSONEachRow' });
-            assert.equal(Number((await result.json())[0].n), 2);
-        } finally { await sink.stop(); }
-    });
-    it('uses one physical minute group independently of the adaptive output window', async function() {
-        const sink=canonicalMetrics(url,domain);
-        const thinned=Array.from({length:600},(unused,index) => {return point('physical-thin',index*100,42,1000);});
-        const exact=thinned.map(({ts,value}) => {return point('physical-exact',ts,value,0);});
-        try {
-            await sink.write(thinned);await sink.write(exact);
-            await client.command({query:'OPTIMIZE TABLE scada.metrics_compact_v2 FINAL'});
-            const query=await client.query({query:"SELECT topic,count() AS n FROM scada.metrics_compact_v2 WHERE topic IN ('physical-thin','physical-exact') GROUP BY topic ORDER BY topic",format:'JSONEachRow'});
-            assert.deepEqual((await query.json()).map(({n:count}) => {return Number(count);}),[1,1]);
-            assert.equal((await rows('physical-thin')).length,120);
-            assert.equal((await rows('physical-exact')).length,600);
-            await sink.write([point('negative-window',-1001,42,1000),point('negative-window',-1000,42,1000),point('negative-window',-999,42,1000)]);
-            assert.deepEqual((await rows('negative-window')).map(({ts}) => {return ts;}),[-1001,-1000,-999]);
+            await sink.write(samples);
+            assert.equal((await rows('thin')).length,6,'Recent observations retain full density for late changes');
+            await sink.write([point('thin',4000,42)]);
+            assert.deepEqual(await rows('thin'),[{ts:0,value:42},{ts:237,value:42},{ts:4000,value:42}]);
+            clock+=180000;await sink.runCompaction();
+            clock+=180000;await sink.runCompaction();
+            await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v3 FINAL'});
+            const result=await client.query({query:"SELECT count() n FROM scada.metrics_points_v3 WHERE topic='thin'",format:'JSONEachRow'});
+            assert.equal(Number((await result.json())[0].n),3,'Actual point rows must disappear; a thin SELECT alone is insufficient');
+            await sink.write([point('thin',100,99),point('thin',150,80)]);
+            assert.deepEqual(await rows('thin'),[{ts:0,value:42},{ts:237,value:42},{ts:4000,value:42}],'No old update or addition may change frozen history');
         } finally {await sink.stop();}
     });
-    it('retains all distinct points without thinning, including 42->43->42 returns and epoch boundaries', async function() {
-        const sink = canonicalMetrics(url, domain);
-        const input = [point('exact', -2208988800000, 42), point('exact', 0, 43), point('exact', 1, 42), point('exact', 10413791999999, 44)];
-        try { await sink.write(input); assert.deepEqual(await rows('exact'), input.map(({ ts, value }) => { return { ts, value }; })); }
-        finally { await sink.stop(); }
+    it('retains every spike and return in a mixed window, including changes delivered before sealing', async function() {
+        let clock=Date.now();
+        const sink=canonicalMetrics(url,domain,{cleanupIntervalMs:0,now:()=>{return clock;}});
+        const expected=[{ts:0,value:42},{ts:100,value:42},{ts:150,value:80},{ts:200,value:42},{ts:250,value:90},{ts:300,value:42}];
+        try {
+            await sink.write(expected.filter(({ts})=>{return ts!==150&&ts!==250;}).map(({ts,value})=>{return point('spikes',ts,value);}));
+            await sink.write([point('spikes',150,80),point('spikes',250,90)]);
+            assert.deepEqual(await rows('spikes'),expected);
+            await sink.write([point('spikes',4000,42)]);clock+=180000;await sink.runCompaction();
+            assert.deepEqual((await rows('spikes')).filter(({ts})=>{return ts<1000;}),expected);
+        } finally {await sink.stop();}
     });
-    it('does not rewrite legacy history and ignores conflicting timestamps after restart', async function() {
-        await client.insert({ table: 'scada.metrics', values: [{ topic: 'legacy', ts: '1970-01-01 00:00:01.000', value: 8 }], format: 'JSONEachRow' });
-        const first = canonicalMetrics(url, domain);
-        await first.write([point('legacy', 1000, 9), point('legacy', 2000, 10)]); await first.stop();
-        const restarted = canonicalMetrics(url, domain);
-        try { await restarted.write([point('legacy', 2000, 99)]); assert.deepEqual(await rows('legacy'), [{ ts: 1000, value: 8 }, { ts: 2000, value: 10 }]); }
-        finally { await restarted.stop(); }
+    it('uses native last-admission winners across restart and preserves legacy history', async function() {
+        await client.insert({table:'scada.metrics',values:[{topic:'legacy',ts:new Date(BASE+1000).toISOString().replace('T',' ').replace('Z',''),value:8}],format:'JSONEachRow'});
+        const first=canonicalMetrics(url,domain);
+        await first.write([point('legacy',1000,9),point('legacy',2000,10)]);await first.stop();
+        const restarted=canonicalMetrics(url,domain);
+        try {
+            await restarted.write([point('legacy',2000,99)]);
+            assert.deepEqual(await rows('legacy'),[{ts:1000,value:8},{ts:2000,value:99}]);
+        } finally {await restarted.stop();}
+    });
+    it('records old and future rejections without letting a future clock advance the frontier', async function() {
+        const sink=canonicalMetrics(url,domain);
+        try {
+            await sink.write([point('age',0,42)]);
+            await sink.write([point('age',-40*86400000,99),point('age',7200000,80)]);
+            await sink.write([point('age',100,43)]);
+            assert.deepEqual(await rows('age'),[{ts:0,value:42},{ts:100,value:43}]);
+            const result=await client.query({query:"SELECT reason FROM scada.metrics_rejected_v3 FINAL WHERE topic='age' ORDER BY reason",format:'JSONEachRow'});
+            assert.deepEqual((await result.json()).map(({reason})=>{return reason;}),['future','too_old']);
+        } finally {await sink.stop();}
+    });
+    it('does not thin point storage when the topic disables compaction', async function() {
+        const sink=canonicalMetrics(url,domain);
+        const input=[point('exact',0,42,0),point('exact',1,43,0),point('exact',2,42,0),point('exact',4000,44,0)];
+        try {await sink.write(input);assert.deepEqual(await rows('exact'),input.map(({ts,value})=>{return {ts:ts-BASE,value};}));}
+        finally {await sink.stop();}
     });
     it('rejects a second admission domain before it can race the existing first-value winner', async function() {
         const sink = canonicalMetrics(url, admissionDomain(broker, 'wrong-queue', targetIdentity(url)));
@@ -126,20 +140,21 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
         finally { await sink.stop(); }
         assert.deepEqual(await rows('foreign'), []);
     });
-    it('queues concurrent collectors through one SAC head and retains the first value across worker restarts', async function() {
+    it('queues concurrent collectors through one SAC head and preserves last-admission winners across restarts', async function() {
         const a = centralMetricsSink(env());
         const b = centralMetricsSink(env());
         await Promise.all([a.start(), b.start()]);
         try {
             await a.write([point('queued', 0, 7)]);
             await Promise.all([1, 2, 3].map((value) => { return b.write([point('queued', 0, value)]); }));
-            await eventually(() => { return rows('queued'); }, [{ ts: 0, value: 7 }]);
+            await b.write([point('queued',0,9)]);
+            await eventually(() => { return rows('queued'); }, [{ ts: 0, value: 9 }]);
             await a.stop();
-            await b.write([point('queued', 0, 9), point('queued', 1, 8)]);
-            await eventually(() => { return rows('queued'); }, [{ ts: 0, value: 7 }, { ts: 1, value: 8 }]);
+            await b.write([point('queued', 0, 10), point('queued', 1, 8)]);
+            await eventually(() => { return rows('queued'); }, [{ ts: 0, value: 10 }, { ts: 1, value: 8 }]);
         } finally { await Promise.allSettled([a.stop(), b.stop()]); }
     });
-    it('preserves first-wins through the actual AMQP telemetry and sync normalization paths', async function() {
+    it('preserves native last-wins through actual AMQP telemetry and sync normalization paths', async function() {
         const sink = centralMetricsSink(env()); await sink.start();
         await channel.assertQueue('central-source', { durable: true });
         await channel.assertExchange('central-source-telemetry','topic',{durable:true});
@@ -147,49 +162,37 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
         const ingest = amqpMetricsIngest(broker, 'central-source', sink, { size: 1, prefetch: 1 });
         await ingest.start();
         try {
-            channel.publish('central-source-telemetry','source', Buffer.from('{"ts":1000,"value":4}'), { persistent: true, headers: { 'scada-route': 'source' } });
+            channel.publish('central-source-telemetry','source', Buffer.from(JSON.stringify({ts:BASE+1000,value:4})), { persistent: true, headers: { 'scada-route': 'source' } });
             await eventually(() => { return rows('source'); }, [{ts:1000,value:4}]);
-            channel.publish('central-source-telemetry','source',Buffer.from('{"ts":1000,"value":99}'),{persistent:true,headers:{'scada-route':'source'}});
+            channel.publish('central-source-telemetry','source',Buffer.from(JSON.stringify({ts:BASE+1000,value:99})),{persistent:true,headers:{'scada-route':'source'}});
             await eventually(async () => { return (await channel.checkQueue('central-source')).messageCount; }, 0);
-            assert.deepEqual(await rows('source'),[{ts:1000,value:4}]);
+            await eventually(()=>{return rows('source');},[{ts:1000,value:99}]);
             const sync = siteSyncTargets({ metrics: sink, topic() { return 'sync'; } });
-            await sync.measurements.write('m', { items: [{ key: 'temp', values: [{ timestamp: '1970-01-01T00:00:01.000Z', value: 4 }] }] });
-            await sync.measurements.write('m', { items: [{ key: 'temp', values: [{ timestamp: '1970-01-01T00:00:01.000Z', value: 9 }] }] });
-            await eventually(() => { return rows('sync'); }, [{ ts: 1000, value: 4 }]);
+            await sync.measurements.write('m', { items: [{ key: 'temp', values: [{ timestamp: new Date(BASE+1000).toISOString(), value: 4 }] }] });
+            await sync.measurements.write('m', { items: [{ key: 'temp', values: [{ timestamp: new Date(BASE+1000).toISOString(), value: 9 }] }] });
+            await eventually(() => { return rows('sync'); }, [{ ts: 1000, value: 9 }]);
         } finally { await ingest.stop(); await sink.stop(); }
     });
-    it('preserves late returns across changed policy windows while future non-overlapping windows still thin', async function() {
-        const sink = canonicalMetrics(url,domain);
+    it('keeps recent analytical density and reports unavailability after constant history is sealed', async function() {
+        const sink=canonicalMetrics(url,domain);await sink.write([0,1000,2000,3000,4000].map(ts=>{return point('density',ts,42,10000);}));
+        const reader=await clickhouseConnection(clickhouse.getHost(),{port:clickhouse.getMappedPort(8123),username:'reader',password:'test'});
         try {
-            await sink.write([100,200,600,900].map((ts) => {return point('policy-change',ts,42,1000);}));
-            await sink.write([point('policy-change',150,43,500),point('policy-change',550,43,500)]);
-            assert.deepEqual((await rows('policy-change')).map(({ts}) => {return ts;}),[100,150,200,550,600,900]);
-            await sink.write([2100,2200,2400].map((ts) => {return point('policy-change',ts,42,500);}));
-            assert.deepEqual((await rows('policy-change')).filter(({ts}) => {return ts>=2000;}).map(({ts}) => {return ts;}),[2100,2400]);
-        } finally {await sink.stop();}
+            const range={start:new Date(BASE),end:new Date(BASE+5000)};
+            assert.equal((await clickhouseHolds(reader,'density',range,1500,'')).length,1);
+            assert((await clickhouseSeries(reader,'density',{start:new Date(BASE+1000),end:new Date(BASE+3000)},1000,'')).length>=3);
+            await sink.write([point('density',40000,42,10000)]);
+            await assert.rejects(clickhouseHolds(reader,'density',range,1500,''),{code:'SCADA_HISTORY_DENSITY_UNAVAILABLE'});
+            const graph=await clickhouseSeries(reader,'density',{start:new Date(BASE+1000),end:new Date(BASE+3000)},1000,'');
+            assert.deepEqual(graph.map(({timestamp,value})=>{return {ts:timestamp.getTime()-BASE,value};}),[{ts:1000,value:42},{ts:3000,value:42}],'A chart inside a compacted constant window keeps its constant coverage');
+        } finally {await reader.close();await sink.stop();}
     });
-    it('preserves full timestamp density for analytical holds even when the plot is thinned', async function() {
-        const sink = canonicalMetrics(url,domain);
-        await sink.write([0,1000,2000,3000,4000].map((ts) => {return point('density',ts,42,10000);}));
-        await sink.stop();
-        assert.equal((await rows('density')).length,2);
-        const query = await client.query({query:`SELECT count() AS n FROM ${rawMetricsRelation} WHERE topic='density'`,format:'JSONEachRow'});
-        assert.equal(Number((await query.json())[0].n),5);
-        const reader = await clickhouseConnection(clickhouse.getHost(),{port:clickhouse.getMappedPort(8123),username:'reader',password:'test'});
-        try {
-            const holds = await clickhouseHolds(reader,'density',{start:new Date(0),end:new Date(5000)},1500,'');
-            assert.equal(holds.length,1);
-            const middle = await clickhouseSeries(reader,'density',{start:new Date(1000),end:new Date(3000)},1000,'');
-            assert(middle.length>=3,'A bounded middle-of-window read cannot disappear between adaptive endpoints');
-        } finally {await reader.close();}
-    });
-    [false,true].forEach((beforeCommit) => { it(`keeps the unacknowledged head first across failover ${beforeCommit?'before CH commit':'after CH commit'}`, async function() {
+    [false,true].forEach((beforeCommit) => { it(`does not let a delayed old INSERT overwrite a newer native winner across failover ${beforeCommit?'before CH commit':'after CH commit'}`, async function() {
         const topic=beforeCommit?'ambiguous-before':'ambiguous-after';
         const proxy = await centralFaultProxy(url,beforeCommit);
         const projection = canonicalMetrics(proxy.url,domain);
         let activeConnection;
         const config = centralPolicy(policy);
-        const old = amqpSource(broker,config.queue,{async accept(delivery) {await projection.write(decodeBatch(delivery.content,targetIdentity(url)));}},
+        const old = amqpSource(broker,config.queue,{async accept(delivery) {const batch=decodeBatch(delivery.content,targetIdentity(url));await projection.write(batch.records,batch);}},
             {queueOptions:centralQueueOptions(config),prefetch:1,stopTimeoutMs:120000,async connect(address) {activeConnection=await amqp.connect(address);return activeConnection;},onError(){}});
         const standby = centralMetricsSink(env());
         await old.start();await standby.start();
@@ -199,16 +202,17 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
             await standby.write([point(topic,0,99)]);
             await standby.write([point(topic,1,43)]);
             await activeConnection.close();
-            await eventually(() => {return rows(topic);},[{ts:0,value:42},{ts:1,value:43}]);
+            await eventually(() => {return rows(topic);},[{ts:0,value:99},{ts:1,value:43}]);
             await new Promise((resolve) => {setTimeout(resolve,5200);});
             assert(old.active(),'A long in-flight CH operation must not permanently retire recovery after five seconds');
             proxy.release();
             await proxy.forwarded;
             await old.stop();
-            await client.command({query:`INSERT INTO scada.metrics_compact_v2 SELECT {topic:String},0,60000,0,42,groupBitmapState(toUInt64(0))`,query_params:{topic}});
-            await client.command({query:'OPTIMIZE TABLE scada.metrics_compact_v2 FINAL'});
-            const physical = await client.query({query:"SELECT count() AS n FROM scada.metrics_compact_v2 WHERE topic={topic:String}",query_params:{topic},format:'JSONEachRow'});
-            assert.equal(Number((await physical.json())[0].n),2,'A retry must not leave permanent physical duplicate states');
+            assert.deepEqual(await rows(topic),[{ts:0,value:99},{ts:1,value:43}],'A released old INSERT cannot win after a later admitted conflict');
+            await client.command({query:`INSERT INTO scada.metrics_points_v3 SELECT * FROM scada.metrics_points_v3 FINAL WHERE topic={topic:String}`,query_params:{topic}});
+            await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v3 FINAL'});
+            const physical=await client.query({query:"SELECT count() n FROM scada.metrics_points_v3 WHERE topic={topic:String}",query_params:{topic},format:'JSONEachRow'});
+            assert.equal(Number((await physical.json())[0].n),2,'Native RMT must remove physical duplicates');
         } finally {
             proxy.release();await old.stop();await standby.stop();await projection.stop();await proxy.stop();
         }
@@ -224,7 +228,7 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
             await sink.stop();
             const first=await channel.get(queue);const second=await channel.get(queue);
             assert(first&&second);
-            assert.deepEqual([decodeBatch(first.content,targetIdentity(url))[0].topic,decodeBatch(second.content,targetIdentity(url))[0].topic],['overflow-first','overflow-second']);
+            assert.deepEqual([decodeBatch(first.content,targetIdentity(url)).records[0].topic,decodeBatch(second.content,targetIdentity(url)).records[0].topic],['overflow-first','overflow-second']);
             channel.ack(first);channel.ack(second);
         } finally {await sink.stop();await channel.deleteQueue(queue);}
     });
@@ -271,7 +275,7 @@ describe('ClickHouse ordered central admission and adaptive thinning', function(
             await admin.end();await database.stop();
         }
     });
-    it('does not permit disabling or bypassing an activated canonical journal', async function() {
+    it('does not permit disabling or bypassing an activated canonical point store', async function() {
         await assert.rejects(centralTelemetryPreflight({ ...env(), CENTRAL_TELEMETRY_POLICY: '{"enabled":false}' }), /cannot be disabled/u);
         await assert.rejects(centralTelemetryPreflight({ CLICKHOUSE_URL: url }), /cannot be disabled/u);
     });

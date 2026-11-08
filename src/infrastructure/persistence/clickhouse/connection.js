@@ -25,7 +25,7 @@ export default async function clickhouseConnection(host, options = {}) {
     const port = options.port || 8123;
     const {username} = options;
     const {password} = options;
-    const config = { url: `http://${host}:${port}` };
+    const config = { url: `http://${host}:${port}`, request_timeout: 10000 };
     if (username) {
         config.username = username;
         config.password = password || '';

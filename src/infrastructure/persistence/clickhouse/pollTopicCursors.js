@@ -1,4 +1,4 @@
-import { rawMetricsRange } from './metricsRelation.js';
+import { metricsRange } from './metricsRelation.js';
 
 /**
  * Batched ClickHouse poll for many topic cursors.
@@ -34,7 +34,7 @@ export default function pollTopicCursors(connection, cursors, until) {
         }
     });
     return connection.query(
-        `SELECT topic, ts, value FROM ${rawMetricsRange('toUnixTimestamp64Milli({since:DateTime64(3)})', 'toUnixTimestamp64Milli({until:DateTime64(3)})')}
+        `SELECT topic, ts, value FROM ${metricsRange('toUnixTimestamp64Milli({since:DateTime64(3)})', 'toUnixTimestamp64Milli({until:DateTime64(3)})')}
          WHERE topic IN {topics:Array(String)}
            AND ts > {since:DateTime64(3)}
            AND ts <= {until:DateTime64(3)}

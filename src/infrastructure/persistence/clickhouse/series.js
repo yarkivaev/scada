@@ -1,4 +1,4 @@
-import { rawMetricsRange } from './metricsRelation.js';
+import { chartMetricsRange } from './metricsRelation.js';
 
 /**
  * Downsampled ClickHouse metric series for one topic.
@@ -18,7 +18,7 @@ export default async function clickhouseSeries(connection, topic, range, step, u
         `SELECT
             toStartOfInterval(ts, INTERVAL ${seconds} SECOND) as ts,
             anyLast(value) as value
-        FROM ${rawMetricsRange(`toUnixTimestamp64Milli(toDateTime64(toStartOfInterval({start:DateTime64(3)}, INTERVAL ${seconds} SECOND), 3, 'UTC'))`, 'toUnixTimestamp64Milli({end:DateTime64(3)})')}
+        FROM ${chartMetricsRange(`toUnixTimestamp64Milli(toDateTime64(toStartOfInterval({start:DateTime64(3)}, INTERVAL ${seconds} SECOND), 3, 'UTC'))`, 'toUnixTimestamp64Milli({end:DateTime64(3)})')}
         WHERE topic = {topic:String}
           AND ts >= toStartOfInterval({start:DateTime64(3)}, INTERVAL ${seconds} SECOND)
           AND ts <= {end:DateTime64(3)}

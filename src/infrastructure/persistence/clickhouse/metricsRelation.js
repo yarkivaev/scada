@@ -1,52 +1,60 @@
-/** States retain source timestamps once, as compact bitmaps, without a PG index. */
-const STATES = `SELECT topic,bucket_start,bucket_ms,thin_ms,value,groupBitmapMergeState(stamps) AS stamps
-    FROM scada.metrics_compact_v2 GROUP BY topic,bucket_start,bucket_ms,thin_ms,value`;
-// Logical output windows are independent of the fixed physical minute grid.
-const LOGICAL_STATES = `SELECT topic,logical_start AS bucket_start,logical_ms AS bucket_ms,thin_ms,value,
-    groupBitmapState(toUInt64(original_ms-logical_start)) AS stamps
-FROM (SELECT topic,thin_ms,value,original_ms,logical_ms,
-    toInt64(floor(original_ms/toFloat64(logical_ms)))*toInt64(logical_ms) AS logical_start
-    FROM (SELECT topic,thin_ms,value,bucket_start+toInt64(arrayJoin(bitmapToArray(stamps))) AS original_ms,
-        if(thin_ms=0,toUInt64(60000),thin_ms) AS logical_ms FROM (${STATES})))
-GROUP BY topic,logical_start,logical_ms,thin_ms,value`;
-const ADAPTIVE = `WITH states AS (${LOGICAL_STATES}), spans AS (
-    SELECT topic,bucket_start,bucket_ms,thin_ms FROM states GROUP BY topic,bucket_start,bucket_ms,thin_ms
-), adjacent AS (
-    SELECT *,maxOrNull(bucket_start+toInt64(bucket_ms)) OVER (PARTITION BY topic ORDER BY bucket_start,bucket_ms,thin_ms
-        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prior_end,
-        minOrNull(bucket_start) OVER (PARTITION BY topic ORDER BY bucket_start,bucket_ms,thin_ms
-        ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS next_start FROM spans
-), legacy AS (
-    SELECT topic,min(toUnixTimestamp64Milli(ts)) AS first_ms,max(toUnixTimestamp64Milli(ts)) AS last_ms,count() AS n
-    FROM scada.metrics GROUP BY topic
-)
-SELECT states.topic AS topic,states.bucket_start AS bucket_start,states.bucket_ms AS bucket_ms,
-    states.thin_ms AS thin_ms,states.value AS value,states.stamps AS stamps,
-    count() OVER (PARTITION BY states.topic,states.bucket_start,states.bucket_ms,states.thin_ms) AS variants,
-    ifNull(bucket_start<prior_end,0) OR ifNull(bucket_start+toInt64(bucket_ms)>next_start,0)
-        OR (legacy.n>0 AND bucket_start<=legacy.last_ms AND bucket_start+toInt64(bucket_ms)>legacy.first_ms) AS overlap
-FROM states INNER JOIN adjacent USING(topic,bucket_start,bucket_ms,thin_ms)
-LEFT JOIN legacy USING(topic)`;
-export const COMPACT_POINTS_SQL = `SELECT topic,
-    fromUnixTimestamp64Milli(bucket_start + toInt64(arrayJoin(
-        if(thin_ms=0 OR variants>1 OR overlap,bitmapToArray(stamps),arrayDistinct([bitmapMin(stamps),bitmapMax(stamps)]))
-    ))) AS ts,value FROM (${ADAPTIVE})`;
-export const COMPACT_RAW_POINTS_SQL = `SELECT topic,
-    fromUnixTimestamp64Milli(bucket_start+toInt64(arrayJoin(bitmapToArray(stamps)))) AS ts,value FROM (${STATES})`;
+import { nativeMetricWindows } from './nativeMetricsCompaction.js';
+import { effectiveNativePoints } from './nativeMetricPoints.js';
+
+/** Ordinary native point rows. Never reconstruct or invent deleted observations. */
+export const MAX_COMPACT_WINDOW_MS = 3600000;
+function physical(since, until, expand = false) {
+    const bounds = since === undefined ? '' : ` WHERE ts>=fromUnixTimestamp64Milli((${since})-${expand ? MAX_COMPACT_WINDOW_MS : 0}) AND ts<=fromUnixTimestamp64Milli((${until})+${expand ? MAX_COMPACT_WINDOW_MS : 0})`;
+    return `SELECT topic,ts,value,compact_ms,revision,is_compacted,compact_first,compact_last,compacted_at FROM scada.metrics_points_v3 FINAL${bounds}`;
+}
+function stored(since,until,expand=false) {
+    return effectiveNativePoints(physical(since,until,expand),physical(since,until,true));
+}
+/** Full windows are required before deciding that a window is constant. */
+export function annotatedPoints(since, until) {
+    const source = stored(since, until, true);
+    return `SELECT points.topic AS topic,points.ts AS ts,points.value AS value,points.compact_ms AS compact_ms,points.revision AS revision,
+        fromUnixTimestamp64Milli(w.first_ms) AS first_ts,fromUnixTimestamp64Milli(w.last_ms) AS last_ts,
+        w.compact_ms>0 AND NOT w.overlap AND ifNull(state.state_exists,0)=1
+            AND w.window_start+w.window_ms<=state.closed_before AND w.low=w.high
+            AND NOT (legacy.n>0 AND w.window_start<=legacy.last_ms AND w.window_start+w.window_ms>legacy.first_ms) AS compactable
+        FROM (${source}) AS points
+        INNER JOIN (${nativeMetricWindows(source)}) AS w ON points.topic=w.topic AND points.compact_ms=w.compact_ms
+            AND toInt64(floor(toUnixTimestamp64Milli(points.ts)/toFloat64(if(points.compact_ms=0,60000,points.compact_ms))))
+                *toInt64(if(points.compact_ms=0,60000,points.compact_ms))=w.window_start
+        LEFT JOIN (SELECT key,closed_before,1 AS state_exists FROM scada.metrics_state_v3 FINAL WHERE key!='') AS state
+            ON state.key=concat('topic:',points.topic)
+        LEFT JOIN (SELECT topic,min(toUnixTimestamp64Milli(ts)) AS first_ms,max(toUnixTimestamp64Milli(ts)) AS last_ms,count() AS n
+            FROM scada.metrics GROUP BY topic) AS legacy ON legacy.topic=points.topic`;
+}
 function relation(points) {
     return `(SELECT topic,ts,argMin(value,priority) AS value FROM (
         SELECT topic,ts,value,0 AS priority FROM scada.metrics
         UNION ALL SELECT topic,ts,value,1 AS priority FROM (${points})
     ) GROUP BY topic,ts)`;
 }
-/** Density-sensitive analytics reconstruct every canonical source timestamp. */
-export const rawMetricsRelation = relation(COMPACT_RAW_POINTS_SQL);
-/** Adaptive reads preserve endpoints or every point in mixed/overlapping windows. */
-export default relation(COMPACT_POINTS_SQL);
+function adaptive(since, until) {
+    return `SELECT topic,ts,value FROM (${annotatedPoints(since, until)}) WHERE NOT compactable OR ts=first_ts OR ts=last_ts`;
+}
+export const rawMetricsRelation = relation(`SELECT topic,ts,value FROM (${stored()})`);
+export default relation(adaptive());
+/** Canonical chart/transition range, retaining complete policy windows for classification. */
+export function metricsRange(since, until) {
+    return `/*scada-native-range*/${relation(adaptive(since, until))}/*end-scada-native-range*/`;
+}
+/** Density-sensitive reads must be checked before issuing the point-count/gap query. */
+export function rawMetricsRange(since, until) {
+    const guard = encodeURIComponent(JSON.stringify({ since, until }));
+    return `/*scada-density-range:${guard}*//*scada-native-range*/${relation(`SELECT topic,ts,value FROM (${stored(since, until)})`)}/*end-scada-native-range*/`;
+}
 
-/** SQL expressions must be static placeholders, never interpolated user input. */
-export function rawMetricsRange(sinceSql,untilSql) {
-    const bounded = STATES.replace('FROM scada.metrics_compact_v2 GROUP BY',
-        `FROM scada.metrics_compact_v2 WHERE bucket_start<=(${untilSql}) AND bucket_start+toInt64(bucket_ms)>(${sinceSql}) GROUP BY`);
-    return `/*scada-raw-range*/${relation(COMPACT_RAW_POINTS_SQL.replace(STATES,bounded))}/*end-scada-raw-range*/`;
+/** Derived display boundary vertices cover a clipped constant span; these are not raw observations. */
+export function chartMetricsRange(since,until) {
+    const points = `${adaptive(since,until)} UNION ALL SELECT cover.topic AS topic,
+        fromUnixTimestamp64Milli(arrayJoin(arrayDistinct([
+            greatest(toUnixTimestamp64Milli(cover.first_ts),toInt64(${since})),
+            least(toUnixTimestamp64Milli(cover.last_ts),toInt64(${until}))]))) AS ts,cover.value AS value
+        FROM (${annotatedPoints(since,until)}) AS cover WHERE cover.compactable AND cover.ts=cover.first_ts
+            AND toUnixTimestamp64Milli(cover.first_ts)<=(${until}) AND toUnixTimestamp64Milli(cover.last_ts)>=(${since})`;
+    return `/*scada-native-range*/${relation(points)}/*end-scada-native-range*/`;
 }

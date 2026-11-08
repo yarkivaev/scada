@@ -8,7 +8,7 @@
  */
 export default async function clickhouseLatest(connection, topic, unit) {
     const rows = await connection.query(
-        `SELECT ts, value FROM scada.metrics_raw_read
+        `SELECT ts, value FROM scada.metrics_read
          WHERE topic = {topic:String}
          ORDER BY ts DESC LIMIT 1`,
         { topic }

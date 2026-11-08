@@ -15,7 +15,8 @@ export default function centralQueueSession(settings, projection, diagnostics) {
         async accept(delivery) {
             while(delivery.active()) {
                 try {
-                    await projection.write(decodeBatch(delivery.content,settings.target));
+                    const { records, admittedAt, batchId } = decodeBatch(delivery.content,settings.target);
+                    await projection.write(records,{admittedAt,batchId});
                     diagnostics.accepted?.();return;
                 } catch(error) {
                     diagnostics.failed(error);

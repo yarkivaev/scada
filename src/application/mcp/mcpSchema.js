@@ -97,7 +97,7 @@ export function clickhouseSchema() {
                 { name: 'topic', type: 'String' },
                 { name: 'ts', type: 'DateTime64(3)' },
                 { name: 'value', type: 'Float64' }
-            ], ['Every first-wins timestamp, including adaptive-hidden points; use for count/gap analytics'])
+            ], ['Retained canonical point rows; sealed constant interiors are physically removed. Use bounded clickhouseMetricsRawRange for count/gap analytics; unavailable density is rejected explicitly.'])
         ]
     };
 }

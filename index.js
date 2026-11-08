@@ -49,7 +49,7 @@ export { default as clickhouseConnection } from './src/infrastructure/persistenc
 export { rawMetricsRange as clickhouseMetricsRawRange } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
 export { rawMetricsRelation as clickhouseMetricsRawRelation } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
 export { default as clickhouseMetricsRelation } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
-export const centralTelemetryVersion = 2;
+export const centralTelemetryVersion = 3;
 export { default as centralTelemetryPolicy } from './src/infrastructure/ingest/telemetry/centralPolicy.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
 export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';
