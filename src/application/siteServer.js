@@ -1,4 +1,5 @@
-import { clickhouseSink } from '../infrastructure/streams/index.js';
+import centralMetricsSink from '../infrastructure/ingest/telemetry/centralMetricsSink.js';
+import centralTelemetryPreflight from '../infrastructure/ingest/telemetry/centralTelemetryPreflight.js';
 import supervisorSink from './supervisorSink.js';
 import plantServer from './plantServer.js';
 import plantOperations from './plantOperations.js';
@@ -44,7 +45,7 @@ function mqttSinkForProfile(sink, env) {
     if (!url) {
         throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for central MQTT metrics');
     }
-    return clickhouseSink(url, 'scada.metrics');
+    return centralMetricsSink(env, sink.pool);
 }
 
 function startMqtt(sink, env) {
@@ -110,6 +111,11 @@ function siteExtraRoutes(catalog, extraRoutes, syncRoutes) {
     };
 }
 
+async function runSiteSink(sink, http, env) {
+    await sink.run(http);
+    if (env.SINK_DB_PROFILE === 'central') { await centralTelemetryPreflight(env, sink.pool); }
+}
+
 /**
  * Unified site process: supervisor-sink HTTP, plant API, and optional MQTT ingest.
  *
@@ -133,7 +139,7 @@ export default async function siteServer(config) {
         pool: sink.pool,
         runRetention
     });
-    await sink.run(http);
+    await runSiteSink(sink, http, env);
     const mqtt = startCollection(config, () => { return startMqtt(sink, env); });
     const telemetry = startCollection(config, () => { return startTelemetryIngest(
         env,

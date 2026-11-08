@@ -1,5 +1,5 @@
 import ingestHealth from '../ingestHealth.js';
-import { clickhouseSink } from '../../infrastructure/streams/index.js';
+import telemetrySink, { validateTelemetryPolicy } from './telemetrySink.js';
 import mqttMetrics from '../../infrastructure/ingest/mqtt/mqttMetrics.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../../infrastructure/sync/operationSyncIngest.js';
@@ -33,7 +33,7 @@ function boundedOptions(spec) {
         prefetch: Math.min(spec.options?.prefetch ?? 32, maxRecords) };
 }
 function ownedSink(pipeline, sink) {
-    return { start() { return pipeline.start(); }, async stop() {
+    return { async start() { await sink.start?.(); return pipeline.start(); }, async stop() {
         try { await pipeline.stop(); } finally { await sink.stop?.(); }
     } };
 }
@@ -52,7 +52,7 @@ function borrowed(pool) {
         end() { return Promise.resolve(); } };
 }
 function telemetry(spec, pool) {
-    const inner = spec.clickhouse ? clickhouseSink(spec.clickhouse, spec.table ?? 'scada.metrics') : metricsSinkFromPool(pool, { firstWins: spec.firstWins === true });
+    const inner = spec.clickhouse ? telemetrySink(spec, pool) : metricsSinkFromPool(pool, { firstWins: spec.firstWins === true });
     return foldedMetricsSink(inner, pool, spec.devices);
 }
 function metrics(spec, pool, context) {
@@ -62,7 +62,8 @@ function metrics(spec, pool, context) {
 function mqttPostgres(spec, pool, context) {
     let failed = false;
     context.report?.({ state: 'degraded' });
-    return mqttMetrics(spec.mqtt, metricsSinkFromPool(pool, { firstWins: spec.firstWins === true }), spec.topic, {
+    const sink = telemetry(spec, pool);
+    return ownedSink(mqttMetrics(spec.mqtt, sink, spec.topic, {
         ...boundedOptions(spec), budget: context.budget,
         onReady() { if (!failed) { context.report?.({ state: 'running' }); } },
         onError(error) {
@@ -71,7 +72,7 @@ function mqttPostgres(spec, pool, context) {
             failed ||= ['WRITE_TIMEOUT', 'OPERATION_TIMEOUT'].includes(error.code);
             context.report?.({ state: failed ? 'failed' : 'degraded', fatal: failed });
         }
-    });
+    }), sink);
 }
 function silent(spec, pool, context) {
     const sink = telemetry(spec, pool);
@@ -148,7 +149,7 @@ function silentConfig(spec) {
     })) { throw new TypeError('Invalid silent source'); }
 }
 function descriptor(factory, keys, validate = () => { return undefined; }, resources = () => { return []; }) {
-    return { validate(spec) { required(spec, keys); urlOptions(spec); boundedOptions(spec); validate(spec); }, resources,
+    return { validate(spec) { required(spec, keys); urlOptions(spec); boundedOptions(spec); validateTelemetryPolicy(spec); validate(spec); }, resources,
         create(spec, context) { return task(factory, spec, context); } };
 }
 /** Portable consumers previously embedded in site HTTP processes; migrations remain external. */

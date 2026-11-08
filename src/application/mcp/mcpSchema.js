@@ -78,7 +78,7 @@ export function postgresSchema() {
 }
 
 /**
- * ClickHouse metrics table. topic is the only series key.
+ * ClickHouse canonical metrics view. topic is the only series key.
  *
  * @returns {object} schema body
  *
@@ -88,11 +88,11 @@ export function postgresSchema() {
 export function clickhouseSchema() {
     return {
         tables: [
-            table('scada.metrics', [
+            table('scada.metrics_read', [
                 { name: 'topic', type: 'String' },
                 { name: 'ts', type: 'DateTime64(3)' },
                 { name: 'value', type: 'Float64' }
-            ], ['topic is the only series key'])
+            ], ['topic is the only series key', 'Legacy history and canonical telemetry; one row per topic and timestamp'])
         ]
     };
 }

@@ -18,13 +18,13 @@ function formatDateTime(date) {
 
 const CHANGES_SQL = `WITH prior AS (
     SELECT ts, value
-    FROM scada.metrics
+    FROM scada.metrics_read
     WHERE topic = {topic:String} AND ts < {start:DateTime64(3)}
     ORDER BY ts DESC
     LIMIT 1
 ), windowed AS (
     SELECT ts, value
-    FROM scada.metrics
+    FROM scada.metrics_read
     WHERE topic = {topic:String}
       AND ts >= {start:DateTime64(3)}
       AND ts <= {end:DateTime64(3)}

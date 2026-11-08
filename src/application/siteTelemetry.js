@@ -1,4 +1,4 @@
-import { clickhouseSink } from '../infrastructure/streams/index.js';
+import centralMetricsSink from '../infrastructure/ingest/telemetry/centralMetricsSink.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import foldedMetricsSink from './foldedMetricsSink.js';
 import bindSilentStreams from './bindSilentStreams.js';
@@ -62,7 +62,7 @@ export default function startTelemetryIngest(env, streams, batchConfig, pool, de
     if (!url) {
         throw new Error('CLICKHOUSE_URL or CLICKHOUSE_HOST is required for AMQP telemetry ingest');
     }
-    const sink = foldedMetricsSink(clickhouseSink(url, 'scada.metrics'), pool, devices);
+    const sink = foldedMetricsSink(centralMetricsSink(env, pool), pool, devices);
     const onSeen = bindSilentStreams(streams, sink);
     const ingest = startAmqpMetrics(env, sink, onSeen, batchConfig);
     if (streams) {

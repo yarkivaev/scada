@@ -1,4 +1,6 @@
-import { clickhouseSink, mqttSink } from '../../infrastructure/streams/index.js';
+import { mqttSink } from '../../infrastructure/streams/index.js';
+import postgresPool from '../../infrastructure/persistence/postgresPool.js';
+import telemetrySink, { validateTelemetryPolicy } from './telemetrySink.js';
 import activityTracking from '../../infrastructure/ingest/activity/activityTracking.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import amqpMqttRelay from '../../infrastructure/ingest/telemetry/amqpMqttRelay.js';
@@ -19,6 +21,7 @@ function adapter(factory, required, resourceKeys = () => { return []; }) {
     return {
         validate(spec) {
             required.forEach((key) => { if (!spec[key]) { throw new TypeError(`Missing pipeline ${key}`); } });
+            validateTelemetryPolicy(spec);
         },
         resources(spec) { return resourceKeys(spec); },
         create(spec, context) {
@@ -46,8 +49,11 @@ function modbusResources(spec) {
     return [...new Set(paths)];
 }
 function metrics(spec, factory) {
-    const sink = clickhouseSink(spec.clickhouseUrl, spec.table);
-    return compositeLifecycle({ outputs: [sink], inputs: [factory(sink)] });
+    const pool = spec.telemetryPolicy && spec.postgres ? postgresPool({ connectionString: spec.postgres }) : null;
+    const sink = telemetrySink(spec, pool);
+    return compositeLifecycle({ outputs: [{ start() { return sink.start?.(); }, async stop() {
+        try { await sink.stop(); } finally { await pool?.end(); }
+    } }], inputs: [factory(sink)] });
 }
 export default function pipelineAdapters() {
     return new Map([

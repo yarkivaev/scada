@@ -12,6 +12,9 @@
  */
 export default function foldingSink(inner, fold, locate) {
     return {
+        requireTimestamp: inner.requireTimestamp,
+        start() { return inner.start?.(); },
+        status() { return inner.status?.(); },
         stop() { return inner.stop?.(); },
         async write(records, context = {}) {
             context.signal?.throwIfAborted();

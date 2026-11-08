@@ -596,3 +596,41 @@ Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP tel
 ### MQTT publisher recovery
 
 An unexpected MQTT publisher close/offline/error retires the session and notifies `onFatal` once. Intentional `stop()` does not notify failure. Modbus runtime tasks propagate publisher failure to collector `/ready` and `/live` (503). Run the collector under its liveness supervisor: it must retire the failed executor and create a fresh one, which reconnects after the broker returns. Uncertain publications are not automatically replayed. Broker restart regression covers failed health, old poll cleanup, and confirmed fresh measurements from the replacement executor.
+
+### Central canonical telemetry
+
+Central can opt into durable exact deduplication with `CENTRAL_TELEMETRY_POLICY`.
+The plant deployment DSL owns this JSON declaration; application-specific defaults
+belong downstream. Enabled policies retain the first durable observation for each
+logical topic and original source timestamp. Optional `thinWindowMs` keeps the
+first arrival per fixed source-time window; zero preserves every distinct timestamp.
+
+PostgreSQL receipts, thinning windows and the pending projection queue survive
+restarts. Complete central-profile migrations before enabling the policy. Receipts
+have no automatic expiry: sizing must include their keys and window indexes as well
+as pending values. Successful projection removes the queued value. A full bounded
+queue rejects new admission rather than discarding previously accepted data.
+
+The optional central `intervalDevices` folding configuration is rejected with
+an enabled admission policy; Sokol central already classifies at edge and does
+not use this fold. This avoids computing intervals from rejected conflicts or
+thinned input.
+
+New ClickHouse records use additive `scada.metrics_canonical` storage. Its
+`ReplacingMergeTree` hides repeated projection attempts through canonical reads;
+physical retry copies remain until background merges. The original `scada.metrics`
+is retained as legacy history. It no longer represents the complete dataset after
+activation. Use **`scada.metrics_read`** for ad hoc SQL and MCP: this read view combines
+legacy history and canonical records with one logical row per topic/timestamp.
+Legacy data takes precedence at overlapping keys; original arrival order among
+pre-existing conflicting legacy values cannot be reconstructed.
+
+Once receipts exist, startup/write preflight rejects disabling or removing the
+policy: otherwise accepted backlog could be stranded and legacy writes could
+bypass prior decisions. Re-enable the policy to resume projection; reverting to
+legacy ingestion requires a separate data migration.
+
+Upgrade all central writers before claiming the new admission guarantee. Do not
+mix old writers to the legacy table with the enabled policy. Read-only consumers
+need no DDL privilege; schema preparation belongs to the writer. No deployment,
+registry publication or database migration is performed by opening this PR.

@@ -46,6 +46,8 @@ export { default as pgTimeline } from './src/infrastructure/persistence/pg/timel
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';
 export { default as pgOperations } from './src/infrastructure/persistence/pg/operations.js';
 export { default as clickhouseConnection } from './src/infrastructure/persistence/clickhouse/connection.js';
+export { default as clickhouseMetricsRelation } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
+export { default as centralTelemetryPolicy } from './src/infrastructure/ingest/telemetry/centralPolicy.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
 export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';
 export { metricsSinkFromPool as pgMetricsSink } from './src/infrastructure/persistence/pg/metrics.js';

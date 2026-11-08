@@ -20,7 +20,7 @@ function formatDateTime(date) {
 
 const HOLDS_SQL = `WITH windowed AS (
     SELECT ts, value
-    FROM scada.metrics
+    FROM scada.metrics_read
     WHERE topic = {topic:String}
       AND ts >= {start:DateTime64(3)}
       AND ts < {end:DateTime64(3)}

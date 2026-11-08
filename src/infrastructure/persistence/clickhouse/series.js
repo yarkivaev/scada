@@ -16,7 +16,7 @@ export default async function clickhouseSeries(connection, topic, range, step, u
         `SELECT
             toStartOfInterval(ts, INTERVAL ${seconds} SECOND) as ts,
             anyLast(value) as value
-        FROM scada.metrics
+        FROM scada.metrics_read
         WHERE topic = {topic:String}
           AND ts >= toStartOfInterval({start:DateTime64(3)}, INTERVAL ${seconds} SECOND)
           AND ts <= {end:DateTime64(3)}

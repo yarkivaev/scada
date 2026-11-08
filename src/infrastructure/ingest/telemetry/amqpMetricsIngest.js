@@ -14,13 +14,17 @@ import streamNameFromTopic from './streamNameFromTopic.js';
  */
 export function acceptTelemetryDeliver(codec, fields, content, onSeen) {
     const record = deliverToMqttRecord(fields, content);
-    if (typeof onSeen === 'function') {
+    function seen() {
+        if (typeof onSeen !== 'function') { return; }
         const name = streamNameFromTopic(record.topic);
         if (name) {
             onSeen(name);
         }
     }
-    return codec.accept({ topic: record.topic, payload: record.payload.toString() });
+    const accepted = codec.accept({ topic: record.topic, payload: record.payload.toString() });
+    if (accepted?.then) { return accepted.then((value) => { seen(); return value; }); }
+    seen();
+    return accepted;
 }
 
 /**
@@ -60,7 +64,7 @@ export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
     // A larger batch can never fill and would throttle ingestion to the flush timer.
     const size = Math.min(options.size ?? 100, prefetch);
     const collector = ingestBatch(sink, { ...options, size });
-    const codec = metricsCodec(collector);
+    const codec = metricsCodec(collector, console, { requireTimestamp: sink.requireTimestamp === true });
     const session = amqpSource(amqpUrl, queue, {
         accept(delivery) {
             return acceptTelemetryDeliver(codec, delivery.fields, delivery.content, options.onSeen);

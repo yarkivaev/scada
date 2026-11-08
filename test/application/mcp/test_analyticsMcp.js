@@ -355,7 +355,7 @@ describe('analyticsMcp', function() {
         );
     });
 
-    it('names topic as the only clickhouse series key', async function() {
+    it('advertises the canonical ClickHouse view with topic as the only series key', async function() {
         const { address, mcp, token } = await started();
         const { body } = await post(address.port, token, {
             id: 15,
@@ -374,8 +374,8 @@ describe('analyticsMcp', function() {
             { columns, name: table.name, notes: table.notes },
             {
                 columns: ['topic', 'ts', 'value'],
-                name: 'scada.metrics',
-                notes: ['topic is the only series key']
+                name: 'scada.metrics_read',
+                notes: ['topic is the only series key', 'Legacy history and canonical telemetry; one row per topic and timestamp']
             },
             'clickhouse schema invented sensor columns or another series key'
         );

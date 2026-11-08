@@ -17,6 +17,9 @@
  *   await conn.close();
  */
 import { createClient } from '@clickhouse/client';
+import { CANONICAL_METRICS_SQL } from './canonicalMetrics.js';
+import metricsRelation from './metricsRelation.js';
+import metricsQuery from './metricsQuery.js';
 
 export default async function clickhouseConnection(host, options = {}) {
     const port = options.port || 8123;
@@ -35,18 +38,15 @@ export default async function clickhouseConnection(host, options = {}) {
                 topic String, ts DateTime64(3), value Float64
             ) ENGINE = MergeTree() ORDER BY (topic, ts)`
         });
+        await client.command({ query: CANONICAL_METRICS_SQL });
+        await client.command({ query: `CREATE VIEW IF NOT EXISTS scada.metrics_read AS SELECT * FROM ${metricsRelation}` });
     }
     return {
         url() {
             return `http://${host}:${port}`;
         },
-        async query(sql, params = {}) {
-            const result = await client.query({
-                query: sql,
-                query_params: params,
-                format: 'JSONEachRow'
-            });
-            return result.json();
+        query(sql, params = {}) {
+            return metricsQuery(client, sql, params);
         },
         async insert(table, rows) {
             await client.insert({ table, values: rows, format: 'JSONEachRow' });

@@ -1,4 +1,4 @@
-import { clickhouseSink } from '../../infrastructure/streams/index.js';
+import centralMetricsSink from '../../infrastructure/ingest/telemetry/centralMetricsSink.js';
 import { jobRoutes, jobs } from '@yarkivaev/simple-server';
 import exportQuery from '../export/exportQuery.js';
 import scadaClient from '../../infrastructure/client/scadaClient.js';
@@ -39,7 +39,7 @@ function metricsOf(sink, env) {
     if (!url) {
         return undefined;
     }
-    return clickhouseSink(url, 'scada.metrics');
+    return centralMetricsSink(env, sink.pool);
 }
 
 function queryFor(site) {
