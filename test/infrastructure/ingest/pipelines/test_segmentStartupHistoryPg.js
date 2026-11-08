@@ -63,6 +63,20 @@ describe('PostgreSQL startup history policy',function() {
             assert.equal(rows[1].tags,'["reason-b"]');
         } finally {await pipeline.stop();}
     });
+    it('still closes a stale open interval without changing closed history',async()=>{
+        const db=pool();
+        await db.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,updated_at)
+            VALUES('line-stale','phase','on','2026-10-01T00:00:00Z','2026-10-01T00:00:10Z',0,'["reason-c"]',now()-interval '1 hour')`);
+        const before=await history(db);
+        const config=readDeploymentConfig({SEGMENT_REPAIR_HISTORY_ON_START:'false'}).pipeline;
+        const pipeline=segmentPipeline('stomp://fixture','postgres://fixture',db,config);
+        try {
+            await pipeline.start();
+            const result=await db.query("SELECT duration,tags FROM segments WHERE machine='line-stale'");
+            assert.deepEqual(result.rows,[{duration:10,tags:'["reason-c"]'}]);
+            assert.deepEqual(await history(db),before);
+        } finally {await pipeline.stop();}
+    });
     it('still commits and acknowledges a new segment with history repair disabled',async()=>{
         const db=pool();const config={...readDeploymentConfig({SEGMENT_REPAIR_HISTORY_ON_START:'false'}).pipeline,size:1,interval:.01};
         const pipeline=segmentPipeline('stomp://fixture','postgres://fixture',db,config);
