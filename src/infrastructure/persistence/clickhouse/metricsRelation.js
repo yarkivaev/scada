@@ -13,7 +13,10 @@ function stored(since,until,expand=false) {
 /** Full windows and complete certificates classify continuity before range clipping. */
 export function annotatedPoints(since, until) {
     const source = stored(since, until, true);
-    return `SELECT points.*,
+    const fields = ['topic','ts','value','compact_ms','max_gap_ms','window_start','window_ms','point_ms',
+        'island_first_ms','island_last_ms','island_n','valid_certificate','raw_interiors']
+        .map(name=>{return `points.${name} AS ${name}`;}).join(',');
+    return `SELECT ${fields},
         fromUnixTimestamp64Milli(points.island_first_ms) AS first_ts,fromUnixTimestamp64Milli(points.island_last_ms) AS last_ts,
         w.compact_ms>0 AND w.max_gap_ms>0 AND NOT w.overlap AND ifNull(state.state_exists,0)=1
             AND w.window_start+w.window_ms<=state.closed_before AND w.low=w.high

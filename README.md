@@ -649,7 +649,7 @@ not merely a SELECT result. There is no forever-full hidden raw copy.
 
 `scada.metrics_read` is the canonical relation; `metrics_raw_read` exposes retained
 point rows and cannot reconstruct deleted timestamps. Level changes/edges remain
-available. Density-sensitive counts/gaps/minPoints use bounded
+available. Density-sensitive counts/minPoints use bounded
 `clickhouseMetricsRawRange`, which explicitly rejects sealed constant ranges with
 `SCADA_HISTORY_DENSITY_UNAVAILABLE` instead of silently computing from endpoints.
 Graphs may clip constant coverage using derived display vertices, which are not
@@ -660,7 +660,7 @@ keys. Only missing additive schema falls back; permission/schema failures surfac
 One authoritative read-after-write ClickHouse target is required. Serving reads
 through lagging asynchronous replicas is unsupported. Atomic table comments pin
 broker/vhost/queue/target; an independent domain cannot race the same data. Existing
-v1/v2 review schemas/envelopes require an explicit migration, not silent reuse.
+v1/v2/v3 review schemas/envelopes require an explicit migration, not silent reuse.
 Disable after activation and immutable queue argument changes fail closed.
 
 No merge, deployment, running-database migration, package/image publication or
@@ -669,3 +669,5 @@ release is performed by opening or updating this PR.
 Native v4 persists each observation's frozen `max_gap_ms`. Certificates prove continuous coverage for one island, so deletion and repeated cleanup never turn a certified interval into a false gap or join separate islands. Interleaved collectors are merged by logical topic and timestamp before detecting gaps. Mixed-value windows remain entirely retained. Chart downsampling groups by continuity before time buckets and emits explicit null separators; native numeric points carry `continuous` metadata so consumers do not infer false gaps from sparse certified endpoints. Holds may use certificates when requested gap is at least the stored threshold; stricter raw-density requests remain explicitly unavailable.
 
 Older unpublished v3 native tables/envelopes require an explicit migration and are rejected; erased gap evidence cannot be recovered from their endpoints. No automatic upgrade or production migration runs in these PRs. Ordinary legacy `scada.metrics` remains readable and unmodified.
+
+HTTP and display MCP results preserve continuity metadata and null separators. `sensor.samples(range)` uses the exact-density guard and returns actual observations for coverage analytics; unsupported raw readers fail explicitly. Two-point unthinned islands retain exact density. Frontends show isolated observations, and peak analytics ignore null separators.
