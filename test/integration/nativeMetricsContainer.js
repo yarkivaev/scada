@@ -26,6 +26,17 @@ describe('native point storage physical compaction',function(){
         assert.equal(Number((await rows("SELECT count() n FROM scada.metrics_points_v3 WHERE topic='mixed'"))[0].n),4);
         const engine=(await rows("SELECT engine FROM system.tables WHERE database='scada' AND name='metrics_points_v3'"))[0].engine;assert.equal(engine,'ReplacingMergeTree');
     });
+    it('preserves a gap between constant runs in the merged sensor stream',async()=>{
+        clock=20000;
+        const point=ts=>{return {...p('gap-regression',ts),maxGapMs:300};};
+        await sink.write([point(10000),point(10200),point(10900)],context());
+        await sink.write([point(10100),point(10800),point(10950)],context());
+        clock=40000;await sink.write([point(40000)],context());
+        clock=200000;await sink.runCompaction();clock=400000;await sink.runCompaction();
+        await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v3 FINAL'});
+        const actual=await rows("SELECT toUnixTimestamp64Milli(ts) AS t FROM scada.metrics_points_v3 FINAL WHERE topic='gap-regression' AND ts<fromUnixTimestamp64Milli(11000) ORDER BY ts");
+        assert.deepEqual(actual.map(row=>Number(row.t)),[10000,10200,10800,10950], 'keep both sides of the observation gap');
+    });
     it('preserves neighboring Float64 values and constant endpoint bits after physical compaction',async()=>{
         clock=20000;
         await sink.write([p('binary-constant',10000,1.586),p('binary-constant',10100,1.586),p('binary-constant',10200,1.586),
