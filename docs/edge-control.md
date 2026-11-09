@@ -1,6 +1,6 @@
 # Edge assignment control
 
-Three independent edge clusters run etcd and controller replicas; every collector embeds an assignment agent. Losing the control majority prevents new placement but never expires saved work. Serial tasks require a pinned node. Controller changes use etcd transactions comparing the leader value and lease.
+Independent edge clusters run the etcd members and controller replicas declared by the deployment DSL; every collector embeds an assignment agent. Losing the control majority prevents new placement but never expires saved work. Serial tasks require a pinned node. Controller changes use etcd transactions comparing the leader value and lease.
 
 Controller environment: CONTROL_NODE_ID, CONTROL_ENDPOINTS (comma-separated), CONTROL_PREFIX (default /scada/control), CONTROL_CA, CONTROL_CERT, CONTROL_KEY, CONTROL_USERNAME, CONTROL_PASSWORD, CONTROL_REPLACEMENT_DELAY_MS (default 30000), CONTROL_CLOCK_SKEW_MS (positive finite milliseconds, default 5000). Run `scada-controller`.
 
