@@ -19,12 +19,12 @@ function record(row) {
         scalar(BigInt(Date.parse(`${row.ts.replace(' ','T')}Z`)),'writeBigInt64LE',8),
         scalar(row.value,'writeDoubleLE',8),scalar(BigInt(row.compact_ms),'writeBigUInt64LE',8),revision(row.revision),
         scalar(row.is_compacted??0,'writeUInt8',1),
-        ...['compact_first','compact_last','compacted_at'].map(field=>{return scalar(BigInt(row[field]??0),'writeBigInt64LE',8);})]);
+        ...['compact_first','compact_last','compacted_at'].map(field=>{return scalar(BigInt(row[field]??0),'writeBigInt64LE',8);}),scalar(BigInt(row.max_gap_ms),'writeBigUInt64LE',8)]);
 }
 /** Preserve Float64 bits and UInt128 revisions for admission and endpoint publication. */
 export default async function nativeMetricsInsert(client,rows) {
     if(!rows.length){return;}
-    const response=await client.exec({query:'INSERT INTO scada.metrics_points_v3 (topic,ts,value,compact_ms,revision,is_compacted,compact_first,compact_last,compacted_at) FORMAT RowBinary',
+    const response=await client.exec({query:'INSERT INTO scada.metrics_points_v4 (topic,ts,value,compact_ms,revision,is_compacted,compact_first,compact_last,compacted_at,max_gap_ms) FORMAT RowBinary',
         values:Readable.from([Buffer.concat(rows.map(record))],{objectMode:false}),
         clickhouse_settings:{async_insert:0,wait_for_async_insert:1,wait_end_of_query:1}});
     for await(const chunk of response.stream){if(chunk.length){throw new Error('Unexpected ClickHouse central insertion response');}}

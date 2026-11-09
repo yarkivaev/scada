@@ -2,9 +2,19 @@ import assert from 'node:assert/strict';
 import centralPolicy from '../../../../src/infrastructure/ingest/telemetry/centralPolicy.js';
 
 describe('central telemetry policy', function() {
+    it('freezes a positive gap threshold independently of the compact window',()=>{
+        const policy=centralPolicy({default:{maxGapMs:300},topics:[{topic:'slow',maxGapMs:5000}]});
+        assert.equal(policy.forTopic('fast').maxGapMs,300);
+        assert.equal(policy.forTopic('slow').maxGapMs,5000);
+        assert.equal(centralPolicy({}).forTopic('default').maxGapMs,30000);
+        for(const maxGapMs of [0,-1,0.5,null,Infinity,Number.MAX_SAFE_INTEGER+1]){
+            assert.throws(()=>{return centralPolicy({default:{maxGapMs}})},/policy/iu);
+        }
+    });
+
     it('uses a bounded ordered queue and native archive defaults', function() {
         const policy = centralPolicy({ enabled: true });
-        assert.deepEqual(policy.forTopic('a'), { compactWindowMs: 60000, historyWindowMs: 604800000, maxHistoryAgeMs: 2592000000, futureSkewMs: 300000 });
+        assert.deepEqual(policy.forTopic('a'), { compactWindowMs: 60000, historyWindowMs: 604800000, maxHistoryAgeMs: 2592000000, futureSkewMs: 300000, maxGapMs: 30000 });
         assert.equal(policy.queue, 'scada.telemetry.canonical');
         assert.equal(policy.queueMaxBytes, 1073741824);
         assert.equal(policy.maxPendingBatches, 100000);
@@ -16,7 +26,7 @@ describe('central telemetry policy', function() {
     });
     it('inherits complete topic policies and permits compaction off', function() {
         const policy = centralPolicy({ default: { compactWindowMs: 0, historyWindowMs: 1, maxHistoryAgeMs: 2, futureSkewMs: 0 }, topics: [{ topic: 'a', maxHistoryAgeMs: 3 }] });
-        assert.deepEqual(policy.forTopic('a'), { compactWindowMs: 0, historyWindowMs: 1, maxHistoryAgeMs: 3, futureSkewMs: 0 });
+        assert.deepEqual(policy.forTopic('a'), { compactWindowMs: 0, historyWindowMs: 1, maxHistoryAgeMs: 3, futureSkewMs: 0, maxGapMs: 30000 });
     });
     it('rejects unsafe settings and contradictory duplicate topics', function() {
         for (const config of [

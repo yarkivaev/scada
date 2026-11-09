@@ -14,7 +14,7 @@ async function queueExists(url,queue) {
 async function activated(url) {
     const client = createClient({url,request_timeout:10000});
     try {
-        const result = await client.query({query:"SELECT name FROM system.tables WHERE database='scada' AND name IN ('metrics_points_v3','metrics_compact_v2','metrics_canonical')",format:'JSONEachRow'});
+        const result = await client.query({query:"SELECT name FROM system.tables WHERE database='scada' AND name IN ('metrics_points_v4','metrics_points_v3','metrics_compact_v2','metrics_canonical')",format:'JSONEachRow'});
         return (await result.json()).length>0;
     } finally { await client.close(); }
 }

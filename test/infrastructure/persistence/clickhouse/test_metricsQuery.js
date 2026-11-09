@@ -6,8 +6,8 @@ describe('ClickHouse additive schema read compatibility', function() {
     it('falls back only for missing additive schema and checks it again on the next read', async function() {
         let installed = false;
         const client = { async query({ query }) {
-            if (query.includes('metrics_points_v3') && !installed) { throw Object.assign(new Error('Unknown table metrics_points_v3'), { code: 60 }); }
-            return { async json() { return [{ value: query.includes('metrics_points_v3') ? 2 : 1 }]; } };
+            if (query.includes('metrics_points_v4') && !installed) { throw Object.assign(new Error('Unknown table metrics_points_v4'), { code: 60 }); }
+            return { async json() { return [{ value: query.includes('metrics_points_v4') ? 2 : 1 }]; } };
         } };
         const sql = `SELECT * FROM ${metricsRelation}`;
         assert.deepEqual(await metricsQuery(client, sql, {}), [{ value: 1 }]);
@@ -16,8 +16,8 @@ describe('ClickHouse additive schema read compatibility', function() {
     });
     it('falls back bounded canonical reads before schema installation', async function() {
         const client = { async query({ query }) {
-            if (query.includes('metrics_points_v3')) {
-                throw Object.assign(new Error('Unknown table metrics_points_v3'), { code: 60 });
+            if (query.includes('metrics_points_v4')) {
+                throw Object.assign(new Error('Unknown table metrics_points_v4'), { code: 60 });
             }
             return { async json() { return [{ value: 7 }]; } };
         } };
@@ -26,7 +26,7 @@ describe('ClickHouse additive schema read compatibility', function() {
             { since: 0, until: 1000 }), [{ value: 7 }]);
     });
     it('does not hide permission errors as old schema', async function() {
-        const failure = Object.assign(new Error('metrics_points_v3 access denied'), { code: 497 });
+        const failure = Object.assign(new Error('metrics_points_v4 access denied'), { code: 497 });
         await assert.rejects(metricsQuery({ async query() { throw failure; } }, `SELECT * FROM ${metricsRelation}`, {}), failure);
     });
 });

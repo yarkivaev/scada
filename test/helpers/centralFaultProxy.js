@@ -18,7 +18,7 @@ export default async function centralFaultProxy(backend,beforeCommit=false) {
         for await(const chunk of request) {chunks.push(chunk);}
         const body=Buffer.concat(chunks);
         const query=new URL(request.url,backend).searchParams.get('query')||body.toString();
-        const held=first&&query.trim().startsWith('INSERT INTO scada.metrics_points_v3');
+        const held=first&&query.trim().startsWith('INSERT INTO scada.metrics_points_v4');
         if(held){first=false;if(beforeCommit){notify();await withheld;}}
         const upstream=await fetch(new URL(request.url,backend),{method:request.method,
             headers:{'content-type':request.headers['content-type']||'text/plain',...(request.headers.authorization?{authorization:request.headers.authorization}:{})},

@@ -34,7 +34,7 @@ function admissionRows(points,topics,admittedAt,batchId,seq) {
         if(point.ts>admittedAt+point.futureSkewMs){reason='future';}
         else if(point.ts<topics.get(point.topic).closed_before||point.ts<admittedAt-point.maxHistoryAgeMs){reason='too_old';}
         if(reason){rejected.push({batch_id:batchId,ordinal:point.ordinal,topic:point.topic,ts:new Date(point.ts).toISOString().replace('T',' ').slice(0,-1),value:point.value,reason,admitted_at:new Date(admittedAt).toISOString().replace('T',' ').slice(0,-1)});}
-        else{unique.set(JSON.stringify([point.topic,point.ts]),{topic:point.topic,ts:new Date(point.ts).toISOString().replace('T',' ').slice(0,-1),value:point.value,compact_ms:point.compactWindowMs,revision:((seq*1024n)+BigInt(point.ordinal)).toString()});}
+        else{unique.set(JSON.stringify([point.topic,point.ts]),{topic:point.topic,ts:new Date(point.ts).toISOString().replace('T',' ').slice(0,-1),value:point.value,compact_ms:point.compactWindowMs,max_gap_ms:point.maxGapMs,revision:((seq*1024n)+BigInt(point.ordinal)).toString()});}
     }
     return {unique,rejected};
 }
@@ -49,7 +49,7 @@ async function seedLegacyStates(client,states,points,admittedAt) {
     for(const row of await response.json()){states.set(`topic:${row.topic}`,{latest:Number(row.latest)});}
 }
 async function committedState(client,points,admittedAt) {
-    const response=await client.query({query:'SELECT * FROM scada.metrics_state_v3 FINAL WHERE key IN {keys:Array(String)}',query_params:{keys:['',...new Set(points.map(({topic})=>{return `topic:${topic}`}))]},format:'JSONEachRow'});
+    const response=await client.query({query:'SELECT * FROM scada.metrics_state_v4 FINAL WHERE key IN {keys:Array(String)}',query_params:{keys:['',...new Set(points.map(({topic})=>{return `topic:${topic}`}))]},format:'JSONEachRow'});
     const states=new Map((await response.json()).map(row=>{return [row.key,row]}));
     await seedLegacyStates(client,states,points,admittedAt);
     const seq=BigInt(states.get('')?.committed_seq??0)+1n;
@@ -58,10 +58,10 @@ async function committedState(client,points,admittedAt) {
 }
 async function persist(client,unique,rejected,states,options) {
     if(unique.size){await nativeMetricsInsert(client,[...unique.values()]);}
-    if(rejected.length){await client.insert({table:'scada.metrics_rejected_v3',values:rejected,format:'JSONEachRow',clickhouse_settings:settings});}
+    if(rejected.length){await client.insert({table:'scada.metrics_rejected_v4',values:rejected,format:'JSONEachRow',clickhouse_settings:settings});}
     const publishedAt=await nativeMetricsClock(client,options);
     for(const state of states){if(state.published_at===null||state.key===''){state.published_at=publishedAt;}}
-    await client.insert({table:'scada.metrics_state_v3',values:states,format:'JSONEachRow',clickhouse_settings:settings});
+    await client.insert({table:'scada.metrics_state_v4',values:states,format:'JSONEachRow',clickhouse_settings:settings});
 }
 /** Requires the serialized SAC head and one authoritative read-after-write target. */
 async function nativeMetricsAdmission(client,records,context={},options={}) {

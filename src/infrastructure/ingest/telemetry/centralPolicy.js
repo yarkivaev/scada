@@ -8,13 +8,15 @@ function positive(value, name, maximum = Number.MAX_SAFE_INTEGER) {
     if (!Number.isSafeInteger(value) || value < 1 || value > maximum) { throw new TypeError(`Invalid central policy ${name}`); }
     return value;
 }
-const ruleDefaults = { compactWindowMs: 60000, historyWindowMs: 604800000, maxHistoryAgeMs: 2592000000, futureSkewMs: 300000 };
+const ruleDefaults = { compactWindowMs: 60000, historyWindowMs: 604800000, maxHistoryAgeMs: 2592000000, futureSkewMs: 300000, maxGapMs: 30000 };
 export const CENTRAL_RULE_FIELDS = Object.keys(ruleDefaults);
 export function centralRule(value, fallback = ruleDefaults) {
     keys(value, [...CENTRAL_RULE_FIELDS, 'topic']);
     const rule = Object.fromEntries(CENTRAL_RULE_FIELDS.map((key) => { return [key, value[key] === undefined ? fallback[key] : value[key]]; }));
     for (const [key, number] of Object.entries(rule)) {
-        const minimum = ['compactWindowMs', 'futureSkewMs'].includes(key) ? 0 : Math.max(1, rule.compactWindowMs);
+        let minimum = Math.max(1, rule.compactWindowMs);
+        if (key === 'maxGapMs') { minimum = 1; }
+        if (['compactWindowMs', 'futureSkewMs'].includes(key)) { minimum = 0; }
         const maximum = key === 'compactWindowMs' ? 3600000 : Number.MAX_SAFE_INTEGER;
         if (!Number.isSafeInteger(number) || number < minimum || number > maximum) { throw new TypeError(`Invalid central policy ${key}`); }
     }

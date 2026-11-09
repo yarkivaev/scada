@@ -28,7 +28,7 @@ function observation(value) {
 }
 export function encodeBatch(records, policy, target) {
     if (!Array.isArray(records) || !records.length || records.length > 1000) { throw new TypeError('Invalid central batch length'); }
-    const body = JSON.stringify({ version: 3, target, admittedAt: Date.now(), records: records.map((record) => {
+    const body = JSON.stringify({ version: 4, target, admittedAt: Date.now(), records: records.map((record) => {
         const point = centralPoint(record);
         return { ...point, ...centralRule(policy.forTopic(point.topic)) };
     }) });
@@ -39,7 +39,7 @@ export function decodeBatch(content, target) {
     if (Buffer.byteLength(content) > MAX_BATCH_BYTES) { throw new TypeError('Central batch byte capacity exceeded'); }
     const batch = JSON.parse(content.toString());
     keys(batch, ['version', 'target', 'admittedAt', 'records']);
-    if (batch.version !== 3 || batch.target !== target) { throw new TypeError('Invalid central envelope version or target'); }
+    if (batch.version !== 4 || batch.target !== target) { throw new TypeError('Invalid central envelope version or target'); }
     if (!Array.isArray(batch.records) || !batch.records.length || batch.records.length > 1000) { throw new TypeError('Invalid central batch length'); }
     if (!Number.isSafeInteger(batch.admittedAt) || batch.admittedAt < 0) { throw new TypeError('Invalid central admission time'); }
     return { records: batch.records.map(observation), admittedAt: batch.admittedAt, batchId: digest(content) };

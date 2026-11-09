@@ -25,6 +25,7 @@ import clickhouseRises from './rises.js';
 import clickhouseChanges from './changes.js';
 import clickhouseHolds from './holds.js';
 import clickhouseSeries from './series.js';
+import clickhouseSamples from './samples.js';
 import clickhouseLatest from './latest.js';
 
 export default function clickhouseSensor(connection, topic, displayName, unit) {
@@ -34,6 +35,9 @@ export default function clickhouseSensor(connection, topic, displayName, unit) {
         },
         current() {
             return clickhouseLatest(connection, topic, unit);
+        },
+        samples(range) {
+            return clickhouseSamples(connection, topic, range, unit);
         },
         measurements(range, step) {
             return clickhouseSeries(connection, topic, range, step, unit);

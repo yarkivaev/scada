@@ -15,7 +15,7 @@ describe('Bounded native ClickHouse point reads', function() {
         it(`prunes indexed point timestamps for ${name}`, async function() {
             let sql;
             await read({ async query(text) { sql = text; return []; } });
-            assert.match(sql, /FROM scada\.metrics_points_v3 FINAL WHERE ts>=/u);
+            assert.match(sql, /FROM scada\.metrics_points_v4 FINAL WHERE ts>=/u);
             assert.doesNotMatch(sql, /groupBitmap|bitmapToArray|metrics_compact_v2/u);
         });
     }

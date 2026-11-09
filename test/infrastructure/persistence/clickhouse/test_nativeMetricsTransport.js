@@ -12,6 +12,11 @@ function client(response=Readable.from([])) {
         exec:async(request)=>{const chunks=[];for await(const chunk of request.values){chunks.push(chunk);}payload=Buffer.concat(chunks);return {stream:response};}};
 }
 describe('native central Float64 transport',function(){
+    it('persists the frozen max-gap policy alongside each ordinary point',async()=>{
+        const target=client();await admission(target,[{...point,maxGapMs:1234}],context,{now:()=>{return 20000}});
+        assert.equal(target.payload.readBigUInt64LE(target.payload.length-8),1234n);
+    });
+
     it('keeps exact Float64 bytes at the ClickHouse boundary',async()=>{
         const target=client();await admission(target,[point],context,{now:()=>{return 20000;}});
         assert.ok(target.payload,'Numeric JSON cannot guarantee the source Float64 bits at ClickHouse input');
@@ -29,7 +34,7 @@ describe('native central Float64 transport',function(){
         const response=new PassThrough();const target=client(response);
         const pending=admission(target,[point],context,{now:()=>{return 20000;}});
         await setImmediate();assert.equal(target.writes.length,0,'Admission cursor advanced while ClickHouse response was incomplete');
-        response.end();await pending;assert.equal(target.writes.at(-1).table,'scada.metrics_state_v3');
+        response.end();await pending;assert.equal(target.writes.at(-1).table,'scada.metrics_state_v4');
     });
     it('never commits after an insertion error arrives in a successful HTTP body',async()=>{
         const target=client(Readable.from([Buffer.from('Code: 241 late storage error')]));

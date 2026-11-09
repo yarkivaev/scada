@@ -88,8 +88,8 @@ describe('ClickHouse native admission and immutable compact history', function()
             assert.deepEqual(await rows('thin'),[{ts:0,value:42},{ts:237,value:42},{ts:4000,value:42}]);
             clock+=180000;await sink.runCompaction();
             clock+=180000;await sink.runCompaction();
-            await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v3 FINAL'});
-            const result=await client.query({query:"SELECT count() n FROM scada.metrics_points_v3 WHERE topic='thin'",format:'JSONEachRow'});
+            await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v4 FINAL'});
+            const result=await client.query({query:"SELECT count() n FROM scada.metrics_points_v4 WHERE topic='thin'",format:'JSONEachRow'});
             assert.equal(Number((await result.json())[0].n),3,'Actual point rows must disappear; a thin SELECT alone is insufficient');
             await sink.write([point('thin',100,99),point('thin',150,80)]);
             assert.deepEqual(await rows('thin'),[{ts:0,value:42},{ts:237,value:42},{ts:4000,value:42}],'No old update or addition may change frozen history');
@@ -124,7 +124,7 @@ describe('ClickHouse native admission and immutable compact history', function()
             await sink.write([point('age',-40*86400000,99),point('age',7200000,80)]);
             await sink.write([point('age',100,43)]);
             assert.deepEqual(await rows('age'),[{ts:0,value:42},{ts:100,value:43}]);
-            const result=await client.query({query:"SELECT reason FROM scada.metrics_rejected_v3 FINAL WHERE topic='age' ORDER BY reason",format:'JSONEachRow'});
+            const result=await client.query({query:"SELECT reason FROM scada.metrics_rejected_v4 FINAL WHERE topic='age' ORDER BY reason",format:'JSONEachRow'});
             assert.deepEqual((await result.json()).map(({reason})=>{return reason;}),['future','too_old']);
         } finally {await sink.stop();}
     });
@@ -209,9 +209,9 @@ describe('ClickHouse native admission and immutable compact history', function()
             await proxy.forwarded;
             await old.stop();
             assert.deepEqual(await rows(topic),[{ts:0,value:99},{ts:1,value:43}],'A released old INSERT cannot win after a later admitted conflict');
-            await client.command({query:`INSERT INTO scada.metrics_points_v3 SELECT * FROM scada.metrics_points_v3 FINAL WHERE topic={topic:String}`,query_params:{topic}});
-            await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v3 FINAL'});
-            const physical=await client.query({query:"SELECT count() n FROM scada.metrics_points_v3 WHERE topic={topic:String}",query_params:{topic},format:'JSONEachRow'});
+            await client.command({query:`INSERT INTO scada.metrics_points_v4 SELECT * FROM scada.metrics_points_v4 FINAL WHERE topic={topic:String}`,query_params:{topic}});
+            await client.command({query:'OPTIMIZE TABLE scada.metrics_points_v4 FINAL'});
+            const physical=await client.query({query:"SELECT count() n FROM scada.metrics_points_v4 WHERE topic={topic:String}",query_params:{topic},format:'JSONEachRow'});
             assert.equal(Number((await physical.json())[0].n),2,'Native RMT must remove physical duplicates');
         } finally {
             proxy.release();await old.stop();await standby.stop();await projection.stop();await proxy.stop();
