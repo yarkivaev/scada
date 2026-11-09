@@ -10,9 +10,23 @@ function physical(since, until, expand = false) {
 function stored(since,until,expand=false) {
     return effectiveNativePoints(physical(since,until,expand),physical(since,until,true));
 }
+/** Nearest neighbors add at most two complete-window contexts, independently of maxGapMs. */
+function chartStored(since,until) {
+    const source=`SELECT topic,ts,value,compact_ms,max_gap_ms,revision,is_compacted,compact_first,compact_last,compacted_at
+        FROM scada.metrics_points_v4 FINAL CROSS JOIN (
+            SELECT maxOrNullIf(toUnixTimestamp64Milli(ts),toUnixTimestamp64Milli(ts)<(${since})) AS before_ms,
+                minOrNullIf(toUnixTimestamp64Milli(ts),toUnixTimestamp64Milli(ts)>(${until})) AS after_ms
+            FROM scada.metrics_points_v4 FINAL WHERE topic={topic:String}
+        ) AS neighbors
+        WHERE topic={topic:String} AND (
+            toUnixTimestamp64Milli(ts) BETWEEN (${since})-${MAX_COMPACT_WINDOW_MS} AND (${until})+${MAX_COMPACT_WINDOW_MS}
+            OR toUnixTimestamp64Milli(ts) BETWEEN before_ms-${MAX_COMPACT_WINDOW_MS} AND before_ms+${MAX_COMPACT_WINDOW_MS}
+            OR toUnixTimestamp64Milli(ts) BETWEEN after_ms-${MAX_COMPACT_WINDOW_MS} AND after_ms+${MAX_COMPACT_WINDOW_MS})`;
+    // One FINAL scan with disjunctive bounds returns each physical winner once, even where contexts overlap.
+    return effectiveNativePoints(source,source);
+}
 /** Full windows and complete certificates classify continuity before range clipping. */
-export function annotatedPoints(since, until) {
-    const source = stored(since, until, true);
+export function annotatedPoints(since, until, source=stored(since, until, true)) {
     const fields = ['topic','ts','value','compact_ms','max_gap_ms','window_start','window_ms','point_ms',
         'island_first_ms','island_last_ms','island_n','valid_certificate','raw_interiors']
         .map(name=>{return `points.${name} AS ${name}`;}).join(',');
@@ -52,7 +66,7 @@ export function rawMetricsRange(since, until) {
 export const legacyChartRelation = `(SELECT topic,ts,value,toUnixTimestamp64Milli(ts) AS coverage_first_ms,
     toUnixTimestamp64Milli(ts) AS coverage_last_ms,toUInt64(30000) AS max_gap_ms,toUInt8(0) AS native FROM scada.metrics)`;
 /** Adjacent equal observations certify the short bridge across a storage-window boundary. */
-function constantBridges(annotated,since,until) {
+function constantBridges(annotated,since,until,gap) {
     return `SELECT bridge.topic AS topic,fromUnixTimestamp64Milli(arrayJoin(arrayDistinct([
         greatest(prior_ms,toInt64(${since})),least(point_ms,toInt64(${until}))]))) AS ts,
         value,prior_ms AS coverage_first_ms,point_ms AS coverage_last_ms,max_gap_ms,toUInt8(1) AS native
@@ -67,11 +81,12 @@ function constantBridges(annotated,since,until) {
         WHERE max_gap_ms>0 AND max_gap_ms=prior_gap_ms AND compact_ms=prior_compact_ms
             AND window_start!=prior_window_start AND value=prior_value AND point_ms>prior_ms
             AND point_ms-prior_ms<=toInt64(max_gap_ms) AND prior_ms<=(${until}) AND point_ms>=(${since})
-            AND NOT (legacy.n>0 AND prior_ms<=legacy.last_ms AND point_ms>=legacy.first_ms)`;
+            AND NOT (legacy.n>0 AND prior_ms<=legacy.last_ms AND point_ms>=legacy.first_ms)
+            ${gap===undefined ? '' : `AND point_ms-prior_ms<=toInt64(${gap})`}`;
 }
 /** Display vertices may clip a constant island, never the silence between islands. */
 export function chartMetricsRange(since,until,gap) {
-    const annotated=annotatedPoints(since,until);
+    const annotated=annotatedPoints(since,until,chartStored(since,until));
     const coverage=gap===undefined ? 'compactable' : `compactable AND max_gap_ms<=(${gap})`;
     const columns=`topic,ts,value,if(${coverage},island_first_ms,point_ms) AS coverage_first_ms,if(${coverage},island_last_ms,point_ms) AS coverage_last_ms,max_gap_ms,toUInt8(1) AS native`;
     const points=`SELECT ${columns} FROM (${annotated}) WHERE NOT compactable OR ts=first_ts OR ts=last_ts
@@ -79,7 +94,7 @@ export function chartMetricsRange(since,until,gap) {
             greatest(island_first_ms,toInt64(${since})),least(island_last_ms,toInt64(${until}))]))) AS ts,
             value,island_first_ms AS coverage_first_ms,island_last_ms AS coverage_last_ms,max_gap_ms,toUInt8(1) AS native
         FROM (${annotated}) AS cover WHERE (${coverage}) AND cover.ts=cover.first_ts AND cover.island_first_ms<=(${until}) AND cover.island_last_ms>=(${since})
-        ${gap===undefined ? `UNION ALL ${constantBridges(annotated,since,until)}` : ''}`;
+        UNION ALL ${constantBridges(annotated,since,until,gap)}`;
     return `/*scada-native-chart-range*/(SELECT topic,ts,
         tupleElement(selected,1) AS value,tupleElement(selected,2) AS coverage_first_ms,
         tupleElement(selected,3) AS coverage_last_ms,tupleElement(selected,4) AS max_gap_ms,tupleElement(selected,5) AS native

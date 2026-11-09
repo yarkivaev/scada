@@ -46,6 +46,15 @@ describe('Certified holds density threshold', function() {
         await metricsQuery(client,`SELECT * FROM ${holdsMetricsRange('0','1000','{gap:UInt64}')}`,{topic:'a',gap:100});
         assert.match(sql,/valid_certificate OR \(compactable AND island_n>2\)/u);
     });
+    it('loads bounded complete neighbor contexts for chart gaps larger than a compaction window', function() {
+        const sql=chartMetricsRange('5399950','5400050');
+        assert.match(sql,/maxOrNullIf\(toUnixTimestamp64Milli\(ts\),toUnixTimestamp64Milli\(ts\)<\(5399950\)\) AS before_ms/u);
+        assert.match(sql,/minOrNullIf\(toUnixTimestamp64Milli\(ts\),toUnixTimestamp64Milli\(ts\)>\(5400050\)\) AS after_ms/u);
+        assert.match(sql,/topic=\{topic:String\}/u);
+        assert.match(sql,/before_ms-3600000/u);
+        assert.match(sql,/after_ms\+3600000/u);
+        assert.doesNotMatch(sql,/max\(max_gap_ms\)/u);
+    });
     it('computes cross-window constant bridges before clipping chart ranges', function() {
         const sql=chartMetricsRange('59950','60050');
         assert.match(sql,/prior_window_start/u);

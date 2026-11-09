@@ -30,6 +30,24 @@ describe('Gap-preserving native charts on ClickHouse 24', function() {
         await client.insert({table:'scada.metrics_points_v4',values,format:'JSONEachRow'});
         if(closed) {await client.insert({table:'scada.metrics_state_v4',values:[{key:`topic:${topic}`,latest:BASE+60000,closed_before:BASE+60000,published_at:1,committed_seq:1,revision:'1'}],format:'JSONEachRow'});}
     }
+    it('clips long allowed gaps using bounded nearest-neighbor window contexts', async function() {
+        const hour=3600000;
+        await seed('long-gap',[0,3*hour],{maxGap:4*hour});
+        const graph=await clickhouseSeries(connection,'long-gap',range(1.5*hour-50,1.5*hour+50),60000,'');
+        assert.deepEqual(graph.map(point=>{return point.timestamp.getTime()-BASE;}),[1.5*hour-50,1.5*hour+50]);
+        assert.deepEqual(graph.map(point=>{return point.continuous;}),[false,true]);
+        const held=await clickhouseHolds(connection,'long-gap',range(1.5*hour-50,1.5*hour+50),4*hour,'');
+        assert.equal(held.length,1);
+        assert.equal(held[0].timestamp.getTime()-BASE,1.5*hour-50);
+        assert.equal(held[0].until.getTime()-BASE,1.5*hour+50);
+        await seed('too-long-gap',[0,5*hour],{maxGap:4*hour});
+        assert.deepEqual(await clickhouseSeries(connection,'too-long-gap',range(2.5*hour-50,2.5*hour+50),60000,''),[]);
+        await seed('neighbor-cert',[0,10000],{maxGap:4*hour,certificate:true});
+        await seed('neighbor-cert',[3*hour],{maxGap:4*hour});
+        const certified=await clickhouseSeries(connection,'neighbor-cert',range(1.5*hour-50,1.5*hour+50),60000,'');
+        assert.deepEqual(certified.map(point=>{return point.continuous;}),[false,true]);
+        assert.deepEqual(await clickhouseSeries(connection,'long-gap',range(3*hour+1,3*hour+1000),60000,''),[]);
+    });
     it('clips constant continuity across adjacent window boundaries without bridging real gaps', async function() {
         await seed('boundary',[59800,59900,60100,60200]);
         await client.command({query:`ALTER TABLE scada.metrics_state_v4 UPDATE closed_before=${BASE+120000} WHERE key='topic:boundary'`,clickhouse_settings:{mutations_sync:1}});
