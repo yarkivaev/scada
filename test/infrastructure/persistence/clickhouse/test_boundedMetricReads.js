@@ -15,7 +15,14 @@ describe('Bounded native ClickHouse point reads', function() {
         it(`prunes indexed point timestamps for ${name}`, async function() {
             let sql;
             await read({ async query(text) { sql = text; return []; } });
-            assert.match(sql, /FROM scada\.metrics_points_v4 FINAL WHERE ts>=/u);
+            assert.match(sql, /ts>=fromUnixTimestamp64Milli\(/u);
+            assert.match(sql, /ts<=fromUnixTimestamp64Milli\(/u);
+            assert.doesNotMatch(sql, /toUnixTimestamp64Milli\(ts\) BETWEEN/u);
+            if (name !== 'live cursors') {
+                assert.match(sql, /WHERE topic=\{topic:String\} AND \(/u);
+                assert.match(sql, /ts>=fromUnixTimestamp64Milli\(before_ms-3600000\)/u);
+                assert.match(sql, /ts<=fromUnixTimestamp64Milli\(after_ms\+3600000\)/u);
+            }
             assert.doesNotMatch(sql, /groupBitmap|bitmapToArray|metrics_compact_v2/u);
         });
     }

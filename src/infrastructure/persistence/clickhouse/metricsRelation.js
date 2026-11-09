@@ -19,9 +19,9 @@ function chartStored(since,until) {
             FROM scada.metrics_points_v4 FINAL WHERE topic={topic:String}
         ) AS neighbors
         WHERE topic={topic:String} AND (
-            toUnixTimestamp64Milli(ts) BETWEEN (${since})-${MAX_COMPACT_WINDOW_MS} AND (${until})+${MAX_COMPACT_WINDOW_MS}
-            OR toUnixTimestamp64Milli(ts) BETWEEN before_ms-${MAX_COMPACT_WINDOW_MS} AND before_ms+${MAX_COMPACT_WINDOW_MS}
-            OR toUnixTimestamp64Milli(ts) BETWEEN after_ms-${MAX_COMPACT_WINDOW_MS} AND after_ms+${MAX_COMPACT_WINDOW_MS})`;
+            ts>=fromUnixTimestamp64Milli((${since})-${MAX_COMPACT_WINDOW_MS}) AND ts<=fromUnixTimestamp64Milli((${until})+${MAX_COMPACT_WINDOW_MS})
+            OR ts>=fromUnixTimestamp64Milli(before_ms-${MAX_COMPACT_WINDOW_MS}) AND ts<=fromUnixTimestamp64Milli(before_ms+${MAX_COMPACT_WINDOW_MS})
+            OR ts>=fromUnixTimestamp64Milli(after_ms-${MAX_COMPACT_WINDOW_MS}) AND ts<=fromUnixTimestamp64Milli(after_ms+${MAX_COMPACT_WINDOW_MS}))`;
     // One FINAL scan with disjunctive bounds returns each physical winner once, even where contexts overlap.
     return effectiveNativePoints(source,source);
 }
