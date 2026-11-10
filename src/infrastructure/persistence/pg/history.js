@@ -50,9 +50,9 @@ function context(pool,machine,from,until,options) {
     machineName(machine);
     return historyContext(pool,machine,from,until,options);
 }
-async function unchanged(client, machine, base) {
+async function unchanged(client, machine, base, observationSource) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
-    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null });
+    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,observations:observationSource?.(client) });
     if (latest.revision !== base.revision) {
         const error = new Error('History context changed');
         error.statusCode = 409;
@@ -72,14 +72,14 @@ async function advance(client,machine,workId,page) {
         await client.query('UPDATE history_work SET cursor_ms=$3,end_ms=$4,token=gen_random_uuid() WHERE id=$1 AND machine=$2',[workId,machine,page.next,page.end]);
     } else { await client.query('DELETE FROM history_work WHERE id=$1 AND machine=$2', [workId, machine]); }
 }
-function commit(pool, machine, workId, segments, base) {
+function commit(pool, machine, workId, segments, base, observationSource) {
     if (!Array.isArray(segments) || segments.length > 1000) { throw new TypeError('Bounded segments required'); }
     return transaction(pool, machine, async (client) => {
         const work = await client.query('SELECT id,token,from_ms,until_ms,cursor_ms,end_ms FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE', [workId, machine]);
         if (!work.rowCount) { return { applied: false }; }
         checkClaim(work.rows[0],base);
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
-        const latest = base?.revision ? await unchanged(client, machine, base) : null;
+        const latest = base?.revision ? await unchanged(client, machine, base, observationSource) : null;
         if (latest && segments.some((item) => { return new Date(item.end_time).getTime()>latest.context.page.until; })) {
             throw new TypeError('Segment extends beyond bounded history page; upgrade history worker');
         }
@@ -106,7 +106,7 @@ function commit(pool, machine, workId, segments, base) {
     });
 }
 /** Local telemetry history and durable classification work; no cross-edge database dependency. */
-export default function historyPg(pool, { retentionDays = 30, now = Date.now } = {}) {
+export default function historyPg(pool, { retentionDays = 30, now = Date.now, observations: observationSource } = {}) {
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0) { throw new TypeError('Positive retentionDays required'); }
     function cutoff() { return now() - retentionDays * 86400000; }
     return {
@@ -126,12 +126,12 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now } =
             return result.rowCount;
         },
         accept(machine, items) { return accept(pool, machine, items, cutoff()); },
-        context(machine, from, until, padding = 60000, page = {}) { return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page }); },
+        context(machine, from, until, padding = 60000, page = {}) { return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page,observations:observationSource?.(pool) }); },
         async work(machine) {
             machineName(machine);
             const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
             return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until),cursor:row.cursor === null ? null : Number(row.cursor),end:row.end === null ? null : Number(row.end) }; }) };
         },
-        commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, base); }
+        commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, base, observationSource); }
     };
 }

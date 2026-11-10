@@ -10,8 +10,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     let container;
     let pool;
     before(async () => {
-        container = await new GenericContainer('postgres:16-alpine').withEnvironment({ POSTGRES_PASSWORD: 'test' }).withExposedPorts(5432).start();
-        pool = new pg.Pool({ host: container.getHost(), port: container.getMappedPort(5432), user: 'postgres', password: 'test' });
+        if (process.env.HISTORY_TEST_POSTGRES_URL) { pool = new pg.Pool({connectionString:process.env.HISTORY_TEST_POSTGRES_URL}); } else {
+            container = await new GenericContainer('postgres:16-alpine').withEnvironment({ POSTGRES_PASSWORD: 'test' }).withExposedPorts(5432).start();
+            pool = new pg.Pool({ host: container.getHost(), port: container.getMappedPort(5432), user: 'postgres', password: 'test' });
+        }
         for (let attempt = 0; attempt < 30; attempt += 1) {
             // eslint-disable-next-line no-await-in-loop
             try { await pool.query('SELECT 1'); break; } catch { await new Promise((resolve) => { setTimeout(resolve, 300); }); }
@@ -24,6 +26,29 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0009__history_continuation.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
+    it('classifies external raw history without copying it into PostgreSQL and fences changed external context', async () => {
+        const time=Date.now()-10000;
+        let value=7;
+        const external=()=>{return {
+            async boundary(){return time+1000;},
+            async page(machine,left,end){return {from:left,until:end,next:null,end};},
+            async read(){return {items:[{eventId:'external',channel:'power',time,value}],continuity:[{from:time,until:time}]};},
+            async seed(){return null;}
+        };};
+        const store=historyPg(pool,{observations:external});
+        await pool.query("DELETE FROM history_work WHERE machine='external-source'");
+        await pool.query("INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),'external-source',$1,$1)",[time]);
+        const work=(await store.work('external-source')).items[0];
+        const snapshot=await store.context('external-source',time,time,1000);
+        assert.equal(snapshot.items[0].value,7);
+        assert.equal((await pool.query("SELECT count(*) FROM history_observations WHERE machine='external-source'")).rows[0].count,'0');
+        value=8;
+        await assert.rejects(store.commit('external-source',work.id,[],{...snapshot.context,revision:snapshot.revision,workToken:work.token}),/context changed/u);
+        assert.equal((await store.work('external-source')).items.length,1);
+        const current=await store.context('external-source',time,time,1000);
+        await store.commit('external-source',work.id,[],{...current.context,revision:current.revision,workToken:work.token});
+        assert.equal((await store.work('external-source')).items.length,0);
+    });
     it('keeps first local metric before history registration and across receiver restarts', async () => {
         const topic = 'first-wins/power';
         const ts = Date.now() - 1000;
