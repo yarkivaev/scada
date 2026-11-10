@@ -208,4 +208,36 @@ describe('SQLite delivery spool contracts', () => {
         assert.equal((await stat(path.join(directory,name))).size,128*1024*1024);
     });
 
+    it('bounds legacy allocation independently of a 256 GiB queue capacity', async () => {
+        const name=await legacy({event:{eventId:'huge-sparse'},recipients:['one'],remaining:['one']});
+        const file=path.join(directory,name); const handle=await openFile(file,'r+');
+        const size=1024**3; await handle.truncate(size); await handle.close();
+        const original=Buffer.alloc;
+        Buffer.alloc=function alloc(length,...args) {
+            if (length>=size) { throw new Error('oversized legacy allocation attempted'); }
+            return original(length,...args);
+        };
+        try { await assert.rejects(spool({maxBytes:256*1024**3}).open(),/legacyMigrationMaxBytes/u); }
+        finally { Object.assign(Buffer,{alloc:original}); }
+        assert.equal((await stat(file)).size,size);
+    });
+    it('preserves legitimate legacy records until an operator raises the independent migration limit', async () => {
+        const record={event:{eventId:'large-valid',value:'x'.repeat(256)},recipients:['one','two'],remaining:['two']};
+        const name=await legacy(record); const file=path.join(directory,name); const original=await readContents(file);
+        await assert.rejects(spool({legacyMigrationMaxBytes:128}).open(),/legacyMigrationMaxBytes/u);
+        assert.deepEqual(await readContents(file),original);
+        const recovered=spool({legacyMigrationMaxBytes:1024}); await recovered.open();
+        assert.deepEqual(await recovered.pending(),[{event:record.event,remaining:['two']}]);
+        assert.ok(!(await readdir(directory)).includes(name));
+    });
+    it('validates the migration-only limit without restricting new generic appends', async () => {
+        for (const legacyMigrationMaxBytes of [0,-1,1.5,Infinity]) {
+            assert.throws(()=>{spool({legacyMigrationMaxBytes});},/legacyMigrationMaxBytes/u);
+        }
+        const item=spool({legacyMigrationMaxBytes:32}); await item.open();
+        const event={eventId:'new-large',value:'x'.repeat(256)}; await item.append(event,['one']);
+        await item.close(); const recovered=spool({legacyMigrationMaxBytes:32}); await recovered.open();
+        assert.deepEqual(await recovered.pending(),[{event,remaining:['one']}]);
+    });
+
 });

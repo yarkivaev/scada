@@ -5,9 +5,10 @@ import spoolMigration from './spoolMigration.js';
 
 /* eslint max-lines-per-function: ["error", 100], max-statements: ["error", 25] */
 /** Single owner, bounded cache and indexed reads. Caps count logical JSON bytes, not allocated pages. */
-export default function deliverySpool(directory, { maxBytes, maxRecords = 100000 } = {}) {
+export default function deliverySpool(directory, { maxBytes, maxRecords = 100000, legacyMigrationMaxBytes = 16 * 1024 * 1024 } = {}) {
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) { throw new TypeError('Explicit positive spool maxBytes required'); }
     if (!Number.isSafeInteger(maxRecords) || maxRecords <= 0) { throw new TypeError('Positive safe spool maxRecords required'); }
+    if (!Number.isSafeInteger(legacyMigrationMaxBytes) || legacyMigrationMaxBytes <= 0) { throw new TypeError('Positive safe legacyMigrationMaxBytes required'); }
     const state = { db: null, owner: null, ready: false, busy: false, bytes: 0, records: 0 };
     function release() {
         state.ready = false;
@@ -33,7 +34,7 @@ export default function deliverySpool(directory, { maxBytes, maxRecords = 100000
                 try {
                     Object.assign(state, await database(directory));
                     capacity(state.db, maxBytes, maxRecords);
-                    await spoolMigration(directory, state.db, { maxBytes, maxRecords });
+                    await spoolMigration(directory, state.db, { maxBytes, maxRecords, legacyMigrationMaxBytes });
                     refresh(); Object.assign(state, { ready:true });
                 } catch (error) { release(); throw error; }
             }, false);

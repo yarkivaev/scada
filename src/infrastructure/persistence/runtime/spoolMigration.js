@@ -4,12 +4,13 @@ import path from 'node:path';
 import { decoded, digest, encoded, revive } from './spoolCodec.js';
 import { insert } from './spoolRecords.js';
 
-async function load(directory, name, maxBytes) {
+async function load(directory, name, limits) {
     const handle = await open(path.join(directory, name), constants.O_RDONLY + constants.O_NOFOLLOW);
     try {
         const info = await handle.stat();
         if (!info.isFile()) { throw new Error('Spool requires regular legacy file'); }
-        if (info.size > maxBytes) { throw new Error('Spool capacity exceeded by legacy file'); }
+        if (info.size > limits.maxBytes) { throw new Error('Spool capacity exceeded by legacy file'); }
+        if (info.size > limits.legacyMigrationMaxBytes) { throw new Error('Legacy migration record capacity exceeded: legacyMigrationMaxBytes'); }
         const buffer = Buffer.alloc(info.size + 1);
         let offset = 0;
         while (offset < buffer.length) {
@@ -32,7 +33,7 @@ function verify(db, value) {
 }
 /* eslint max-statements: ["error", 20] */
 async function migrateFile(directory, name, db, limits) {
-    const text = await load(directory, name, limits.maxBytes);
+    const text = await load(directory, name, limits);
     const record = JSON.parse(text, revive);
     if (!Array.isArray(record.remaining)) { throw new Error('Corrupt spool receipt state'); }
     const value = encoded(record.event, record.recipients, record.remaining);
@@ -46,7 +47,7 @@ async function migrateFile(directory, name, db, limits) {
     })();
     verify(db, value);
     // Verify source unchanged after commit before unlink; owner excludes compliant concurrent writers.
-    if (digest(await load(directory, name, limits.maxBytes)) !== hash) { throw new Error('Legacy import source changed'); }
+    if (digest(await load(directory, name, limits)) !== hash) { throw new Error('Legacy import source changed'); }
     await unlink(path.join(directory, name));
     const handle = await open(directory, 'r');
     try { await handle.sync(); } finally { await handle.close(); }
