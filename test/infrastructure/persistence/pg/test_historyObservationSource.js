@@ -26,4 +26,9 @@ describe('historical context with external observations', function() {
         const next=await historyContext(pool,'machine',1000,2000,{padding:1000,cutoff:-Infinity,observations:changed});
         assert.notEqual(next.revision,result.revision);
     });
+    it('exports the supported staged history protocol for runtime capability checks',function(){assert.equal(scada.historyProtocol,'stateful-correction-v1');});
+    it('does not advertise a stateful classifier protocol on the legacy PostgreSQL observation path', async function() {
+        await assert.rejects(async()=>{await scada.historyPg(pool).configure('machine',[{topic:'a',channel:'power'}],30000,'casting');},/stateful|external/u);
+    });
+
 });

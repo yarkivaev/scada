@@ -5,6 +5,13 @@ import { readFile } from 'node:fs/promises';
 import metricsStatePg, { metricsSinkFromPool } from '../../src/infrastructure/persistence/pg/metrics.js';
 import historyPg from '../../src/infrastructure/persistence/pg/history.js';
 
+function stagedSource(time,offsets=[0,1000,5000],sample=(offset)=>{return offset;}) {
+    const points=offsets.map(offset=>{return {eventId:`s${offset}`,channel:'power',time:time+offset,value:offset};});
+    return ()=>{return {async registered(){},async start(){return time;},async seed(){return null;},async boundary(){return time+offsets.at(-1);},
+        async page(id,left,end){const remaining=points.filter(p=>{return p.time>=left && p.time<=end;});return {from:left,until:remaining.length>2?remaining[1].time:end,next:remaining[2]?.time ?? null,end};},
+        async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}).map(row=>{return {...row,value:sample(row.time-time)};}),continuity:[{from:left,until:right}]};}
+    };};
+}
 describe('Historical telemetry PostgreSQL', function historyTests() {
     this.timeout(120000);
     let container;
@@ -26,6 +33,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0009__history_continuation.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0010__history_admissions.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0011__history_classifier_checkpoints.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0013__history_staged_corrections.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('classifies external raw history without copying it into PostgreSQL and fences changed external context', async () => {
@@ -150,6 +158,140 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const context=await store.context(machine,work.from,work.until,1000);
         assert.deepEqual(context.items.map(({time:at})=>{return at;}),[time+1,time+2]);
         assert.equal(context.segments[0].name,'on');
+    });
+    it('rewinds another paged classifier claim when a late admission changes its processed prefix', async () => {
+        const machine='cross-work-rewind';const time=Date.now()-10000;
+        const source=()=>{return {async registered(){}};};
+        const store=historyPg(pool,{observations:source});
+        await store.configure(machine,[{topic:'cross-work/power',channel:'power'}],30000,'casting');
+        const old=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms,cursor_ms,end_ms) VALUES(gen_random_uuid(),$1,$2,$3,$3,$4) RETURNING id,token',[machine,time,time+1000,time+9000]);
+        const record={topic:'cross-work/power',ts:time+500,value:9};
+        await store.prepare([record]);await store.complete([record]);
+        const current=(await store.work(machine)).items.find(item=>{return item.id===old.rows[0].id;});
+        assert.equal(current.cursor,null);
+        assert.notEqual(current.token,old.rows[0].token);
+    });
+    it('keeps valid paged classifier progress when new admissions only append beyond its cursor', async () => {
+        const machine='append-keeps-progress';const time=Date.now()-10000;
+        const store=historyPg(pool,{observations:()=>{return {async registered(){}};}});
+        await store.configure(machine,[{topic:'append-progress/power',channel:'power'}],30000,'casting');
+        const old=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms,cursor_ms,end_ms) VALUES(gen_random_uuid(),$1,$2,$3,$3,$4) RETURNING id,token',[machine,time,time+1000,time+9000]);
+        const record={topic:'append-progress/power',ts:time+5000,value:9};
+        await store.prepare([record]);await store.complete([record]);
+        const current=(await store.work(machine)).items.find(item=>{return item.id===old.rows[0].id;});
+        assert.equal(current.cursor,time+1000);
+        assert.equal(current.token,old.rows[0].token);
+    });
+    it('publishes a complete staged casting correction atomically and applies the latest operator cuts and labels', async () => {
+        const machine='staged-casting';const time=Date.now()-10000;
+        const points=[0,1000,5000].map(offset=>{return {eventId:`staged${offset}`,channel:'power',time:time+offset,value:offset};});
+        const source=()=>{return {async registered(){},async start(){return time;},async seed(){return null;},async boundary(){return time+5000;},
+            async page(id,left,end){const remaining=points.filter(p=>{return p.time>=left && p.time<=end;});return {from:left,until:remaining.length>2?remaining[1].time:end,next:remaining[2]?.time ?? null,end};},
+            async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};}
+        };};
+        const store=historyPg(pool,{observations:source});
+        await store.configure(machine,[{topic:'staged/power',channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties,resolved) VALUES($1,'phase','on',$2,$3,3,$5,$7,true),($1,'phase','on',$3,$4,2,$6,$7,true)",
+            [machine,new Date(time),new Date(time+3000),new Date(time+5000),'["left"]','["right"]','{"cadence_threshold_ms":"99","operator_note":"keep"}']);
+        const initial=(await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
+        const inserted=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING id',[machine,time,time+5000]);
+        let work=(await store.work(machine)).items.find(row=>{return row.id===inserted.rows[0].id;});
+        let context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const first={kind:'phase',name:'on',start_time:new Date(time+1000),end_time:new Date(time+1000),duration:0,tags:[],properties:{casting:'true',cadence_threshold_ms:'10'}};
+        await store.commit(machine,work.id,[first],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
+        assert.deepEqual((await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows,initial);
+        assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'0');
+        await pool.query('UPDATE segments SET tags=$3 WHERE machine=$1 AND start_time=$2',[machine,new Date(time+3000),'["new-right"]']);
+        const continuingId=work.id;
+        work=(await store.work(machine)).items.find(row=>{return row.id===continuingId;});
+        context=await historyPg(pool,{observations:source}).context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'casting',workId:work.id,workToken:work.token});
+        assert.deepEqual(context.classifierSeed,{at:time+1000,state:{count:2}});
+        await store.commit(machine,work.id,[{...first,end_time:new Date(time+5000),duration:4}],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{count:3}}});
+        const rows=(await pool.query('SELECT start_time,end_time,tags,properties FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
+        assert.deepEqual(rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[1000,3000,['left']],[3000,5000,['new-right']]]);
+        assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_threshold_ms==='10' && p.operator_note==='keep';}));
+        assert.equal((await store.work(machine)).items.length,0);
+        assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'2');
+    });
+    it('converges staged replay without manufacturing a page cut or losing the unprocessed user tail', async () => {
+        const machine='staged-convergence';const time=Date.now()-10000;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,1000,2000,3000,4000,5000,6000])});
+        await store.configure(machine,[{topic:'staged-convergence/power',channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','on',$2,$3,3,$5),($1,'phase','on',$3,$4,3,$6)",
+            [machine,new Date(time),new Date(time+3000),new Date(time+6000),'["left"]','["right"]']);
+        await pool.query('INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES($1,$2,$3,$4)',[machine,'casting',time+1000,{count:2}]);
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time]);
+        const work=(await store.work(machine)).items[0];
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        assert.equal(context.page.until,time+1000);assert.equal(context.page.end,time+6000);
+        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time),end_time:new Date(time+1000),duration:0,tags:[],properties:{casting:'true'}}],
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
+        assert.equal((await store.work(machine)).items.length,0);
+        assert.deepEqual((await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[0,3000,['left']],[3000,6000,['right']]]);
+    });
+    it('removes obsolete automatic phases when the corrected casting history has no confirmed island', async () => {
+        const machine='staged-empty';const time=Date.now()-10000;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,5000])});
+        await store.configure(machine,[{topic:'staged-empty/power',channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','on',$2,$3,0,$4)",[machine,new Date(time),new Date(time+5000),JSON.stringify(['keep'])]);
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
+        const work=(await store.work(machine)).items[0];
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        await store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{last:null}}});
+        assert.equal((await pool.query('SELECT count(*) FROM segments WHERE machine=$1',[machine])).rows[0].count,'0');
+        assert.equal((await pool.query('SELECT tags FROM history_annotations WHERE machine=$1',[machine])).rows[0].tags,'["keep"]');
+    });
+    it('keeps a real user cut at the last singleton without leaving the preceding slice pending', async () => {
+        const machine='staged-final-cut';const time=Date.now()-10000;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,5000])});
+        await store.configure(machine,[{topic:'staged-final-cut/power',channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties) VALUES($1,'phase','on',$2,$3,5,$4,$6),($1,'phase','on',$3,$3,0,$5,$6)",
+            [machine,new Date(time),new Date(time+5000),'["left"]','["singleton"]','{"cadence_rule":"old","note":"keep"}']);
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
+        const work=(await store.work(machine)).items[0];
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time),end_time:new Date(time+5000),duration:0,tags:[],properties:{casting:'true',cadence_rule:'fresh'}}],
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{count:2}}});
+        const rows=(await pool.query('SELECT start_time,duration,tags,properties FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
+        assert.deepEqual(rows.map(row=>{return [row.start_time.getTime()-time,row.duration,JSON.parse(row.tags)];}),[[0,5,['left']],[5000,0,['singleton']]]);
+        assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_rule==='fresh' && p.note==='keep';}));
+    });
+    it('does not advance staged work when a nonempty page omits its classifier checkpoint', async () => {
+        const machine='staged-missing-state';const time=Date.now()-10000;
+        const store=historyPg(pool,{observations:stagedSource(time)});
+        await store.configure(machine,[{topic:'staged-missing-state/power',channel:'power'}],30000,'casting');
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
+        const work=(await store.work(machine)).items[0];
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        await assert.rejects(store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,replace:true}),/checkpoint/u);
+        assert.equal((await store.work(machine)).items[0].cursor,null);
+    });
+    it('discards an obsolete staged generation after a late point rewinds its processed prefix', async () => {
+        const machine='staged-rewind';const time=Date.now()-10000;let changed=false;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000],offset=>{return changed && offset===0?99:offset;})});
+        await store.configure(machine,[{topic:'staged-rewind/power',channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','on',$2,$3,0)",[machine,new Date(time),new Date(time+5000)]);
+        const inserted=(await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING id',[machine,time,time+5000])).rows[0];
+        let work=(await store.work(machine)).items.find(row=>{return row.id===inserted.id;});
+        let context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const oldClaim={...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}};
+        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time+1000),end_time:new Date(time+1000),duration:0,tags:[]}],oldClaim);
+        const records=[{topic:'staged-rewind/power',ts:time,value:99}];
+        await store.prepare(records);changed=true;await store.complete(records);
+        await assert.rejects(store.commit(machine,inserted.id,[],oldClaim),/claim/u);
+        work=(await store.work(machine)).items.find(row=>{return row.id===inserted.id;});
+        assert.equal(work.cursor,null);
+        context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        assert.equal(context.classifierSeed,null);
+        await store.commit(machine,work.id,[{name:'off',start_time:new Date(time),end_time:new Date(time+1000),duration:0,tags:[]}],
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{mode:'off',count:2}}});
+        work=(await store.work(machine)).items.find(row=>{return row.id===inserted.id;});
+        context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token,cursor:work.cursor,end:work.end});
+        await store.commit(machine,work.id,[{name:'off',start_time:new Date(time),end_time:new Date(time+5000),duration:0,tags:[]}],
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{mode:'off',count:3}}});
+        const rows=(await pool.query('SELECT name,start_time,end_time FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
+        assert.deepEqual(rows.map(row=>{return [row.name,row.start_time.getTime()-time,row.end_time.getTime()-time];}),[['off',0,5000]]);
+        assert.equal((await pool.query('SELECT count(*) FROM history_corrections WHERE machine=$1',[machine])).rows[0].count,'0');
     });
     it('keeps first local metric before history registration and across receiver restarts', async () => {
         const topic = 'first-wins/power';
@@ -297,6 +439,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0005__historical_telemetry_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0008__metric_receipts_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0012__external_history_grants.sql', import.meta.url),'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0014__history_correction_grants.sql', import.meta.url),'utf8'));
         const client=await pool.connect();
         try {
             await client.query('SET ROLE supervisor_sink');
@@ -309,6 +452,12 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             await client.query("INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES('role','casting',1,'{}')");
             await client.query("UPDATE history_checkpoints SET valid=false WHERE machine='role'");
             await client.query("DELETE FROM history_admissions WHERE event_id='role-event'");
+            const at=Date.now();
+            const staged=(await client.query("INSERT INTO history_work(id,machine,from_ms,until_ms,correction_from,correction_until) VALUES(gen_random_uuid(),'role-stage',$1,$2,$1,$2) RETURNING id,generation",[at,at+1000])).rows[0];
+            await client.query("INSERT INTO history_corrections(work_id,generation,machine,kind,name,start_time,end_time,duration) VALUES($1,$2,'role-stage','phase','on',$3,$4,1)",[staged.id,staged.generation,new Date(at),new Date(at+1000)]);
+            await client.query("SELECT history_apply_correction($1,'role-stage',1,false)",[staged.id]);
+            assert.equal((await client.query("SELECT count(*) FROM segments WHERE machine='role-stage'")).rows[0].count,'1');
+            await client.query('DELETE FROM history_work WHERE id=$1',[staged.id]);
         } finally { await client.query('RESET ROLE'); client.release(); }
     });
 

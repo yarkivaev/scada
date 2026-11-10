@@ -2,7 +2,10 @@ import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
 import historyContext from './historyContext.js';
 import historyAdmission, {assertHistoryReady} from './historyAdmission.js';
 import {configureClassifier,saveCheckpoint} from './historyCheckpoint.js';
+import historyCorrection from './historyCorrection.js';
 import historyConfigure from './historyConfigure.js';
+
+export const historyProtocol = 'stateful-correction-v1';
 
 function machineName(machine) {
     if (typeof machine !== 'string' || !machine || machine.length > 200) { throw new TypeError('machine required'); }
@@ -55,7 +58,7 @@ function context(pool,machine,from,until,options) {
 }
 async function unchanged(client, machine, base, {observationSource,timeScale}) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
-    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,timeScale,observations:observationSource?.(client) });
+    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,workId:base.workId,workToken:base.workToken,timeScale,observations:observationSource?.(client) });
     if (latest.revision !== base.revision) {
         const error = new Error('History context changed');
         error.statusCode = 409;
@@ -79,14 +82,19 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
     if (!Array.isArray(segments) || segments.length > 1000) { throw new TypeError('Bounded segments required'); }
     // eslint-disable-next-line max-statements -- Claim, correction, checkpoint and advancement share one atomic boundary.
     return transaction(pool, machine, async (client) => {
-        const work = await client.query('SELECT id,token,from_ms,until_ms,cursor_ms,end_ms FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE', [workId, machine]);
+        const work = await client.query(`SELECT id,token,from_ms,until_ms,cursor_ms,end_ms${base?.replace?',generation':''} FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE`, [workId, machine]);
         if (!work.rowCount) { return { applied: false }; }
         checkClaim(work.rows[0],base);
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
         if (observationSource) { await assertHistoryReady(client,machine); }
         const latest = base?.revision ? await unchanged(client, machine, base, {observationSource,timeScale}) : null;
-        if (latest && segments.some((item) => { return new Date(item.end_time).getTime()*timeScale>latest.context.page.until; })) {
+        if (latest && segments.some((item) => { return new Date(item.end_time).getTime()>Math.round(latest.context.page.until/timeScale); })) {
             throw new TypeError('Segment extends beyond bounded history page; upgrade history worker');
+        }
+        if(base?.replace){
+            const next=await historyCorrection(client,machine,work.rows[0],segments,{base,context:latest,timeScale});
+            await advance(client,machine,workId,next);
+            return {applied:true};
         }
         await client.query(`INSERT INTO history_annotations(machine,kind,start_time,name,end_time,duration,tags,properties,resolved)
             SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
@@ -120,12 +128,13 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
     return {
         ...(admission ?? {}),
         configure(machine, topics, bucketMs = 30000, classifierKey = undefined) {
+            if (classifierKey && !observationSource) {throw new TypeError('Stateful classification requires an external observation source');}
             if (!Array.isArray(topics) || topics.length > 500 || !Number.isSafeInteger(bucketMs) || bucketMs <= 0) { throw new TypeError('Invalid history topics'); }
             return transaction(pool,machine,async (client) => {
                 const source=observationSource?.(client);
                 const result=await historyConfigure(client,machine,topics,bucketMs*timeScale,{retentionDays,observations:source});
                 await configureClassifier(client,machine,classifierKey,source);
-                return {...result,...(timeScale!==1 && {timeScale})};
+                return {...result,...((timeScale!==1 || classifierKey) && {timeScale}),...(classifierKey && {classifierProtocol:historyProtocol})};
             },true);
         },
         async purge() {

@@ -13,6 +13,7 @@ export async function persistTelemetry(sink, delivery) {
 /** Node-owned receiver; independent of relocatable collectors and MQTT sessions. */
 export default function historyTelemetry(env, pool) {
     if (env.HISTORY_AMQP_ENABLED !== 'true' || env.SINK_DB_PROFILE === 'central') { return undefined; }
+    if (env.TELEMETRY_BACKEND === 'clickhouse') { throw new TypeError('ClickHouse telemetry requires the coordinated history receiver'); }
     const url = env.HISTORY_AMQP_URL ?? env.AMQP_URL;
     if (!url) { throw new TypeError('HISTORY_AMQP_URL or AMQP_URL required for durable local telemetry'); }
     if (!env.HISTORY_AMQP_BINDINGS) { throw new TypeError('Explicit local telemetry bindings required'); }

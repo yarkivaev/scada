@@ -56,12 +56,14 @@ export default function historyAdmission(pool,{now=Date.now,timeScale=1,timestam
                     if (times.length) {
                         // eslint-disable-next-line no-await-in-loop
                         await client.query('UPDATE history_checkpoints SET valid=false WHERE machine=$1 AND time_ms>=$2',[mapping.machine,Math.min(...times)]);
+                        // eslint-disable-next-line no-await-in-loop
+                        await client.query('UPDATE history_work SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,generation=gen_random_uuid(),classifier_checkpoint=NULL,correction_from=NULL,correction_until=NULL WHERE machine=$1 AND cursor_ms>$2',[mapping.machine,Math.min(...times)]);
                     }
                     for (const row of items.filter(({topic,time}) => {return topic===mapping.topic && time>=now()-mapping.retention_days*86400000*timeScale;})) {
                         // eslint-disable-next-line no-await-in-loop
                         await client.query(`INSERT INTO history_work(id,machine,from_ms,until_ms)
                             VALUES(md5($1||':'||$2::text)::uuid,$1,$3,$3)
-                            ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
+                            ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,generation=gen_random_uuid(),classifier_checkpoint=NULL,correction_from=NULL,correction_until=NULL,from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
                         [mapping.machine,Math.floor(row.time/Number(mapping.bucket_ms)),row.time]);
                     }
                 }

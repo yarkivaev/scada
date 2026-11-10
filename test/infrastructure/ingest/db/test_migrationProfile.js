@@ -54,4 +54,8 @@ describe('migrationApplies', function() {
         assert.equal(migrationSinkRunnable(name),false);
     });
 
+    it('keeps staged correction grants out of the sink migration pass', function() {
+        assert.equal(migrationSinkRunnable('E0014__history_correction_grants.sql'),false);
+    });
+
 });

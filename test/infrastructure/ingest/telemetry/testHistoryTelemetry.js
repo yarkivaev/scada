@@ -23,3 +23,7 @@ describe('durable local telemetry receiver', () => {
 it('requires explicit telemetry bindings rather than consuming unrelated exchange traffic', () => {
     assert.throws(() => { historyTelemetry({ HISTORY_AMQP_ENABLED: 'true', HISTORY_AMQP_URL: 'amqp://localhost' }, {}); }, /bindings/u);
 });
+
+it('does not start a second PostgreSQL raw receiver for ClickHouse telemetry', () => {
+    assert.throws(() => { historyTelemetry({HISTORY_AMQP_ENABLED:'true',TELEMETRY_BACKEND:'clickhouse',HISTORY_AMQP_URL:'amqp://localhost',HISTORY_AMQP_BINDINGS:'["#"]'},{}); },/ClickHouse/u);
+});

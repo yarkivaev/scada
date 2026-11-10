@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import historySeed from './historySeed.js';
 import historyObservationsPg from './historyObservations.js';
-import {classifierPage,classifierSeed} from './historyCheckpoint.js';
+import {classifierClaim,classifierPage,classifierSeed} from './historyCheckpoint.js';
 
 function bounded(rows) {
     if (rows.length>10000) { throw new Error('History context capacity exceeded; retain work for bounded refinement'); }
@@ -18,20 +18,22 @@ async function segmentBoundary(pool,machine,right,segments,timeScale) {
 }
 /** Read a finite dependency envelope in stored history, compacting unchanged heartbeat observations. */
 // eslint-disable-next-line max-statements
-export default async function historyContext(pool,machine,from,until,{padding,cutoff,cursor = null,end: envelope = null,observations: source = historyObservationsPg(pool),classifierKey,timeScale=1}) {
+export default async function historyContext(pool,machine,from,until,{padding,cutoff,cursor = null,end: envelope = null,observations: source = historyObservationsPg(pool),classifierKey,timeScale=1,workId,workToken}) {
     if (![from,until,padding].every(Number.isSafeInteger) || from>until || padding<0 || padding>86400000*timeScale) { throw new TypeError('Invalid history range'); }
-    const range = { from,until,paddingMs:padding,cursor,end:envelope,...(classifierKey && {classifierKey}),...(timeScale!==1 && {timeScale}) };
+    const range = { from,until,paddingMs:padding,cursor,end:envelope,...(classifierKey && {classifierKey}),...(timeScale!==1 && {timeScale}),...(workId && {workId,workToken}) };
     if ((cursor !== null && !Number.isSafeInteger(cursor)) || (envelope !== null && !Number.isSafeInteger(envelope))) { throw new TypeError('Invalid history cursor'); }
-    if (from<cutoff) {
+    const claim=await classifierClaim(pool,machine,{workId,workToken,from,until,cursor,end:envelope});
+    if (from<cutoff && !claim?.started) {
         const pending = cursor === null || envelope === null ? {rowCount:0} : await pool.query(`SELECT 1 FROM history_work WHERE machine=$1 AND from_ms=$2 AND until_ms=$3 AND cursor_ms=$4 AND end_ms=$5 LIMIT 1`,[machine,from,until,cursor,envelope]);
         if (!pending.rowCount) { return {available:false,items:[],segments:[],annotations:[],context:range}; }
     }
-    const classifier=classifierKey ? await classifierSeed(pool,machine,cursor ?? from,classifierKey) : null;
+    const classifier=classifierKey ? await classifierSeed(pool,machine,cursor ?? from,classifierKey,{claim,cursor}) : null;
     let left = cursor ?? from-padding;
     if (classifierKey && cursor===null) { left=classifier ? classifier.at+1 : await source.start(machine); }
     const right = Math.max(envelope ?? until,await source.boundary(machine,from,until,padding));
     const previous = await pool.query(`SELECT kind,name,start_time,end_time FROM segments WHERE machine=$1 AND kind='phase' AND start_time<=$2 ORDER BY start_time DESC LIMIT 1`,[machine,new Date(right/timeScale)]);
-    const end = Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale));
+    const tail=classifierKey ? await pool.query("SELECT max(end_time) AS end_time FROM segments WHERE machine=$1 AND kind='phase'",[machine]) : null;
+    const end = Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale),tail?.rows[0]?.end_time ? new Date(tail.rows[0].end_time).getTime()*timeScale : -Infinity);
     // Fetch timestamp keys only, then read at most 250 complete groups. Never fetch the raw dependency tail.
     const rawPage = await source.page(machine,left,end);
     const page=classifierKey ? await classifierPage(pool,machine,rawPage,classifierKey) : rawPage;
@@ -50,7 +52,7 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
         AND (COALESCE(a.tags,'') NOT IN ('','null','[]') OR COALESCE(a.properties,'') NOT IN ('','null','{}')) ORDER BY a.start_time,a.name LIMIT 10001`,
     [machine,new Date(left/timeScale),new Date(pageEnd/timeScale)]);
     bounded(annotations.rows);
-    const initial = await historySeed(pool,machine,left,padding,{observations:source,timeScale});
+    const initial = classifierKey ? null : await historySeed(pool,machine,left,padding,{observations:source,timeScale});
     if (initial?.segment && !segments.rows.some((row) => { return row.start_time.getTime() === initial.segment.start_time.getTime(); })) { segments.rows.unshift(initial.segment); }
     const last = observations.items.at(-1)?.time;
     const rightClosed = next === null && last !== undefined && segments.rows.some((row) => { return row.duration>0 && new Date(row.end_time).getTime()*timeScale>=last; });

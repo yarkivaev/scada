@@ -113,4 +113,4 @@ export { default as collectorProcesses } from './src/application/deploy/collecto
 
 export { default as executeStages } from './src/infrastructure/deploy/executeStages.js';
 
-export { default as historyPg } from './src/infrastructure/persistence/pg/history.js';
+export { default as historyPg, historyProtocol } from './src/infrastructure/persistence/pg/history.js';
