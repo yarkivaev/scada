@@ -18,8 +18,11 @@ jobs:
     with:
       node-version: '22'
 
+  control:
+    uses: ./.github/workflows/control.yml
+
   tag:
-    needs: [check-version, lint, test]
+    needs: [check-version, lint, test, control]
     if: needs.check-version.outputs.should_release == 'true'
     uses: yarkivaev/npm-workflows/.github/workflows/tag.yml@main
     with:
