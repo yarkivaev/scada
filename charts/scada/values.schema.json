@@ -115,8 +115,47 @@
         "podTemplate": {
           "type": "object",
           "description": "Opaque PodTemplateSpec override for preserving existing storage pods during adoption; empty uses generated defaults."
+        },
+        "migrationsMode": {
+          "type": "string",
+          "enum": [
+            "apply",
+            "verify"
+          ]
+        },
+        "runtimeSecret": {
+          "type": "string"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "enabled",
+              "migrationsMode"
+            ],
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "migrationsMode": {
+                "const": "verify"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "runtimeSecret"
+            ],
+            "properties": {
+              "runtimeSecret": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "rabbitmq": {
       "type": "object",
@@ -124,6 +163,12 @@
         "podTemplate": {
           "type": "object",
           "description": "Opaque PodTemplateSpec override for preserving existing storage pods during adoption; empty uses generated defaults."
+        },
+        "definitionsSecret": {
+          "type": "string"
+        },
+        "runtimeSecret": {
+          "type": "string"
         }
       }
     }

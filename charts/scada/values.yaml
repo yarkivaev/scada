@@ -30,6 +30,10 @@ postgres:
   enabled: true
   image: postgres:16
   secret: scada-postgres
+  # apply preserves startup migrations; verify uses a separately bootstrapped DB.
+  migrationsMode: apply
+  # Required and distinct from secret in verify mode; contains only runtime url.
+  runtimeSecret: ""
   # Existing PVC: no PVC or volumeClaimTemplate is created.
   existingClaim: ""
   env: {}
@@ -56,6 +60,9 @@ rabbitmq:
   configName: ""
   rolloutOnConfigChange: false
   definitions: null
+  # Secure definitions are provisioned separately; passwords never enter ConfigMaps.
+  definitionsSecret: ""
+  runtimeSecret: ""
   plugins: [rabbitmq_stomp, rabbitmq_mqtt, rabbitmq_management]
   extraConfig: {}
   resources: {}

@@ -76,16 +76,20 @@ data:
   rabbitmq.conf: |
     load_definitions = /etc/rabbitmq/definitions.json
     mqtt.listeners.tcp.default = 1883
-    mqtt.allow_anonymous = true
+    mqtt.allow_anonymous = {{ if hasKey (.Values.rabbitmq.extraConfig | default dict) "mqtt.allow_anonymous" }}{{ get .Values.rabbitmq.extraConfig "mqtt.allow_anonymous" }}{{ else }}true{{ end }}
     mqtt.vhost = /
     mqtt.exchange = scada.telemetry
     {{- range $key, $value := .Values.rabbitmq.extraConfig }}
+    {{- if ne $key "mqtt.allow_anonymous" }}
     {{ $key }} = {{ $value }}
     {{- end }}
+    {{- end }}
+{{- if not .Values.rabbitmq.definitionsSecret }}
   definitions.json: |
 {{- if ne .Values.rabbitmq.definitions nil }}
 {{ .Values.rabbitmq.definitions | toPrettyJson | nindent 4 }}
 {{- else }}
 {{ $definitions | toPrettyJson | nindent 4 }}
+{{- end }}
 {{- end }}
 {{- end }}
