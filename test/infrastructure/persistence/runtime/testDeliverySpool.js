@@ -2,12 +2,20 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import deliverySpool from '../../../../src/infrastructure/persistence/runtime/deliverySpool.js';
+import createDelivery from '../../../../src/infrastructure/persistence/runtime/deliverySpool.js';
+
+const owned = [];
+function deliverySpool(...args) {
+    const item = createDelivery(...args); owned.push(item); return item;
+}
+async function closeOwned() {
+    await Promise.all(owned.splice(0).map((item) => { return item.close(); }));
+}
 
 describe('Persistent delivery spool', () => {
     let directory;
     beforeEach(async () => { directory = await mkdtemp(path.join(os.tmpdir(), 'spool-')); });
-    afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
+    afterEach(async () => { await closeOwned(); await rm(directory, { recursive: true, force: true }); });
     it('recovers original event and per-recipient receipts after restart', async () => {
         const first = deliverySpool(directory, { maxBytes: 10000 });
         await first.open();
@@ -50,7 +58,7 @@ describe('Persistent delivery spool', () => {
 describe('delivery spool record admission', () => {
     let directory;
     beforeEach(async () => { directory = await mkdtemp(path.join(os.tmpdir(), 'spool-cap-')); });
-    afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
+    afterEach(async () => { await closeOwned(); await rm(directory, { recursive: true, force: true }); });
     it('bounds tiny record count, preserves old records, and frees capacity only after confirmation', async () => {
         const spool = deliverySpool(directory, { maxBytes: 10000, maxRecords: 2 });
         await spool.open();
