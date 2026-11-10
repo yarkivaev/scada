@@ -25,7 +25,7 @@ npm run lint:eo       # Elegant Objects naming audit (no -er factories)
 
 ## CI/CD
 
-GitHub repository `yarkivaev/scada`. PR CI: `npm-workflows` ci.yml (version check, lint including EO audit, test). Push to `main`: release.yml (re-check, tag `v*`, publish `@yarkivaev/scada` to npm).
+GitHub repository `yarkivaev/scada`. PR CI checks the version only. Push to `main` always runs lint and tests once; tagging and npm publication depend on both succeeding for that exact commit. Before pushing, follow the targeted testing policy in `AGENTS.md`.
 
 ## Layout
 

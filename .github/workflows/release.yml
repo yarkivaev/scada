@@ -5,10 +5,33 @@ on:
     branches: [main]
 
 jobs:
-  release:
-    uses: yarkivaev/npm-workflows/.github/workflows/release.yml@main
-    permissions:
-      contents: write
-      id-token: write
+  check-version:
+    uses: yarkivaev/npm-workflows/.github/workflows/check-version.yml@main
+
+  lint:
+    uses: yarkivaev/npm-workflows/.github/workflows/lint.yml@main
     with:
       node-version: '22'
+
+  test:
+    uses: yarkivaev/npm-workflows/.github/workflows/test.yml@main
+    with:
+      node-version: '22'
+
+  tag:
+    needs: [check-version, lint, test]
+    if: needs.check-version.outputs.should_release == 'true'
+    uses: yarkivaev/npm-workflows/.github/workflows/tag.yml@main
+    with:
+      version: ${{ needs.check-version.outputs.version }}
+    permissions:
+      contents: write
+
+  publish:
+    needs: [tag]
+    uses: yarkivaev/npm-workflows/.github/workflows/publish.yml@main
+    with:
+      node-version: '22'
+    permissions:
+      contents: read
+      id-token: write
