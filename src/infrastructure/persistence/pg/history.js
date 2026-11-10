@@ -1,5 +1,7 @@
 import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
 import historyContext from './historyContext.js';
+import historyAdmission, {assertHistoryReady} from './historyAdmission.js';
+import {configureClassifier,saveCheckpoint} from './historyCheckpoint.js';
 import historyConfigure from './historyConfigure.js';
 
 function machineName(machine) {
@@ -52,7 +54,7 @@ function context(pool,machine,from,until,options) {
 }
 async function unchanged(client, machine, base, observationSource) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
-    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,observations:observationSource?.(client) });
+    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,observations:observationSource?.(client) });
     if (latest.revision !== base.revision) {
         const error = new Error('History context changed');
         error.statusCode = 409;
@@ -72,13 +74,15 @@ async function advance(client,machine,workId,page) {
         await client.query('UPDATE history_work SET cursor_ms=$3,end_ms=$4,token=gen_random_uuid() WHERE id=$1 AND machine=$2',[workId,machine,page.next,page.end]);
     } else { await client.query('DELETE FROM history_work WHERE id=$1 AND machine=$2', [workId, machine]); }
 }
-function commit(pool, machine, workId, segments, base, observationSource) {
+function commit(pool, machine, workId, segments, {base, observationSource}) {
     if (!Array.isArray(segments) || segments.length > 1000) { throw new TypeError('Bounded segments required'); }
+    // eslint-disable-next-line max-statements -- Claim, correction, checkpoint and advancement share one atomic boundary.
     return transaction(pool, machine, async (client) => {
         const work = await client.query('SELECT id,token,from_ms,until_ms,cursor_ms,end_ms FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE', [workId, machine]);
         if (!work.rowCount) { return { applied: false }; }
         checkClaim(work.rows[0],base);
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
+        if (observationSource) { await assertHistoryReady(client,machine); }
         const latest = base?.revision ? await unchanged(client, machine, base, observationSource) : null;
         if (latest && segments.some((item) => { return new Date(item.end_time).getTime()>latest.context.page.until; })) {
             throw new TypeError('Segment extends beyond bounded history page; upgrade history worker');
@@ -101,7 +105,8 @@ function commit(pool, machine, workId, segments, base, observationSource) {
                 typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags ?? null),
                 typeof item.properties === 'string' ? item.properties : JSON.stringify(item.properties ?? null), item.resolved ?? true]);
         }
-        await advance(client,machine,workId,latest?.context.page);
+        const converged=await saveCheckpoint(client,machine,base?.checkpoint,latest);
+        await advance(client,machine,workId,converged ? {next:null} : latest?.context.page);
         return { applied: true };
     });
 }
@@ -109,10 +114,17 @@ function commit(pool, machine, workId, segments, base, observationSource) {
 export default function historyPg(pool, { retentionDays = 30, now = Date.now, observations: observationSource } = {}) {
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0) { throw new TypeError('Positive retentionDays required'); }
     function cutoff() { return now() - retentionDays * 86400000; }
+    const admission=observationSource ? historyAdmission(pool,{now}) : null;
     return {
-        configure(machine, topics, bucketMs = 30000) {
+        ...(admission ?? {}),
+        configure(machine, topics, bucketMs = 30000, classifierKey = undefined) {
             if (!Array.isArray(topics) || topics.length > 500 || !Number.isSafeInteger(bucketMs) || bucketMs <= 0) { throw new TypeError('Invalid history topics'); }
-            return transaction(pool,machine,(client) => { return historyConfigure(client,machine,topics,bucketMs,retentionDays); });
+            return transaction(pool,machine,async (client) => {
+                const source=observationSource?.(client);
+                const result=await historyConfigure(client,machine,topics,bucketMs,{retentionDays,observations:source});
+                await configureClassifier(client,machine,classifierKey,source);
+                return result;
+            });
         },
         async purge() {
             const result = await pool.query(`DELETE FROM history_observations o WHERE time_ms < $1
@@ -126,12 +138,16 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
             return result.rowCount;
         },
         accept(machine, items) { return accept(pool, machine, items, cutoff()); },
-        context(machine, from, until, padding = 60000, page = {}) { return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page,observations:observationSource?.(pool) }); },
+        async context(machine, from, until, padding = 60000, page = {}) {
+            if (observationSource) { await assertHistoryReady(pool,machine); }
+            return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page,observations:observationSource?.(pool) });
+        },
         async work(machine) {
             machineName(machine);
+            if (observationSource) { try { await assertHistoryReady(pool,machine); } catch (error) { if (error.statusCode===409) { return {items:[]}; } throw error; } }
             const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
             return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until),cursor:row.cursor === null ? null : Number(row.cursor),end:row.end === null ? null : Number(row.end) }; }) };
         },
-        commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, base, observationSource); }
+        commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, {base, observationSource}); }
     };
 }

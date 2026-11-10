@@ -24,6 +24,8 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0006__historical_telemetry.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0007__metric_receipts.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0009__history_continuation.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0010__history_admissions.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0011__history_classifier_checkpoints.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('classifies external raw history without copying it into PostgreSQL and fences changed external context', async () => {
@@ -48,6 +50,89 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const current=await store.context('external-source',time,time,1000);
         await store.commit('external-source',work.id,[],{...current.context,revision:current.revision,workToken:work.token});
         assert.equal((await store.work('external-source')).items.length,0);
+    });
+    it('keeps external history unreadable until every rebatched admission has durable completion', async () => {
+        const time=Date.now()-10000;
+        const machine='external-admission';
+        const records=[{topic:'external/admission',ts:new Date(time),value:1},{topic:'external/admission',ts:new Date(time+1000),value:2}];
+        const source=()=>{return {async boundary(){return time+1000;},async page(id,left,end){return {from:left,until:end,next:null,end};},async read(){return {items:[],continuity:[]};},async seed(){return null;}};};
+        const store=historyPg(pool,{observations:source});
+        await pool.query('INSERT INTO history_topics(machine,topic,channel) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[machine,records[0].topic,'power']);
+        await store.prepare(records);
+        await assert.rejects(store.context(machine,time,time),/admission/u);
+        // Restart and redelivery in different batches must resolve the same durable barriers.
+        const restarted=historyPg(pool,{observations:source});
+        await restarted.prepare([records[1]]);
+        await restarted.complete([records[1]]);
+        assert.deepEqual((await restarted.work(machine)).items,[]);
+        await assert.rejects(restarted.context(machine,time,time),/admission/u);
+        await restarted.prepare([records[0]]);
+        await restarted.complete([records[0]]);
+        assert.equal((await restarted.context(machine,time,time)).available,true);
+        assert((await restarted.work(machine)).items.length>0);
+        assert.equal((await pool.query('SELECT count(*) FROM history_admissions WHERE topic=$1',[records[0].topic])).rows[0].count,'0');
+        assert.equal((await pool.query('SELECT count(*) FROM history_observations WHERE machine=$1',[machine])).rows[0].count,'0');
+    });
+    it('persists classifier checkpoints with pages and rejects commits from a replaced classifier', async () => {
+        const machine='external-checkpoints';
+        const time=Date.now()-10000;
+        const points=[0,1000,2000,3000].map((offset)=>{return {eventId:`p${offset}`,channel:'power',time:time+offset,value:offset};});
+        const external=()=>{return {
+            async start(){return time;},async boundary(){return time+3000;},async seed(){return null;},
+            async page(id,left,end){const remaining=points.filter(p=>{return p.time>=left && p.time<=end;});return {from:left,until:remaining.length>2?remaining[1].time:end,next:remaining[2]?.time ?? null,end};},
+            async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};},
+            async registered(){}
+        };};
+        const store=historyPg(pool,{observations:external});
+        await pool.query('DELETE FROM history_work WHERE machine=$1',[machine]);
+        await pool.query('DELETE FROM history_classifiers WHERE machine=$1',[machine]);
+        await store.configure(machine,[{topic:'checkpoint/power',channel:'power'}],30000,'casting-v1');
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time+2000]);
+        const work=(await store.work(machine)).items[0];
+        const first=await store.context(machine,work.from,work.until,0,{classifierKey:'casting-v1'});
+        assert.equal(first.context.classifierKey,'casting-v1');
+        assert.equal(first.page.from,time);
+        await store.commit(machine,work.id,[],{...first.context,revision:first.revision,workToken:work.token,checkpoint:{key:'casting-v1',at:time+1000,state:{count:2}}});
+        const restarted=historyPg(pool,{observations:external});
+        const next=(await restarted.work(machine)).items[0];
+        const continuation=await restarted.context(machine,next.from,next.until,0,{cursor:next.cursor,end:next.end,classifierKey:'casting-v1'});
+        assert.deepEqual(continuation.classifierSeed,{at:time+1000,state:{count:2}});
+        await restarted.configure(machine,[{topic:'checkpoint/power',channel:'power'}],30000,'casting-v2');
+        await assert.rejects(restarted.commit(machine,next.id,[],{...continuation.context,revision:continuation.revision,workToken:next.token,checkpoint:{key:'casting-v1',at:time+3000,state:{count:4}}}),/classifier|claim/u);
+        assert((await restarted.work(machine)).items.length>0);
+    });
+    it('invalidates late-data checkpoints and retires bounded replay only at an equal classifier state', async () => {
+        const machine='checkpoint-convergence';
+        const time=Math.floor(Date.now()/30000)*30000-60000;
+        const points=[0,1000,2000,3000,4000,5000,6000].map(offset=>{return {eventId:`e${offset}`,channel:'power',time:time+offset,value:offset};});
+        const source=()=>{return {
+            async start(){return time;},async boundary(){return time+6000;},async seed(){return null;},async registered(){},
+            async page(id,left,end){const remaining=points.filter(p=>{return p.time>=left && p.time<=end;});return {from:left,until:remaining.length>2?remaining[1].time:end,next:remaining[2]?.time ?? null,end};},
+            async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};}
+        };};
+        const store=historyPg(pool,{observations:source});
+        await store.configure(machine,[{topic:'convergence/power',channel:'power'}],30000,'casting');
+        await pool.query('INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES($1,$2,$3,$4),($1,$2,$5,$6)',[machine,'casting',time+1000,{count:2},time+3000,{count:4}]);
+        const records=[{topic:'convergence/power',ts:time+1000,value:99}];
+        await store.prepare(records);await store.complete(records);
+        assert((await pool.query('SELECT valid FROM history_checkpoints WHERE machine=$1',[machine])).rows.every(row=>{return row.valid===false;}));
+        let work=(await store.work(machine)).items[0];
+        let page=await store.context(machine,work.from,work.until,0,{classifierKey:'casting'});
+        assert.equal(page.classifierSeed,null);
+        await assert.rejects(store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'casting',at:time,state:{count:3}}}),/checkpoint/u);
+        assert.equal((await store.work(machine)).items[0].token,work.token);
+        await store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'casting',at:time+1000,state:{count:3}}});
+        work=(await store.work(machine)).items[0];
+        page=await store.context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'casting'});
+        assert.deepEqual(page.classifierSeed,{at:time+1000,state:{count:3}});
+        assert.equal(page.page.until,time+3000);
+        assert.equal(page.page.end,time+6000);
+        await store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'casting',at:time+3000,state:{count:4}}});
+        assert.equal((await store.work(machine)).items.length,0);
+    });
+    it('refuses external completion without its durable admission barrier', async () => {
+        const store=historyPg(pool,{observations:()=>{return {};}});
+        await assert.rejects(store.complete([{topic:'unprepared/point',ts:Date.now(),value:1}]),/prepare/u);
     });
     it('keeps first local metric before history registration and across receiver restarts', async () => {
         const topic = 'first-wins/power';
@@ -190,16 +275,23 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
 
     it('supports the existing receiver role with only required local history privileges', async () => {
-        await pool.query('CREATE ROLE supervisor_sink');
+        await pool.query("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supervisor_sink') THEN CREATE ROLE supervisor_sink; END IF; END $$");
         await pool.query('GRANT SELECT, INSERT ON metrics TO supervisor_sink');
         await pool.query(await readFile(new URL('../../db/migrations/E0005__historical_telemetry_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0008__metric_receipts_grants.sql', import.meta.url),'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0012__external_history_grants.sql', import.meta.url),'utf8'));
         const client=await pool.connect();
         try {
             await client.query('SET ROLE supervisor_sink');
             assert.equal((await client.query('SELECT count(*) FROM history_work')).rowCount,1);
             await metricsSinkFromPool(client,{firstWins:true}).write([{topic:'role/metric',ts:Date.now(),value:1}]);
             await client.query("INSERT INTO history_topics(machine,topic,channel) VALUES('role','role/topic','value')");
+            await client.query("INSERT INTO history_admissions(event_id,topic,time_ms) VALUES('role-event','role/topic',1)");
+            await assert.rejects(historyPg(client,{observations:()=>{return {};}}).context('role',1,1),/admission/u);
+            await client.query("INSERT INTO history_classifiers(machine,classifier_key) VALUES('role','casting')");
+            await client.query("INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES('role','casting',1,'{}')");
+            await client.query("UPDATE history_checkpoints SET valid=false WHERE machine='role'");
+            await client.query("DELETE FROM history_admissions WHERE event_id='role-event'");
         } finally { await client.query('RESET ROLE'); client.release(); }
     });
 

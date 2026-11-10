@@ -1,5 +1,5 @@
 /** First registration/new topics import existing durable telemetry before enabling history polling. */
-export default async function historyConfigure(client,machine,topics,bucketMs,retentionDays) {
+export default async function historyConfigure(client,machine,topics,bucketMs,{retentionDays,observations}) {
     const previous = await client.query('SELECT topic FROM history_topics WHERE machine=$1',[machine]);
     const known = new Set(previous.rows.map((row) => { return row.topic; }));
     await client.query('DELETE FROM history_topics WHERE machine=$1',[machine]);
@@ -9,7 +9,9 @@ export default async function historyConfigure(client,machine,topics,bucketMs,re
         await client.query('INSERT INTO history_topics(machine,topic,channel,bucket_ms,retention_days) VALUES($1,$2,$3,$4,$5)',[machine,item.topic,item.channel,bucketMs,retentionDays]);
     }
     const added = topics.filter((item) => { return !known.has(item.topic); }).map((item) => { return item.topic; });
-    if (added.length) {
+    if (observations?.registered) {
+        await observations.registered(machine,added,{bucketMs,retentionDays});
+    } else if (added.length) {
         await client.query(`WITH imported AS (
             INSERT INTO history_observations(machine,channel,time_ms,event_id,value)
             SELECT $1,t.channel,floor(extract(epoch FROM m.ts)*1000)::bigint,

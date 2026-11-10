@@ -21,12 +21,12 @@ function endpoint(method, suffix, token, action) {
 export default function historyRoutes(token, history) {
     if (!history) { return []; }
     return [
-        endpoint('POST', 'config', token, (input) => { return history.configure(input.machine, input.topics, input.bucketMs); }),
+        endpoint('POST', 'config', token, (input) => { return history.configure(input.machine, input.topics, input.bucketMs, input.classifierKey); }),
         endpoint('POST', 'purge', token, () => { return history.purge(); }),
         endpoint('POST', 'observations', token, (input) => { return history.accept(input.machine, input.observations); }),
         endpoint('GET', 'work', token, (input) => { return history.work(input.machine); }),
         endpoint('GET', 'context', token, (input) => {
-            return history.context(input.machine, Number(input.from), Number(input.until), input.paddingMs === undefined ? 60000 : Number(input.paddingMs), {cursor:input.cursor === undefined ? null : Number(input.cursor),end:input.end === undefined ? null : Number(input.end)});
+            return history.context(input.machine, Number(input.from), Number(input.until), input.paddingMs === undefined ? 60000 : Number(input.paddingMs), {classifierKey:input.classifierKey,cursor:input.cursor === undefined ? null : Number(input.cursor),end:input.end === undefined ? null : Number(input.end)});
         }),
         endpoint('POST', 'commit', token, (input) => { return history.commit(input.machine, input.workId, input.segments, input.context); })
     ];

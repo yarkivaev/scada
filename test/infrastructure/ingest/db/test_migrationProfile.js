@@ -47,4 +47,11 @@ describe('migrationApplies', function() {
         assert.strictEqual(migrationApplies(name, 'central'), false, 'central must skip E0004');
         assert.strictEqual(migrationSinkRunnable(name), false, 'E0004 must not run as supervisor_sink');
     });
+    it('runs external-history grants only as the administrator on edge', function() {
+        const name='E0012__external_history_grants.sql';
+        assert.equal(migrationApplies(name,'edge'),true);
+        assert.equal(migrationApplies(name,'central'),false);
+        assert.equal(migrationSinkRunnable(name),false);
+    });
+
 });
