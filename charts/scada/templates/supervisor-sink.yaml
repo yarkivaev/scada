@@ -35,7 +35,12 @@ spec:
             {{- include "scada.linkEnv" . | nindent 12 }}
             {{- range .Values.env }}
             - name: {{ .name }}
+              {{- if .valueFrom }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- else }}
               value: {{ .value | quote }}
+              {{- end }}
             {{- end }}
           readinessProbe:
             tcpSocket:
