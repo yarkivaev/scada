@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import deliverySpool from '../../../../src/infrastructure/persistence/runtime/deliverySpool.js';
@@ -13,6 +13,7 @@ describe('Persistent delivery spool', () => {
         await first.open();
         await first.append({ eventId: 'a', value: 4 }, ['one', 'two']);
         await first.ack('a', 'one');
+        await first.close();
         const recovered = deliverySpool(directory, { maxBytes: 10000 });
         await recovered.open();
         assert.deepEqual(await recovered.pending(), [{ event: { eventId: 'a', value: 4 }, remaining: ['two'] }]);
@@ -69,14 +70,17 @@ describe('delivery spool record admission', () => {
         await first.open();
         await first.append({ eventId: 'a' }, ['one']);
         await first.append({ eventId: 'b' }, ['one']);
+        await first.close();
         const recovered = deliverySpool(directory, { maxBytes: 10000, maxRecords: 2 });
         await recovered.open();
         assert.equal(recovered.status().pending, 2);
         await assert.rejects(recovered.append({ eventId: 'c' }, ['one']), /record capacity/u);
+        await recovered.close();
         const tooSmall = deliverySpool(directory, { maxBytes: 10000, maxRecords: 1 });
         await assert.rejects(tooSmall.open(), /record capacity/u);
         assert.equal(tooSmall.status().ready, false);
-        assert.equal((await readdir(directory)).filter((name) => { return name.endsWith('.json'); }).length, 2);
+        const again = deliverySpool(directory, {maxBytes:10000,maxRecords:2});
+        await again.open(); assert.equal(again.status().pending,2); await again.close();
     });
     it('validates a positive safe record limit and defaults to 100000', () => {
         [0, -1, 1.5, Infinity].forEach((maxRecords) => {

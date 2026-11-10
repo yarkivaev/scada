@@ -1,0 +1,369 @@
+{
+  "count": 120000,
+  "fixtureSamples": 20,
+  "admitted": {
+    "bytes": 370812000,
+    "maxBytes": 1000000000000,
+    "recordLimit": 10000000,
+    "pending": 120000,
+    "ready": true
+  },
+  "before": {
+    "rss": 44662784,
+    "heapTotal": 10551296,
+    "heapUsed": 4896096,
+    "external": 2281687,
+    "arrayBuffers": 35019
+  },
+  "afterAppend": {
+    "rss": 75431936,
+    "heapTotal": 23396352,
+    "heapUsed": 5394800,
+    "external": 2229622,
+    "arrayBuffers": 43211
+  },
+  "snapshots": [
+    {
+      "records": 10000,
+      "elapsedMs": 1699.455666,
+      "rss": 70991872,
+      "heapTotal": 15269888,
+      "heapUsed": 5353136,
+      "external": 2336166,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 20000,
+      "elapsedMs": 3478.248208,
+      "rss": 67895296,
+      "heapTotal": 15269888,
+      "heapUsed": 5331136,
+      "external": 4049062,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 30000,
+      "elapsedMs": 5232.528915999999,
+      "rss": 69468160,
+      "heapTotal": 15269888,
+      "heapUsed": 5340560,
+      "external": 3991694,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 40000,
+      "elapsedMs": 7191.384958,
+      "rss": 63029248,
+      "heapTotal": 15269888,
+      "heapUsed": 5339648,
+      "external": 3909734,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 50000,
+      "elapsedMs": 9193.504041,
+      "rss": 75874304,
+      "heapTotal": 23920640,
+      "heapUsed": 5369544,
+      "external": 5737374,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 60000,
+      "elapsedMs": 11557.917333,
+      "rss": 73793536,
+      "heapTotal": 23920640,
+      "heapUsed": 5354824,
+      "external": 5303006,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 70000,
+      "elapsedMs": 13693.875375,
+      "rss": 81461248,
+      "heapTotal": 23920640,
+      "heapUsed": 5371320,
+      "external": 5376766,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 80000,
+      "elapsedMs": 15794.274666,
+      "rss": 83476480,
+      "heapTotal": 23920640,
+      "heapUsed": 5384768,
+      "external": 5294806,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 90000,
+      "elapsedMs": 17763.250041000003,
+      "rss": 84426752,
+      "heapTotal": 23920640,
+      "heapUsed": 5397224,
+      "external": 5360366,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 100000,
+      "elapsedMs": 21722.849000000002,
+      "rss": 78921728,
+      "heapTotal": 23920640,
+      "heapUsed": 5403896,
+      "external": 5540678,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 110000,
+      "elapsedMs": 24900.305875000002,
+      "rss": 79970304,
+      "heapTotal": 23920640,
+      "heapUsed": 5412016,
+      "external": 5384958,
+      "arrayBuffers": 43211
+    },
+    {
+      "records": 120000,
+      "elapsedMs": 27824.813916000003,
+      "rss": 75366400,
+      "heapTotal": 23920640,
+      "heapUsed": 5393808,
+      "external": 5409550,
+      "arrayBuffers": 43211
+    }
+  ],
+  "appendMs": 27827.64425,
+  "appendPerSecond": 4312.258663433216,
+  "beforeCloseFiles": [
+    {
+      "name": "delivery.sqlite",
+      "bytes": 101228544,
+      "allocated": 101408768
+    },
+    {
+      "name": "delivery.sqlite-shm",
+      "bytes": 32768,
+      "allocated": 32768
+    },
+    {
+      "name": "delivery.sqlite-wal",
+      "bytes": 1048576,
+      "allocated": 1048576
+    },
+    {
+      "name": "owner.sqlite",
+      "bytes": 0,
+      "allocated": 0
+    },
+    {
+      "name": "owner.sqlite-journal",
+      "bytes": 512,
+      "allocated": 4096
+    }
+  ],
+  "files": [
+    {
+      "name": "delivery.sqlite",
+      "bytes": 101244928,
+      "allocated": 101408768
+    },
+    {
+      "name": "delivery.sqlite-shm",
+      "bytes": 32768,
+      "allocated": 32768
+    },
+    {
+      "name": "delivery.sqlite-wal",
+      "bytes": 0,
+      "allocated": 0
+    },
+    {
+      "name": "owner.sqlite",
+      "bytes": 0,
+      "allocated": 0
+    }
+  ],
+  "stored": {
+    "pageBytes": 4096,
+    "pages": 24718,
+    "freePages": 0,
+    "events": {
+      "records": 120000,
+      "compressedBytes": 52231009
+    },
+    "destinations": {
+      "descriptors": 2,
+      "jsonBytes": 2798,
+      "referenceCount": 120000
+    },
+    "tables": [
+      {
+        "name": "counters",
+        "bytes": 4096
+      },
+      {
+        "name": "destinations",
+        "bytes": 4096
+      },
+      {
+        "name": "event_sequence",
+        "bytes": 1581056
+      },
+      {
+        "name": "events",
+        "bytes": 93622272
+      },
+      {
+        "name": "imports",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_destinations_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_events_1",
+        "bytes": 6017024
+      },
+      {
+        "name": "sqlite_autoindex_imports_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_schema",
+        "bytes": 4096
+      }
+    ]
+  },
+  "recovered": {
+    "recoveredMs": 5.121583000000001,
+    "pending": 120000,
+    "before": {
+      "rss": 42614784,
+      "heapTotal": 10289152,
+      "heapUsed": 4717552,
+      "external": 2250336,
+      "arrayBuffers": 27003
+    },
+    "after": {
+      "rss": 44843008,
+      "heapTotal": 10551296,
+      "heapUsed": 4847976,
+      "external": 2239290,
+      "arrayBuffers": 27003
+    }
+  },
+  "drainMs": 27966.995375,
+  "delivered": 120000,
+  "drainPerSecond": 4290.771975714963,
+  "drained": {
+    "pageBytes": 4096,
+    "pages": 24719,
+    "freePages": 24710,
+    "events": {
+      "records": 0,
+      "compressedBytes": null
+    },
+    "destinations": {
+      "descriptors": 0,
+      "jsonBytes": null,
+      "referenceCount": null
+    },
+    "tables": [
+      {
+        "name": "counters",
+        "bytes": 4096
+      },
+      {
+        "name": "destinations",
+        "bytes": 4096
+      },
+      {
+        "name": "event_sequence",
+        "bytes": 4096
+      },
+      {
+        "name": "events",
+        "bytes": 4096
+      },
+      {
+        "name": "imports",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_destinations_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_events_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_imports_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_schema",
+        "bytes": 4096
+      }
+    ]
+  },
+  "reused": {
+    "pageBytes": 4096,
+    "pages": 24719,
+    "freePages": 22650,
+    "events": {
+      "records": 10000,
+      "compressedBytes": 4352417
+    },
+    "destinations": {
+      "descriptors": 2,
+      "jsonBytes": 2798,
+      "referenceCount": 10000
+    },
+    "tables": [
+      {
+        "name": "counters",
+        "bytes": 4096
+      },
+      {
+        "name": "destinations",
+        "bytes": 4096
+      },
+      {
+        "name": "event_sequence",
+        "bytes": 131072
+      },
+      {
+        "name": "events",
+        "bytes": 7802880
+      },
+      {
+        "name": "imports",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_destinations_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_autoindex_events_1",
+        "bytes": 516096
+      },
+      {
+        "name": "sqlite_autoindex_imports_1",
+        "bytes": 4096
+      },
+      {
+        "name": "sqlite_schema",
+        "bytes": 4096
+      }
+    ]
+  },
+  "limits": [
+    "Mac APFS timing is not a Linux PVC throughput guarantee",
+    "Memory includes Node and runtime modules",
+    "Logical admission counts full JSON envelopes; allocated SQLite pages are measured separately",
+    "Drain uses confirmed-sink stand-in; real RabbitMQ recovery is tested separately"
+  ]
+}

@@ -15,6 +15,7 @@ describe('Node delivery queue', () => {
         await first.accept({ eventId: 'a', body: Buffer.from('hello') }, [{ id: 'one', type: 'amqp', url: 'amqp://host' }]);
         assert.equal((await first.drain()).failed, 1);
         const received = [];
+        await first.close();
         const second = deliveryQueue(directory, { ...options, factory(spec) {
             assert.equal(spec.url, 'amqp://host');
             return { async write(records) { received.push(records[0]); } };
@@ -49,6 +50,16 @@ describe('Node delivery queue', () => {
         assert.deepEqual(received, ['good']);
         await queue.close();
         await assert.rejects(queue.accept({ eventId:'c' },[{id:'good',type:'amqp'}]),/closed/u);
+    });
+
+    it('releases the durable spool owner only after an accepted write finishes', async () => {
+        const options = { maxBytes:10000, factory() { throw new Error('offline'); } };
+        const first=deliveryQueue(directory,options); await first.open();
+        const accepted=first.accept({eventId:'a'},[{id:'one',type:'amqp'}]);
+        await first.close(); await accepted;
+        const second=deliveryQueue(directory,options); await second.open();
+        assert.equal(second.status().pending,1); await second.close();
+        await assert.rejects(first.open(),/closed/u);
     });
 
 });

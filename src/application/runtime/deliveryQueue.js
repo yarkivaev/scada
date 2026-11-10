@@ -4,7 +4,7 @@ import deliverySessions from './deliverySessions.js';
 function confirmed(event) {
     return { ...event, options: { ...event.options, persistent: true, mandatory: true, messageId: event.eventId } };
 }
-/* eslint max-lines-per-function: ["error", 60] */
+/* eslint max-lines-per-function: ["error", 90], max-statements: ["error", 20] */
 /** Node-owned queue: removing a source does not remove its destination descriptors or receipts. */
 export default function deliveryQueue(directory, options) {
     const spool = deliverySpool(directory, options);
@@ -27,8 +27,30 @@ export default function deliveryQueue(directory, options) {
         await serialized(() => { return spool.ack(record.event.eventId, id); });
     }
 
+    async function drain() {
+        if (state.draining || state.closed) { return { delivered: 0, failed: 0 }; }
+        state.draining = true;
+        const result = { delivered: 0, failed: 0 };
+        try {
+            const rows = await serialized(() => { return spool.pending(options.batchSize ?? 100); });
+            for (const row of rows) {
+                for (const id of row.remaining) {
+                    // Recipients fail independently; continue draining other destinations.
+                    // eslint-disable-next-line no-await-in-loop, max-depth
+                    try { await send(row, id); result.delivered += 1; } catch (error) {
+                        result.failed += 1; options.onError?.(error);
+                    }
+                }
+            }
+            return result;
+        } finally { Object.assign(state, { draining: false }); }
+    }
+
     return {
-        open() { return serialized(() => { return spool.open(); }); },
+        open() {
+            if (state.closed) { return Promise.reject(new Error('Delivery queue closed')); }
+            return serialized(() => { return spool.open(); });
+        },
         accept(event, destinations) {
             if (state.closed) { return Promise.reject(new Error('Delivery queue closed')); }
             if (!destinations?.length || destinations.some((item) => { return item.type !== 'amqp'; })) {
@@ -38,25 +60,21 @@ export default function deliveryQueue(directory, options) {
             const envelope = JSON.parse(JSON.stringify({ eventId: event.eventId, observation: event, destinations }));
             return serialized(() => { return spool.append(envelope, destinations.map((item) => { return item.id; })); });
         },
-        async drain() {
-            if (state.draining || state.closed) { return { delivered: 0, failed: 0 }; }
-            state.draining = true;
-            const result = { delivered: 0, failed: 0 };
-            try {
-                const rows = await serialized(() => { return spool.pending(options.batchSize ?? 100); });
-                for (const row of rows) {
-                    for (const id of row.remaining) {
-                        // Recipients fail independently; continue draining other destinations.
-                        // eslint-disable-next-line no-await-in-loop, max-depth
-                        try { await send(row, id); result.delivered += 1; } catch (error) {
-                            result.failed += 1; options.onError?.(error);
-                        }
-                    }
-                }
-                return result;
-            } finally { Object.assign(state, { draining: false }); }
+        drain() {
+            if (state.draining || state.closed) { return Promise.resolve({ delivered:0, failed:0 }); }
+            const result = drain(); state.activeDrain = result; return result;
         },
-        close() { state.closed = true; return sessions.close(); },
+        close() {
+            state.closed = true;
+            state.closing ??= (async () => {
+                await state.activeDrain?.catch(() => {
+                    // Drain caller receives the original error.
+                }); await chain;
+                try { await sessions.close(); } finally { await spool.close(); }
+            })();
+            return state.closing;
+        },
         status() { return spool.status(); }
     };
+
 }
