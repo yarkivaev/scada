@@ -18,5 +18,6 @@ export default function foldedMetricsSink(inner, pool, devices) {
     if (!devices || Object.keys(devices).length === 0) {
         return inner;
     }
+    if (inner.requireTimestamp) { throw new TypeError('Central telemetry policy cannot be combined with interval folding'); }
     return foldingSink(inner, intervalFold(intervalFoldPg(pool)), opcuaLocate(devices));
 }

@@ -10,6 +10,7 @@ export default function taskContext(slot, request, ctx) {
             if (controller.signal.aborted) { return; }
             slot.health = event.state;
             if (event.fatal === true) { ctx.fatal = true; }
+            if (event.read) { slot.lastRead = Date.now(); }
             if (event.delivered) { slot.lastDelivery = Date.now(); }
             try { ctx.services.report?.({ taskId: slot.taskId, generation: slot.generation, ...event }); } catch {
                 // Observability cannot interrupt collection.

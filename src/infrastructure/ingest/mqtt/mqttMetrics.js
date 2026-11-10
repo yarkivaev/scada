@@ -51,7 +51,7 @@ export default function mqttMetrics(mqtt, sink, topic, config) {
     // the batch would reject every message at a one-record runtime budget.
     const { budget, ...batchConfig } = config;
     const collector = ingestBatch(sink, { ...batchConfig, size: 1 });
-    const transformer = metricsCodec(collector);
+    const transformer = metricsCodec(collector, console, { requireTimestamp: sink.requireTimestamp === true });
     const source = mqttSource(mqtt, topic, transformer, {
         budget,
         onError: config.onError,

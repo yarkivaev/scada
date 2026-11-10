@@ -18,11 +18,14 @@
  */
 import { createClient } from '@clickhouse/client';
 
+
+import metricsQuery from './metricsQuery.js';
+
 export default async function clickhouseConnection(host, options = {}) {
     const port = options.port || 8123;
     const {username} = options;
     const {password} = options;
-    const config = { url: `http://${host}:${port}` };
+    const config = { url: `http://${host}:${port}`, request_timeout: 10000 };
     if (username) {
         config.username = username;
         config.password = password || '';
@@ -40,13 +43,8 @@ export default async function clickhouseConnection(host, options = {}) {
         url() {
             return `http://${host}:${port}`;
         },
-        async query(sql, params = {}) {
-            const result = await client.query({
-                query: sql,
-                query_params: params,
-                format: 'JSONEachRow'
-            });
-            return result.json();
+        query(sql, params = {}) {
+            return metricsQuery(client, sql, params);
         },
         async insert(table, rows) {
             await client.insert({ table, values: rows, format: 'JSONEachRow' });

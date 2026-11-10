@@ -35,6 +35,9 @@ export function measurementItem(key, sensor, rows) {
             timestamp: row.timestamp.toISOString(),
             value: row.value
         };
+        if (typeof row.continuous === 'boolean') {
+            point.continuous = row.continuous;
+        }
         if (row.until) {
             point.until = row.until.toISOString();
         }

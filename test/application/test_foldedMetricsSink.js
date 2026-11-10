@@ -1,6 +1,12 @@
 import assert from 'assert';
 import foldedMetricsSink from '../../src/application/foldedMetricsSink.js';
 
+describe('central policy interval folding guard', function() {
+    it('rejects raw-input folding alongside canonical telemetry policy', function() {
+        assert.throws(() => { foldedMetricsSink({ requireTimestamp: true }, {}, { device: 'machine' }); }, /cannot be combined/u);
+    });
+});
+
 describe('foldedMetricsSink', function() {
     it('folds an opcua sample after writing the point', async function() {
         const written = [];

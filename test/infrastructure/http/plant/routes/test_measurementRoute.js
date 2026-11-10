@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { measurementItem } from '../../../../../src/infrastructure/http/plant/routes/measurementRead.js';
 import { virtualClock } from '@yarkivaev/simple-server';
 import plantApi from '../../../../../src/application/plantApi.js';
 import plantDomain from '../../../../../src/domain/plant/plant.js';
@@ -134,5 +135,23 @@ describe('measurementRoute', function() {
             [{ timestamp: start.toISOString(), value: size, until: until.toISOString() }],
             'holds mode dropped the coverage until stamp'
         );
+    });
+});
+
+
+describe('measurement HTTP continuity serialization', function() {
+    it('preserves certified connections, explicit breaks and null separators', function() {
+        const rows = [
+            {timestamp:new Date(1000),value:42,continuous:false},
+            {timestamp:new Date(2000),value:42,continuous:true},
+            {timestamp:new Date(3000),value:null},
+            {timestamp:new Date(4000),value:42,continuous:false}
+        ];
+        const values = measurementItem('sensor',{name(){return 'sensor';}},rows).values;
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(values)),rows.map((row)=>{
+            const point={timestamp:row.timestamp.toISOString(),value:row.value};
+            if(typeof row.continuous==='boolean'){point.continuous=row.continuous;}
+            return point;
+        }));
     });
 });

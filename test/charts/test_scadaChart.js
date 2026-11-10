@@ -392,7 +392,14 @@ describe('scada chart', function() {
         );
     });
 
-    it('runs site and sink from the same image', function() {
+    it('preserves secret references in both site and sink environments',function(){
+        const rendered=render('image: example.invalid/site:1\nenv:\n  - name: STATE_HTTP_TOKEN\n    valueFrom:\n      secretKeyRef:\n        name: history-token\n        key: token\n');
+        const deployments=rendered.split('---').filter(row=>{return row.includes('kind: Deployment') && (row.includes('name: plant-site-server') || row.includes('name: plant-supervisor-sink'));});
+        assert.equal(deployments.length,2);
+        for(const row of deployments){assert.match(row,/name: STATE_HTTP_TOKEN\s+valueFrom:\s+secretKeyRef:/u);assert.match(row,/name: history-token/u);}
+    });
+
+    it('runs site and sink from the same image' , function() {
         const image = `example.invalid/site:${Math.random().toString(36).slice(2, 8)}`;
         const rendered = render(`image: ${image}\n`);
         assert.strictEqual(

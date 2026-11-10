@@ -1,3 +1,5 @@
+import { metricsRange } from './metricsRelation.js';
+
 /**
  * Prefix sum of 0→1 edges for one ClickHouse metric topic.
  *
@@ -16,13 +18,13 @@ function formatDateTime(date) {
 
 const RISES_SQL = `WITH prior AS (
     SELECT ts, value
-    FROM scada.metrics
+    FROM scada.metrics_read
     WHERE topic = {topic:String} AND ts < {start:DateTime64(3)}
     ORDER BY ts DESC
     LIMIT 1
 ), windowed AS (
     SELECT ts, value
-    FROM scada.metrics
+    FROM ${metricsRange('toUnixTimestamp64Milli({start:DateTime64(3)})', 'toUnixTimestamp64Milli({end:DateTime64(3)})')}
     WHERE topic = {topic:String}
       AND ts >= {start:DateTime64(3)}
       AND ts < {end:DateTime64(3)}

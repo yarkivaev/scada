@@ -290,6 +290,8 @@ export default function modbusPublish(mqtt, config) {
     return modbusMqtt(mqtt, specs, {
         budget: config.budget,
         onFatal: config.onFatal,
+        output: config.output,
+        size: config.size,
         maxRecords: config.maxRecords,
         maxBytes: config.maxBytes,
         writeTimeoutMs: config.writeTimeoutMs,

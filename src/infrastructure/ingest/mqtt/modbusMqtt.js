@@ -175,7 +175,7 @@ function buildSources(devices, config, collector, clk) {
 export default function modbusMqtt(mqtt, devices, config) {
     assertModbusMqttArgs(mqtt, devices, config);
     const clk = clock();
-    const sink = mqttSink(mqtt, {
+    const sink = config.output ?? mqttSink(mqtt, {
         clientId: config.clientId || 'scada-modbus',
         qos: 1,
         onFatal: config.onFatal

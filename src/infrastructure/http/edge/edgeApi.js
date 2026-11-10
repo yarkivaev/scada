@@ -1,5 +1,6 @@
 import http from 'http';
 import ingestHealthRoutes from './routes/ingestHealthRoutes.js';
+import historyRoutes from './routes/history/historyRoutes.js';
 import checkpointRoutes from './routes/checkpoint/checkpointRoutes.js';
 import metricsRoutes from './routes/metrics/metricsRoutes.js';
 import retentionRoutes from './routes/retention/retentionRoutes.js';
@@ -28,6 +29,7 @@ export function createEdgeApi(dataAccess, options) {
     return routes([
         ...(opt.health ? ingestHealthRoutes(opt.health) : []),
         ...admin,
+        ...historyRoutes(token, dataAccess.history),
         ...checkpointRoutes(token, checkpoints),
         ...metricRoutes
     ], { requestTimeoutMs: opt.requestTimeoutMs });

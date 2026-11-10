@@ -46,6 +46,11 @@ export { default as pgTimeline } from './src/infrastructure/persistence/pg/timel
 export { default as pgAlerts } from './src/infrastructure/persistence/pg/alerts.js';
 export { default as pgOperations } from './src/infrastructure/persistence/pg/operations.js';
 export { default as clickhouseConnection } from './src/infrastructure/persistence/clickhouse/connection.js';
+export { rawMetricsRange as clickhouseMetricsRawRange } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
+export { rawMetricsRelation as clickhouseMetricsRawRelation } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
+export { default as clickhouseMetricsRelation } from './src/infrastructure/persistence/clickhouse/metricsRelation.js';
+export const centralTelemetryVersion = 4;
+export { default as centralTelemetryPolicy } from './src/infrastructure/ingest/telemetry/centralPolicy.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
 export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';
 export { metricsSinkFromPool as pgMetricsSink } from './src/infrastructure/persistence/pg/metrics.js';
@@ -107,3 +112,5 @@ export { default as executeRelease } from './src/infrastructure/deploy/executeRe
 export { default as collectorProcesses } from './src/application/deploy/collectorProcesses.js';
 
 export { default as executeStages } from './src/infrastructure/deploy/executeStages.js';
+
+export { default as historyPg, historyProtocol } from './src/infrastructure/persistence/pg/history.js';

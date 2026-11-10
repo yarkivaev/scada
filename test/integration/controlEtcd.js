@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { controlClient, controlStore, reconcile } from '../../src/application/control/index.js';
+const call = controlClient({ endpoints: [process.env.ETCD_TEST_URL ?? 'http://127.0.0.1:32379'] });
+const prefix = `/integration/${Date.now()}`;
+const first = controlStore(call, prefix);
+const second = controlStore(call, prefix);
+await first.publish({ version: '1', nodes: [{ id: 'a', capacity: 10 }], tasks: [{ taskId: 's', spec: { adapter: 'test' } }] });
+await first.report('a', { nodeId: 'a', receivedAt: Date.now(), tasks: [] });
+assert.equal(await reconcile(first, 'one'), true);
+assert.equal(await reconcile(second, 'two'), false);
+assert.equal((await first.assignment('a')).assignments.length, 1);
+const token = await first.acquire();
+const view = await first.read();
+await call('/v3/lease/revoke', { ID: token.lease });
+assert.ok(await second.acquire());
+assert.equal(await first.commit(token, view, { a: { generation: 99, assignments: [] } }), false);
+await assert.rejects(first.publish({ version: '2', nodes: [], tasks: [] }, '0'), /conflict/u);
+process.stdout.write('etcd publication, election, assignment and expired-leader fencing passed\n');
+
+await import('./controlEtcdAuth.js');

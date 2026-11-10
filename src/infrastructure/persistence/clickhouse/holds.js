@@ -1,3 +1,5 @@
+import { holdsMetricsRange } from './metricsRelation.js';
+
 /**
  * Coverage holds of one ClickHouse metric.
  *
@@ -19,8 +21,8 @@ function formatDateTime(date) {
 }
 
 const HOLDS_SQL = `WITH windowed AS (
-    SELECT ts, value
-    FROM scada.metrics
+    SELECT ts, value, coverage_first_ms,coverage_last_ms
+    FROM ${holdsMetricsRange('toUnixTimestamp64Milli({start:DateTime64(3)})', 'toUnixTimestamp64Milli({end:DateTime64(3)})','{gap:UInt64}')}
     WHERE topic = {topic:String}
       AND ts >= {start:DateTime64(3)}
       AND ts < {end:DateTime64(3)}
@@ -28,17 +30,18 @@ const HOLDS_SQL = `WITH windowed AS (
     SELECT
         ts,
         value,
-        lagInFrame(ts, 1) OVER (ORDER BY ts) AS prev_ts,
+        coverage_first_ms,coverage_last_ms,
+        lagInFrame(coverage_last_ms,1) OVER (ORDER BY ts) AS prev_last_ms,
         lagInFrame(toNullable(value), 1) OVER (ORDER BY ts) AS prev
     FROM windowed
 ), flagged AS (
     SELECT
         ts,
-        value,
+        value,coverage_last_ms,
         if(
             prev IS NULL
                 OR value != prev
-                OR toUnixTimestamp64Milli(ts) - toUnixTimestamp64Milli(prev_ts) > {gap:UInt64},
+                OR coverage_first_ms - prev_last_ms > toInt64({gap:UInt64}),
             1,
             0
         ) AS fresh
@@ -46,11 +49,11 @@ const HOLDS_SQL = `WITH windowed AS (
 ), grouped AS (
     SELECT
         ts,
-        value,
+        value,coverage_last_ms,
         sum(fresh) OVER (ORDER BY ts) AS grp
     FROM flagged
 )
-SELECT min(ts) AS started, max(ts) AS until, any(value) AS value
+SELECT min(ts) AS started, fromUnixTimestamp64Milli(least(max(coverage_last_ms),toUnixTimestamp64Milli({end:DateTime64(3)}))) AS until, any(value) AS value
 FROM grouped
 GROUP BY grp
 ORDER BY started`;

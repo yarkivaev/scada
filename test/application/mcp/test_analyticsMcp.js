@@ -355,7 +355,7 @@ describe('analyticsMcp', function() {
         );
     });
 
-    it('names topic as the only clickhouse series key', async function() {
+    it('advertises the canonical ClickHouse view with topic as the only series key', async function() {
         const { address, mcp, token } = await started();
         const { body } = await post(address.port, token, {
             id: 15,
@@ -374,11 +374,27 @@ describe('analyticsMcp', function() {
             { columns, name: table.name, notes: table.notes },
             {
                 columns: ['topic', 'ts', 'value'],
-                name: 'scada.metrics',
-                notes: ['topic is the only series key']
+                name: 'scada.metrics_read',
+                notes: ['topic is the only series key', 'Legacy history and canonical telemetry; one row per topic and timestamp']
             },
             'clickhouse schema invented sensor columns or another series key'
         );
+    });
+
+    it('advertises full canonical timestamps for gap and count analytics', async function() {
+        const { address, mcp, token } = await started();
+        const { body } = await post(address.port, token, {
+            id: 16,
+            jsonrpc: '2.0',
+            method: 'resources/read',
+            params: { uri: 'plant://schema/clickhouse' }
+        });
+        await mcp.close();
+        const payload = JSON.parse(body.result.contents[0].text);
+        const raw = payload.tables.find((entry) => { return entry.name === 'scada.metrics_raw_read'; });
+        assert.ok(raw, 'MCP must expose full canonical timestamp density for analytics');
+        assert.deepStrictEqual(raw.columns.map((column) => { return column.name; }), ['topic', 'ts', 'value']);
+        assert.ok(raw.notes.some((note) => { return note.includes('count/gap'); }));
     });
 
     it('puts the overlapping timeline name on a coverage span', async function() {

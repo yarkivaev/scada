@@ -14,7 +14,14 @@
  * @param {object} [log] - Logger with warn() method
  * @returns {object} Transformer with accept() method
  */
-export default function metricsCodec(collector, log = console) {
+function validateTimestamp(parsed, options) {
+    if (options.requireTimestamp && (!parsed || typeof parsed !== 'object'
+        || !Number.isSafeInteger(parsed.ts) || !Number.isFinite(parsed.value))) {
+        throw new TypeError('Central telemetry requires original timestamp and finite value');
+    }
+}
+
+export default function metricsCodec(collector, log = console, options = {}) {
     if (!collector || typeof collector.accept !== 'function') {
         throw new Error('Collector must have an accept() method');
     }
@@ -29,9 +36,11 @@ export default function metricsCodec(collector, log = console) {
             try {
                 parsed = JSON.parse(raw.payload);
             } catch {
+                if (options.requireTimestamp) { throw new TypeError('Invalid central telemetry JSON'); }
                 log.warn(`Cannot resolve payload on ${raw.topic}: not valid JSON`);
                 return undefined;
             }
+            validateTimestamp(parsed, options);
             if (typeof parsed === 'number') {
                 return collector.accept({
                     topic: raw.topic,
@@ -42,7 +51,7 @@ export default function metricsCodec(collector, log = console) {
             if (typeof parsed === 'object' && parsed !== null && typeof parsed.value === 'number') {
                 return collector.accept({
                     topic: raw.topic,
-                    ts: parsed.ts || Date.now(),
+                    ts: parsed.ts ?? Date.now(),
                     value: parsed.value
                 });
             }

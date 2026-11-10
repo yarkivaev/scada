@@ -87,3 +87,22 @@ describe('stream recovery boundaries', () => {
         await task.stop();
     });
 });
+
+describe('offline spooled stream', () => {
+    it('collects without opening network sinks and queues stable events', async () => {
+        const test = setup();
+        test.factory = streamTask({ sources: new Map([['input', (spec, target) => {
+            test.accept = (value) => { return target.accept(value); };
+            return { start() {}, stop() {} };
+        }]]), sinks: new Map([['amqp', () => { throw new Error('must not open network sink'); }]]), transforms: new Map() });
+        const rows = [];
+        test.context.deliveryQueue = { async accept(event, recipients) { rows.push({ event, recipients }); } };
+        const spec = { delivery: 'spooled', source: { type: 'input' }, sinks: [{ id: 'one', type: 'amqp', url: 'amqp://host' }] };
+        test.factory.validate(spec);
+        const task = test.factory.create(spec, test.context);
+        await task.start(); await test.accept({ value: 4 }); await task.stop();
+        assert.equal(rows.length, 1);
+        assert.equal(typeof rows[0].event.eventId, 'string');
+        assert.equal(rows[0].recipients[0].id, 'one');
+    });
+});
