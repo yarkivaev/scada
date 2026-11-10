@@ -52,9 +52,9 @@ function context(pool,machine,from,until,options) {
     machineName(machine);
     return historyContext(pool,machine,from,until,options);
 }
-async function unchanged(client, machine, base, observationSource) {
+async function unchanged(client, machine, base, {observationSource,timeScale}) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
-    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,observations:observationSource?.(client) });
+    const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,timeScale,observations:observationSource?.(client) });
     if (latest.revision !== base.revision) {
         const error = new Error('History context changed');
         error.statusCode = 409;
@@ -74,7 +74,7 @@ async function advance(client,machine,workId,page) {
         await client.query('UPDATE history_work SET cursor_ms=$3,end_ms=$4,token=gen_random_uuid() WHERE id=$1 AND machine=$2',[workId,machine,page.next,page.end]);
     } else { await client.query('DELETE FROM history_work WHERE id=$1 AND machine=$2', [workId, machine]); }
 }
-function commit(pool, machine, workId, segments, {base, observationSource}) {
+function commit(pool, machine, workId, segments, {base, observationSource,timeScale}) {
     if (!Array.isArray(segments) || segments.length > 1000) { throw new TypeError('Bounded segments required'); }
     // eslint-disable-next-line max-statements -- Claim, correction, checkpoint and advancement share one atomic boundary.
     return transaction(pool, machine, async (client) => {
@@ -83,14 +83,14 @@ function commit(pool, machine, workId, segments, {base, observationSource}) {
         checkClaim(work.rows[0],base);
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
         if (observationSource) { await assertHistoryReady(client,machine); }
-        const latest = base?.revision ? await unchanged(client, machine, base, observationSource) : null;
-        if (latest && segments.some((item) => { return new Date(item.end_time).getTime()>latest.context.page.until; })) {
+        const latest = base?.revision ? await unchanged(client, machine, base, {observationSource,timeScale}) : null;
+        if (latest && segments.some((item) => { return new Date(item.end_time).getTime()*timeScale>latest.context.page.until; })) {
             throw new TypeError('Segment extends beyond bounded history page; upgrade history worker');
         }
         await client.query(`INSERT INTO history_annotations(machine,kind,start_time,name,end_time,duration,tags,properties,resolved)
             SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
             WHERE machine=$1 AND start_time<=$3 AND end_time>=$2
-            ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine,new Date(latest?.context.page.from ?? base.from),new Date(latest?.context.page.until ?? base.until)]);
+            ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine,new Date((latest?.context.page.from ?? base.from)/timeScale),new Date((latest?.context.page.until ?? base.until)/timeScale)]);
         for (const item of segments) {
             // Only computed fields change. User cuts/labels must be applied by caller before commit.
             // eslint-disable-next-line no-await-in-loop
@@ -111,19 +111,20 @@ function commit(pool, machine, workId, segments, {base, observationSource}) {
     });
 }
 /** Local telemetry history and durable classification work; no cross-edge database dependency. */
-export default function historyPg(pool, { retentionDays = 30, now = Date.now, observations: observationSource } = {}) {
+export default function historyPg(pool, { retentionDays = 30, now = Date.now, observations: observationSource,timeScale=1,timestamp } = {}) {
+    if (![1,1000].includes(timeScale) || (timeScale!==1 && !observationSource)) {throw new TypeError('External history supports millisecond or microsecond coordinates');}
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0) { throw new TypeError('Positive retentionDays required'); }
-    function cutoff() { return now() - retentionDays * 86400000; }
-    const admission=observationSource ? historyAdmission(pool,{now}) : null;
+    function cutoff() { return (now() - retentionDays * 86400000)*timeScale; }
+    const admission=observationSource ? historyAdmission(pool,{now:()=>{return now()*timeScale;},timeScale,timestamp}) : null;
     return {
         ...(admission ?? {}),
         configure(machine, topics, bucketMs = 30000, classifierKey = undefined) {
             if (!Array.isArray(topics) || topics.length > 500 || !Number.isSafeInteger(bucketMs) || bucketMs <= 0) { throw new TypeError('Invalid history topics'); }
             return transaction(pool,machine,async (client) => {
                 const source=observationSource?.(client);
-                const result=await historyConfigure(client,machine,topics,bucketMs,{retentionDays,observations:source});
+                const result=await historyConfigure(client,machine,topics,bucketMs*timeScale,{retentionDays,observations:source});
                 await configureClassifier(client,machine,classifierKey,source);
-                return result;
+                return {...result,...(timeScale!==1 && {timeScale})};
             });
         },
         async purge() {
@@ -137,10 +138,12 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
             await retainMetricReceipts(pool, retentionDays);
             return result.rowCount;
         },
-        accept(machine, items) { return accept(pool, machine, items, cutoff()); },
-        async context(machine, from, until, padding = 60000, page = {}) {
+        accept(machine, items) {
+            if (observationSource) { throw new TypeError('External observations require durable telemetry admission'); }
+            return accept(pool, machine, items, cutoff()); },
+        async context(machine, from, until, padding = 60000*timeScale, page = {}) {
             if (observationSource) { await assertHistoryReady(pool,machine); }
-            return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page,observations:observationSource?.(pool) });
+            return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page,timeScale,observations:observationSource?.(pool) });
         },
         async work(machine) {
             machineName(machine);
@@ -148,6 +151,6 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
             const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
             return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until),cursor:row.cursor === null ? null : Number(row.cursor),end:row.end === null ? null : Number(row.end) }; }) };
         },
-        commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, {base, observationSource}); }
+        commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, {base, observationSource,timeScale}); }
     };
 }

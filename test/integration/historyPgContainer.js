@@ -134,6 +134,23 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const store=historyPg(pool,{observations:()=>{return {};}});
         await assert.rejects(store.complete([{topic:'unprepared/point',ts:Date.now(),value:1}]),/prepare/u);
     });
+    it('retains microsecond work coordinates while querying millisecond domain segments', async () => {
+        const machine='microsecond-history';
+        const time=Date.now()*1000-10000000;
+        const source=()=>{return {async registered(){},async boundary(){return time+2;},async page(id,left,end){return {from:left,until:end,next:null,end};},async seed(){return null;},async read(){return {items:[{eventId:'micro1',channel:'power',time:time+1,value:1},{eventId:'micro2',channel:'power',time:time+2,value:2}],continuity:[{from:time+1,until:time+2}]};}};};
+        const store=historyPg(pool,{observations:source,timeScale:1000,timestamp:(ts)=>{return Number(ts);}});
+        const configured=await store.configure(machine,[{topic:'microseconds/power',channel:'power'}]);
+        assert.equal(configured.timeScale,1000);
+        await store.prepare([{topic:'microseconds/power',ts:String(time+1),value:1}]);
+        assert.equal((await pool.query('SELECT time_ms FROM history_admissions WHERE topic=$1',['microseconds/power'])).rows[0].time_ms,String(time+1));
+        await store.complete([{topic:'microseconds/power',ts:String(time+1),value:1}]);
+        const work=(await store.work(machine)).items[0];
+        assert.equal(work.from,time+1);
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','on',$2,$3,1)",[machine,new Date(time/1000),new Date(time/1000+1000)]);
+        const context=await store.context(machine,work.from,work.until,1000);
+        assert.deepEqual(context.items.map(({time:at})=>{return at;}),[time+1,time+2]);
+        assert.equal(context.segments[0].name,'on');
+    });
     it('keeps first local metric before history registration and across receiver restarts', async () => {
         const topic = 'first-wins/power';
         const ts = Date.now() - 1000;
