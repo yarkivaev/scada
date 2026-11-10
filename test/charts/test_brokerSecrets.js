@@ -11,14 +11,16 @@ function render(extra = {}) {
             definitions: { users: [{ name: 'fixture', password: 'sensitive-fixture' }] },
             extraConfig: { 'mqtt.allow_anonymous': 'false' } }, ...extra };
     return yaml.loadAll(execFileSync('helm', ['template', 'fixture', chart, '-f', '-'], {
-        encoding: 'utf8', input: JSON.stringify(values), stdio: ['pipe', 'pipe', 'pipe']
+        timeout: 30000, encoding: 'utf8', input: JSON.stringify(values), stdio: ['pipe', 'pipe', 'pipe']
     })).filter(Boolean);
 }
 function workload(documents, name) {
     return documents.find(document => { return document.metadata.name === name && ['Deployment', 'StatefulSet'].includes(document.kind); });
 }
 
-describe('broker credential boundaries in rendered workloads', () => {
+describe('broker credential boundaries in rendered workloads', function() {
+    // Cold Helm startup can exceed Mocha's default 2s; bound the subprocess separately.
+    this.timeout(35000);
     it('keeps definitions out of ConfigMaps and mounts only the referenced Secret', () => {
         const documents = render();
         for (const document of documents.filter(value => { return value.kind === 'ConfigMap'; })) {
