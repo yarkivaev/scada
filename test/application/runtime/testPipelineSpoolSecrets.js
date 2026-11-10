@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import pipelineAdapters from '../../../src/application/runtime/pipelineAdapters.js';
@@ -61,10 +61,10 @@ describe('durable pipeline destination secrets', function () {
                 check();
             });
             await task.stop(); await first.close();
-            const files = await readdir(directory, { recursive: true });
-            const content = await Promise.all(files.filter(file => {return file.endsWith('.json')}).map(file => {return readFile(path.join(directory, file), 'utf8')}));
+            const content = await readFile(path.join(directory, 'delivery.sqlite'));
             assert(content.length > 0);
-            assert(!content.join('').includes('old-password'), 'PVC must contain references, not resolved credentials');
+            assert(!content.includes(Buffer.from('old-password')), 'PVC must contain references, not resolved credentials');
+            assert(content.includes(Buffer.from('RECEIVER_AMQP')), 'interned destinations retain raw Secret refs');
             const received = [];
             secrets.get = () => {return 'amqp://reader:new-password@receiver'};
             second = deliveryQueue(directory, { ...options, factory(descriptor) {
