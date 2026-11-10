@@ -5,8 +5,5 @@ on:
     branches: [main]
 
 jobs:
-  ci:
-    uses: yarkivaev/npm-workflows/.github/workflows/ci.yml@main
-    with:
-      node-version: '22'
-      lint: true
+  check-version:
+    uses: yarkivaev/npm-workflows/.github/workflows/check-version.yml@main
