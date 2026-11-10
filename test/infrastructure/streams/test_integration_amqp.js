@@ -168,4 +168,21 @@ describe('AMQP source and sink integration', function() {
         }
     });
 
+    it('groups real mandatory confirmations while retaining returned members and replaying exact bodies',async function(){
+        this.timeout(30000);
+        const directory=await mkdtemp(path.join(os.tmpdir(),'grouped-rabbit-'));const connection=await amqp.connect(url);const channel=await connection.createChannel();
+        const exchange='grouped.spool';const queue='grouped.spool.queue';await channel.assertExchange(exchange,'direct',{durable:true});await channel.assertQueue(queue,{durable:true});await channel.bindQueue(queue,exchange,'good');
+        const destinations=[{id:'one',type:'amqp',url,options:{exchanges:[{name:exchange,type:'direct',options:{durable:true}}]}}];
+        const options={maxBytes:100000,factory(spec){return amqpSink(spec.url,{...spec.options,onError(){}});}};let first;let second;
+        try{
+            first=deliveryQueue(directory,options);await first.open();
+            await Promise.all(['first','missing','last'].map(eventId=>{return first.accept({eventId,exchange,routingKey:eventId==='missing'?'missing':'good',body:Buffer.from(`frozen-${eventId}`)},destinations);}));
+            assert.deepEqual(await first.drain(),{delivered:2,failed:1});assert.equal(first.status().pending,1);
+            const successful=[await channel.get(queue,{noAck:true}),await channel.get(queue,{noAck:true})];
+            assert.deepEqual(successful.map(item=>{return item.properties.messageId;}),['first','last']);
+            await first.close();await channel.bindQueue(queue,exchange,'missing');second=deliveryQueue(directory,options);await second.open();
+            assert.deepEqual(await second.drain(),{delivered:1,failed:0});const replay=await channel.get(queue,{noAck:true});assert.equal(replay.properties.messageId,'missing');assert.equal(replay.content.toString(),'frozen-missing');assert.equal(second.status().pending,0);
+        }finally{await first?.close();await second?.close();await connection.close();await rm(directory,{recursive:true,force:true});}
+    });
+
 });

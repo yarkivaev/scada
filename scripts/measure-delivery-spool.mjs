@@ -35,16 +35,23 @@ async function recovery(directory) {
     await queue.open(); const recoveredMs = performance.now() - start; const after = memory();
     const { pending } = queue.status(); await queue.close(); return { recoveredMs, pending, before, after };
 }
-async function append(queue, samples, count, snapshots) {
-    const start = performance.now();
-    for (let index = 0; index < count; index += 1) {
-        const sample = samples[index % samples.length];
-        // New identity preserves actual wire body, routing and destination shape.
+async function append(queue, samples, count, snapshots, concurrency = 64) {
+    const start = performance.now(); let index = 0; let peakOperations = 0; let peakBytes = 0;
+    while (index < count) {
+        const size = Math.min(concurrency, count - index, 10000 - index % 10000);
+        const writes = [];
+        for (let offset = 0; offset < size; offset += 1) {
+            const sample = samples[index % samples.length]; index += 1;
+            // New identity preserves actual wire body, routing and destination shape.
+            writes.push(queue.accept({ ...sample.event, eventId: randomUUID() }, sample.destinations));
+        }
+        const queued = queue.status(); peakOperations = Math.max(peakOperations, queued.queuedOperations); peakBytes = Math.max(peakBytes, queued.queuedBytes);
+        // Bound producer concurrency instead of allocating one promise per retained event.
         // eslint-disable-next-line no-await-in-loop
-        await queue.accept({ ...sample.event, eventId: randomUUID() }, sample.destinations);
-        if ((index + 1) % 10000 === 0) { snapshots.push({ records: index + 1, elapsedMs: performance.now() - start, ...memory() }); }
+        await Promise.all(writes);
+        if (index % 10000 === 0) { snapshots.push({ records: index, elapsedMs: performance.now() - start, ...memory() }); }
     }
-    return performance.now() - start;
+    return { elapsedMs: performance.now() - start, peakOperations, peakBytes, concurrency };
 }
 /* eslint max-statements: ["error", 40] */
 async function benchmark(fixture, count) {
@@ -52,7 +59,7 @@ async function benchmark(fixture, count) {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'spool-measure-'));
     const queue = deliveryQueue(directory, options); const snapshots = [];
     try {
-        await queue.open(); const before = memory(); const appendMs = await append(queue, samples, count, snapshots);
+        await queue.open(); const before = memory(); const producer = await append(queue, samples, count, snapshots); const appendMs = producer.elapsedMs;
         const admitted = queue.status(); const afterAppend = memory(); const beforeCloseFiles = await allocated(directory);
         await queue.close(); const stored = statistics(directory); const files = await allocated(directory);
         const child = fork(new URL(import.meta.url), ['--recover', directory], { silent: true });
@@ -67,11 +74,12 @@ async function benchmark(fixture, count) {
         await drainQueue.close(); const drained = statistics(directory);
         const refill = deliveryQueue(directory, options); await refill.open();
         await append(refill, samples, 10000, []); await refill.close(); const reused = statistics(directory);
-        return { count, fixtureSamples: samples.length, admitted, before, afterAppend, snapshots, appendMs,
+        return { count, producer, fixtureSamples: samples.length, admitted, before, afterAppend, snapshots, appendMs,
             appendPerSecond: count * 1000 / appendMs, beforeCloseFiles, files, stored, recovered,
             drainMs, delivered, drainPerSecond: delivered * 1000 / drainMs, drained, reused,
             limits: ['Mac APFS timing is not a Linux PVC throughput guarantee', 'Memory includes Node and runtime modules',
                 'Logical admission counts full JSON envelopes; allocated SQLite pages are measured separately',
+                'Producer uses bounded 64-record bursts; a serial await producer remains limited by sparse flush latency',
                 'Drain uses confirmed-sink stand-in; real RabbitMQ recovery is tested separately'] };
     } finally { await queue.close(); await rm(directory, { recursive: true, force: true }); }
 }

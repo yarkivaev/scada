@@ -1,80 +1,96 @@
 import deliverySpool from '../../infrastructure/persistence/runtime/deliverySpool.js';
 import deliverySessions from './deliverySessions.js';
+import deliveryOperations from './deliveryOperations.js';
 
 function confirmed(event) {
     return { ...event, options: { ...event.options, persistent: true, mandatory: true, messageId: event.eventId } };
 }
-/* eslint max-lines-per-function: ["error", 90], max-statements: ["error", 20] */
-/** Node-owned queue: removing a source does not remove its destination descriptors or receipts. */
+function snapshot(operation, checkBytes) {
+    const json = JSON.stringify(operation); checkBytes(Buffer.byteLength(json));
+    const frozen = JSON.parse(json);
+    if (frozen.kind === 'append') { frozen.recipients = frozen.event.destinations.map((item) => { return item.id; }); }
+    return { operation: frozen, bytes: Buffer.byteLength(JSON.stringify(frozen)) };
+}
+/* eslint max-lines-per-function: ["error", 125], max-statements: ["error", 25] */
+/** Node-owned queue: every point/receipt resolves only after its grouped FULL commit. */
 export default function deliveryQueue(directory, options) {
     const spool = deliverySpool(directory, options);
+    const commands = deliveryOperations((operations) => { return spool.mutateMany(operations); }, options);
     const sessions = deliverySessions(options.factory, options.writeTimeoutMs);
-    let chain = Promise.resolve();
-    const state = { pending: 0, draining: false, closed: false };
-    function serialized(action) {
-        if (state.pending >= (options.maxOperations ?? 32)) { return Promise.reject(new Error('Delivery operation capacity exceeded')); }
-        state.pending += 1;
-        const result = chain.then(action).finally(() => { state.pending -= 1; });
-        chain = result.catch(() => {
-            // Individual callers receive rejection; preserve serialization.
-        });
-        return result;
-    }
-    async function send(record, id) {
+    const batchSize = options.batchSize ?? 100;
+    if (!Number.isSafeInteger(batchSize) || batchSize <= 0) { throw new TypeError('Positive safe batchSize required'); }
+    const receiptWindow = Math.min(options.groupCommit?.maxRecords ?? 64, options.maxOperations ?? 128);
+    const state = { draining: false, closed: false, full: false };
+    async function publish(record, id) {
         if (state.closed) { throw new Error('Delivery queue closed'); }
-        const descriptor = record.event.destinations.find((item) => { return item.id === id; });
-        await sessions.write(descriptor, confirmed(record.event.observation));
-        await serialized(() => { return spool.ack(record.event.eventId, id); });
+        // Reserve the eventual receipt BEFORE publication; confirmation can never lose its admission slot.
+        const receipt = commands.prepare((checkBytes) => { return snapshot({ kind: 'ack', eventId: record.event.eventId, recipient: id }, checkBytes); });
+        try {
+            const descriptor = record.event.destinations.find((item) => { return item.id === id; });
+            await sessions.write(descriptor, confirmed(record.event.observation));
+            return { receipt: receipt.commit() };
+        } catch (error) { receipt.cancel(); throw error; }
     }
-
     async function drain() {
-        if (state.draining || state.closed) { return { delivered: 0, failed: 0 }; }
         state.draining = true;
         const result = { delivered: 0, failed: 0 };
+        const receipts = [];
+        function failure(error) {
+            result.failed += 1;
+            try { options.onError?.(error); } catch {
+                // Observers cannot prevent independent recipient progress or release.
+            }
+        }
+        async function flush() { commands.flush(); await Promise.all(receipts.splice(0)); }
+        async function receive(row, id) {
+            try {
+                const sent = await publish(row, id);
+                receipts.push(sent.receipt.then(() => { result.delivered += 1; }, failure));
+            } catch (error) { failure(error); }
+            if (receipts.length >= receiptWindow) { await flush(); }
+        }
         try {
-            const rows = await serialized(() => { return spool.pending(options.batchSize ?? 100); });
+            const rows = await commands.barrier(() => { return spool.pending(batchSize); });
+            Object.assign(state, { full: rows.length === batchSize });
             for (const row of rows) {
                 for (const id of row.remaining) {
-                    // Recipients fail independently; continue draining other destinations.
-                    // eslint-disable-next-line no-await-in-loop, max-depth
-                    try { await send(row, id); result.delivered += 1; } catch (error) {
-                        result.failed += 1; options.onError?.(error);
-                    }
+                    // eslint-disable-next-line no-await-in-loop
+                    await receive(row, id);
                 }
             }
             return result;
-        } finally { Object.assign(state, { draining: false }); }
+        } finally { try { await flush(); } finally { Object.assign(state, { draining: false }); } }
     }
-
     return {
         open() {
             if (state.closed) { return Promise.reject(new Error('Delivery queue closed')); }
-            return serialized(() => { return spool.open(); });
+            return commands.barrier(() => { return spool.open(); });
         },
         accept(event, destinations) {
             if (state.closed) { return Promise.reject(new Error('Delivery queue closed')); }
             if (!destinations?.length || destinations.some((item) => { return item.type !== 'amqp'; })) {
                 return Promise.reject(new TypeError('Queued delivery requires confirmed AMQP destinations'));
             }
-            // Snapshot before asynchronous I/O; callers may reuse buffers/objects.
-            const envelope = JSON.parse(JSON.stringify({ eventId: event.eventId, observation: event, destinations }));
-            return serialized(() => { return spool.append(envelope, envelope.destinations.map((item) => { return item.id; })); });
+            return commands.mutate((checkBytes) => { return snapshot({ kind: 'append', event: { eventId: event.eventId, observation: event, destinations } }, checkBytes); });
         },
         drain() {
-            if (state.draining || state.closed) { return Promise.resolve({ delivered:0, failed:0 }); }
+            if (state.draining || state.closed) { return Promise.resolve({ delivered: 0, failed: 0 }); }
             const result = drain(); state.activeDrain = result; return result;
         },
         close() {
-            state.closed = true;
+            state.closed = true; commands.flush();
             state.closing ??= (async () => {
                 await state.activeDrain?.catch(() => {
                     // Drain caller receives the original error.
-                }); await chain;
+                });
+                await commands.idle();
                 try { await sessions.close(); } finally { await spool.close(); }
             })();
             return state.closing;
         },
-        status() { return spool.status(); }
+        status() {
+            const usage = commands.status();
+            return { ...spool.status(), queuedOperations: usage.operations, queuedBytes: usage.bytes, drainFull: state.full };
+        }
     };
-
 }

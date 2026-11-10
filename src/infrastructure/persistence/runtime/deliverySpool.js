@@ -1,6 +1,6 @@
 import { capacity, checkpoint, counters, database } from './spoolDatabase.js';
-import { acknowledge, insert, pending } from './spoolRecords.js';
-import { encoded } from './spoolCodec.js';
+import { pending } from './spoolRecords.js';
+import spoolMutations from './spoolMutations.js';
 import spoolMigration from './spoolMigration.js';
 
 /* eslint max-lines-per-function: ["error", 100], max-statements: ["error", 25] */
@@ -27,7 +27,15 @@ export default function deliverySpool(directory, { maxBytes, maxRecords = 100000
         try { const result = state.db.transaction(action)(); refresh(); return result; }
         catch (error) { if (error.code?.startsWith('SQLITE_')) { release(); } throw error; }
     }
+    function mutateMany(operations) {
+        return exclusive(() => { return commit(() => { return spoolMutations(state.db, operations, { maxBytes, maxRecords }); }); });
+    }
+    async function single(operation) {
+        const [result] = await mutateMany([operation]);
+        if (!result.ok) { throw result.error; }
+    }
     return {
+        mutateMany,
         open() {
             return exclusive(async () => {
                 if (state.ready) { return; }
@@ -39,8 +47,8 @@ export default function deliverySpool(directory, { maxBytes, maxRecords = 100000
                 } catch (error) { release(); throw error; }
             }, false);
         },
-        append(event, recipients) { return exclusive(() => { return commit(() => { insert(state.db, encoded(event, recipients), maxBytes, maxRecords); }); }); },
-        ack(eventId, recipient) { return exclusive(() => { return commit(() => { acknowledge(state.db, eventId, recipient); }); }); },
+        append(event, recipients) { return single({ kind: 'append', event, recipients }); },
+        ack(eventId, recipient) { return single({ kind: 'ack', eventId, recipient }); },
         pending(limit = 100) {
             return exclusive(() => {
                 if (!Number.isSafeInteger(limit) || limit <= 0) { throw new TypeError('Positive pending limit required'); }
