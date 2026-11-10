@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import fs, { mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import fs, { link, mkdtemp, open as openFile, readFile as readContents, readdir, rm, stat, symlink, unlink as removeFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -43,7 +43,7 @@ describe('SQLite delivery spool contracts', () => {
         const item = spool(); await item.open();
         assert.deepEqual(await item.pending(), [{event:{eventId:'../a',body:Buffer.from([1,2])},remaining:['two']}]);
         assert.ok(!(await readdir(directory)).includes(name));
-        assert.equal(await readFile(path.join(directory,'unrelated.json'),'utf8'),'leave');
+        assert.equal(await readContents(path.join(directory,'unrelated.json'),'utf8'),'leave');
     });
     it('fails closed on corrupt legacy data without deleting originals or bypassing it on restart', async () => {
         const name = await legacy({ event:{eventId:'a'},recipients:['one'],remaining:['one'] });
@@ -86,7 +86,7 @@ describe('SQLite delivery spool contracts', () => {
     });
     it('reconciles a committed legacy import after an interruption before unlink', async () => {
         const record={event:{eventId:'legacy'},recipients:['one','two'],remaining:['two']};
-        const name=await legacy(record); const original=await readFile(path.join(directory,name));
+        const name=await legacy(record); const original=await readContents(path.join(directory,name));
         const first=spool(); await first.open(); await first.close();
         await writeFile(path.join(directory,name),original);
         const second=spool(); await second.open();
@@ -101,7 +101,7 @@ describe('SQLite delivery spool contracts', () => {
     });
     it('rejects a corrupt database without deleting pending data', async () => {
         const file=path.join(directory,'delivery.sqlite'); await writeFile(file,'corrupt-database');
-        await assert.rejects(spool().open(),/database/u); assert.equal(await readFile(file,'utf8'),'corrupt-database');
+        await assert.rejects(spool().open(),/database/u); assert.equal(await readContents(file,'utf8'),'corrupt-database');
     });
     it('transactionally accounts logical bytes and releases descriptors only after all confirmations', async () => {
         const event={eventId:'a',destinations:[{id:'one',url:{$secret:'broker'}}]};
@@ -142,6 +142,70 @@ describe('SQLite delivery spool contracts', () => {
         const recovered=spool(); await recovered.open();
         assert.deepEqual(await recovered.pending(),[{event:{eventId:'interrupted'},remaining:['two']}]);
         assert.ok(!(await readdir(directory)).includes(name));
+    });
+
+    it('keeps the first owner locked after a rejected same-process contender and directory alias', async () => {
+        const first=spool(); await first.open();
+        async function rejectedChild() {
+            const child=fork(new URL('../../../helpers/runtime/spoolChild.js',import.meta.url),[directory,'probe'],{silent:true});
+            const exited=once(child,'exit'); const [message]=await once(child,'message'); await exited;
+            assert.match(message.error ?? '',/locked/u);
+        }
+        await rejectedChild(); await assert.rejects(spool().open(),/owner|locked/u);
+        const parentAlias=path.join(directory,'parent-alias'); await symlink(path.dirname(directory),parentAlias);
+        const alias=deliverySpool(path.join(parentAlias,path.basename(directory)),{maxBytes:1000000});
+        try { await assert.rejects(alias.open(),/owner|locked/u); } finally { await alias.close(); }
+        await rejectedChild(); await first.append({eventId:'still-owned'},['one']);
+    });
+    it('refuses hard-linked SQLite sidecars without changing unrelated bytes or permissions', async () => {
+        const unrelated=path.join(directory,'unrelated.bin'); const original=Buffer.alloc(1600,7);
+        await writeFile(unrelated,original,{mode:0o640});
+        const mode=(await stat(unrelated)).mode;
+        for (const name of ['delivery.sqlite-shm','delivery.sqlite-wal','delivery.sqlite-journal','owner.sqlite-journal','owner.sqlite-wal','owner.sqlite-shm']) {
+            // eslint-disable-next-line no-await-in-loop
+            await link(unrelated,path.join(directory,name));
+            // eslint-disable-next-line no-await-in-loop
+            await assert.rejects(spool().open(),/regular|link|private/u);
+            // eslint-disable-next-line no-await-in-loop
+            assert.deepEqual(await readContents(unrelated),original);
+            // eslint-disable-next-line no-await-in-loop
+            assert.equal((await stat(unrelated)).mode,mode);
+            // eslint-disable-next-line no-await-in-loop
+            await removeFile(path.join(directory,name));
+        }
+    });
+    it('does not recreate missing spool counters or bypass record admission after ambiguous damage', async () => {
+        const first=spool({maxRecords:1}); await first.open(); await first.append({eventId:'retained'},['one']); await first.close();
+        const db=new Database(path.join(directory,'delivery.sqlite')); db.prepare('DELETE FROM counters').run(); db.close();
+        const broken=spool({maxRecords:1}); await assert.rejects(broken.open(),/Corrupt|format/u);
+        assert.equal(broken.status().ready,false); await assert.rejects(broken.append({eventId:'b'},['one']),/not opened/u);
+        const verify=new Database(path.join(directory,'delivery.sqlite'),{readonly:true});
+        assert.equal(verify.prepare('SELECT count(*) AS count FROM counters').get().count,0);
+        assert.equal(verify.prepare('SELECT count(*) AS count FROM events').get().count,1); verify.close();
+    });
+    it('rejects an unrelated unversioned SQLite database without modifying its schema or journal mode', async () => {
+        const db=new Database(path.join(directory,'delivery.sqlite')); db.exec('CREATE TABLE unrelated (value TEXT)'); db.close();
+        await assert.rejects(spool().open(),/format|empty/u);
+        const verify=new Database(path.join(directory,'delivery.sqlite'),{readonly:true});
+        assert.equal(verify.pragma('user_version',{simple:true}),0);
+        assert.equal(verify.pragma('journal_mode',{simple:true}),'delete');
+        assert.deepEqual(verify.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all(),[{name:'unrelated'}]); verify.close();
+    });
+    it('rejects an oversized sparse committed legacy file before reading its body', async () => {
+        const name=await legacy({event:{eventId:'oversized'},recipients:['one'],remaining:['one']});
+        const handle=await openFile(path.join(directory,name),'r+'); await handle.truncate(128*1024*1024); await handle.close();
+        const original=fs.open;
+        fs.open=async function open(file,...args) {
+            const opened=await original(file,...args);
+            if (file===path.join(directory,name)) {
+                opened.readFile=async function readFile() { throw new Error('unbounded legacy read attempted'); };
+                opened.read=async function read() { throw new Error('legacy body read before capacity check'); };
+            }
+            return opened;
+        }; syncBuiltinESMExports();
+        try { await assert.rejects(spool({maxBytes:1000}).open(),/capacity/u); }
+        finally { Object.assign(fs,{open:original}); syncBuiltinESMExports(); }
+        assert.equal((await stat(path.join(directory,name))).size,128*1024*1024);
     });
 
 });

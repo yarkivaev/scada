@@ -58,7 +58,7 @@ export default function deliveryQueue(directory, options) {
             }
             // Snapshot before asynchronous I/O; callers may reuse buffers/objects.
             const envelope = JSON.parse(JSON.stringify({ eventId: event.eventId, observation: event, destinations }));
-            return serialized(() => { return spool.append(envelope, destinations.map((item) => { return item.id; })); });
+            return serialized(() => { return spool.append(envelope, envelope.destinations.map((item) => { return item.id; })); });
         },
         drain() {
             if (state.draining || state.closed) { return Promise.resolve({ delivered:0, failed:0 }); }

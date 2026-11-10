@@ -62,4 +62,14 @@ describe('Node delivery queue', () => {
         await assert.rejects(first.open(),/closed/u);
     });
 
+    it('freezes recipient identities together with caller-owned destination descriptors', async () => {
+        const received=[];
+        const queue=deliveryQueue(directory,{maxBytes:10000,factory(spec) {return {async write() {received.push(spec.id);}};}});
+        await queue.open();
+        const destinations=[{id:'frozen',type:'amqp'}];
+        const accepted=queue.accept({eventId:'a'},destinations); destinations[0].id='mutated'; destinations.push({id:'extra',type:'amqp'});
+        await accepted; assert.deepEqual(await queue.drain(),{delivered:1,failed:0});
+        assert.deepEqual(received,['frozen']); await queue.close();
+    });
+
 });

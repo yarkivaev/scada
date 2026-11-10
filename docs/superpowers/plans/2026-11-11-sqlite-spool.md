@@ -18,12 +18,12 @@ Preserve event identity/body/Secret refs and recipient routing; commit before ac
 - Logical capacity distinct from allocated pages; bounded recovery and WAL.
 
 ## Task1 persistence
-- [ ] Add failing SQLite storage/compression/ownership/migration/rotation/capacity tests; run RED.
-- [ ] Implement codec, database and migration helpers and compatible spool API; run focused GREEN.
-- [ ] Update explicit close lifecycle and restart tests; run queue/Secret tests.
-- [ ] Full tests/lint and real broker/central/history tests.
-- [ ] Measure100k+ real envelopes, RSS/recovery/write/drain and allocated pages.
-- [ ] One fresh focused review; material fixes RED→GREEN then full verification.
+- [x] Add failing SQLite storage/compression/ownership/migration/rotation/capacity tests; run RED.
+- [x] Implement codec, database and migration helpers and compatible spool API; run focused GREEN.
+- [x] Update explicit close lifecycle and restart tests; run queue/Secret tests.
+- [x] Full tests/lint and real broker/central/history tests.
+- [x] Measure100k+ real envelopes, RSS/recovery/write/drain and allocated pages.
+- [x] One fresh focused review; material fixes RED→GREEN then full verification.
 - [ ] Version2.6.1, PR/version check; report exact head. No merge until parent confirms.
 
 ## Ledger
@@ -31,3 +31,10 @@ Preserve event identity/body/Secret refs and recipient routing; commit before ac
 - Task1 implementation: initial6 missing-feature RED failures -> SQLite contracts GREEN; missing legacy receipt state RED -> strict rejection GREEN. Queue accepted-write close RED(lock retained) -> shutdown GREEN. Private file modes RED0644 ->0600 GREEN.
 - Validation: first full suite1480/1480; focused current26/26; actual Rabbit/central/native/gap/history84/84; lint clean. Final expanded full suite running.
 - Capacity:120k real envelopes,101.2MB SQLite/370.8MB logical; heap5.35→5.39MB; fresh recovery5.12ms. See docs/measurements. No production changes.
+- Final review: one fresh read-only reviewer found2 Critical and3 Important issues, reproduced as6 RED tests. One fix pass: process-local device/inode reservation before owner fd opens; regular/nlink1 validation for both databases' main/journal/WAL/SHM files; bounded existing-schema/counter validation before journal/data mutation; recipient IDs from frozen envelope; descriptor-stat cap and bounded legacy read. All6 RED→GREEN;32focused contracts pass. Final fullsuite and real-container reruns pending.
+- Final: minor (deferred): `spoolRecords.admission()` is an unused capacity alias. No behavioral effect; leave this polish for a separate change.
+- Final: Ruling: target Linux PVC power-loss durability and sustained throughput remain activation gates, not inferred from APFS/SIGKILL evidence — the test environment cannot prove disk-controller guarantees — wrong assumptions risk backlog exhaustion or crash loss.
+- Final: Ruling: stop the legacy JSON writer before upgrade and keep the spool directory private — legacy collectors do not share the SQLite ownership protocol, and hostile concurrent filesystem mutation is outside the private-directory boundary — wrong sequencing can race legacy source changes or file removal.
+- Final: Ruling: AMQP confirm followed by process loss before the local receipt may replay the same eventId — preserve pending data and rely on receiver deduplication for exactly-once effects — wrong receiver assumptions can duplicate effects; event identity and wire body remain frozen.
+
+- Final: fixed all5 material findings —6 regressions RED→GREEN, full suite1495/1495; actual Rabbit/central/native/gap/history84/84;32focused contracts; lint and diff whitespace check pass. No second review. Final120k measurement:101.24MBphysical/370.81MBlogical, heap5.36→5.43MB, strict-format fresh recovery8.97ms, append4204/s and stand-in drain2665/s under concurrent container load. Physical pages fully reused after drain/refill.
