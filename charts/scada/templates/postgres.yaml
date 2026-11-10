@@ -1,4 +1,10 @@
 {{- if .Values.postgres.enabled }}
+{{- if eq .Values.postgres.migrationsMode "verify" }}
+{{- $runtimeSecret := required "postgres.runtimeSecret is required in verify mode" .Values.postgres.runtimeSecret }}
+{{- if eq $runtimeSecret .Values.postgres.secret }}
+{{- fail "postgres.runtimeSecret must differ from bootstrap postgres.secret in verify mode" }}
+{{- end }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:

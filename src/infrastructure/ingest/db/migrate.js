@@ -78,3 +78,19 @@ export async function migratePrivileged(pool, migrationsDir, profile = 'central'
     await ensureMigrationsTable(pool);
     await applyMigrationFiles(pool, migrationsDir, profile, true);
 }
+
+
+/** Checks the complete selected migration manifest without DDL or writes. */
+export async function verifyMigrations(pool, migrationsDir, profile = 'edge', options = {}) {
+    const expected = (await fs.readdir(migrationsDir)).filter((name) => {
+        return migrationSelected(name, profile, false, options)
+            || migrationSelected(name, profile, true, options);
+    }).sort();
+    const { rows } = await pool.query(
+        'SELECT version FROM public.schema_migrations WHERE version = ANY($1::text[])',
+        [expected]
+    );
+    const applied = new Set(rows.map(({ version }) => { return version; }));
+    const missing = expected.filter((name) => { return !applied.has(name); });
+    if (missing.length) { throw new Error(`Missing database migrations: ${missing.join(', ')}`); }
+}

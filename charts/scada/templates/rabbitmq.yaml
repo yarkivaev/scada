@@ -1,4 +1,7 @@
 {{- if .Values.rabbitmq.enabled }}
+{{- if and .Values.rabbitmq.definitionsSecret .Values.rabbitmq.podTemplate }}
+{{- fail "rabbitmq.definitionsSecret requires the managed pod template; unfreeze storage templates for the controlled migration restart" }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -98,12 +101,20 @@ spec:
             - name: config
               mountPath: /etc/rabbitmq/rabbitmq.conf
               subPath: rabbitmq.conf
-            - name: config
+            - name: {{ ternary "definitions" "config" (not (empty .Values.rabbitmq.definitionsSecret)) }}
               mountPath: /etc/rabbitmq/definitions.json
               subPath: definitions.json
             - name: data
               mountPath: /var/lib/rabbitmq
       volumes:
+        {{- with .Values.rabbitmq.definitionsSecret }}
+        - name: definitions
+          secret:
+            secretName: {{ . | quote }}
+            items:
+              - key: definitions.json
+                path: definitions.json
+        {{- end }}
         - name: config
           configMap:
             name: {{ include "scada.brokerConfigName" . }}
