@@ -24,6 +24,7 @@ async function transaction(pool,records,action,options) {
     const client=await pool.connect();
     try {
         await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended('history:configuration',0))");
         const mappings=await mapped(client,items);
         await locks(client,mappings);
         await action(client,items,mappings);

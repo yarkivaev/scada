@@ -7,11 +7,12 @@ import historyConfigure from './historyConfigure.js';
 function machineName(machine) {
     if (typeof machine !== 'string' || !machine || machine.length > 200) { throw new TypeError('machine required'); }
 }
-async function transaction(pool, machine, action) {
+async function transaction(pool, machine, action, topology=false) {
     machineName(machine);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        if (topology) {await client.query("SELECT pg_advisory_xact_lock(hashtextextended('history:configuration',0))");}
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`history:${machine}`]);
         const result = await action(client);
         await client.query('COMMIT');
@@ -125,7 +126,7 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
                 const result=await historyConfigure(client,machine,topics,bucketMs*timeScale,{retentionDays,observations:source});
                 await configureClassifier(client,machine,classifierKey,source);
                 return {...result,...(timeScale!==1 && {timeScale})};
-            });
+            },true);
         },
         async purge() {
             const result = await pool.query(`DELETE FROM history_observations o WHERE time_ms < $1
