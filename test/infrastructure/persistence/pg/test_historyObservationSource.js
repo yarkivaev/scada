@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import historyContext from '../../../../src/infrastructure/persistence/pg/historyContext.js';
+import * as scada from '../../../../index.js';
 
 // The external backend owns raw observations; PostgreSQL owns only domain state.
 describe('historical context with external observations', function() {
     const pool = {async query(sql) {
         if (/history_observations/u.test(sql)) { throw new Error('Raw observation table must not be read for external history'); }
-        if (/FROM segments|FROM history_annotations/u.test(sql)) { return {rows:[],rowCount:0}; }
+        if (/FROM segments|FROM history_annotations|FROM history_admissions/u.test(sql)) { return {rows:[],rowCount:0}; }
         throw new Error(`Unexpected domain-state query: ${sql}`);
     }};
     const source = {
@@ -15,7 +16,7 @@ describe('historical context with external observations', function() {
         async seed() { return {time:0,since:0,values:{temperature:10}}; }
     };
     it('reads the supplied raw store while preserving PostgreSQL context and revision fencing', async function() {
-        const result=await historyContext(pool,'machine',1000,2000,{padding:1000,cutoff:-Infinity,observations:source});
+        const result=await scada.historyPg(pool,{observations:()=>{return source;},now:()=>{return 0;}}).context('machine',1000,2000,1000);
         assert.equal(result.available,true);
         assert.deepEqual(result.items.map(({time,value})=>{return {time,value};}),[{time:1000,value:7},{time:3000,value:9}]);
         assert.deepEqual(result.initial.values,{temperature:10});

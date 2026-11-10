@@ -112,3 +112,5 @@ export { default as executeRelease } from './src/infrastructure/deploy/executeRe
 export { default as collectorProcesses } from './src/application/deploy/collectorProcesses.js';
 
 export { default as executeStages } from './src/infrastructure/deploy/executeStages.js';
+
+export { default as historyPg } from './src/infrastructure/persistence/pg/history.js';
