@@ -151,9 +151,12 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
         accept(machine, items) {
             if (observationSource) { throw new TypeError('External observations require durable telemetry admission'); }
             return accept(pool, machine, items, cutoff()); },
-        async context(machine, from, until, padding = 60000*timeScale, page = {}) {
-            if (observationSource) { await assertHistoryReady(pool,machine); }
-            return context(pool, machine, from, until, { padding, cutoff: cutoff(),...page,timeScale,observations:observationSource?.(pool) });
+        context(machine, from, until, padding = 60000*timeScale, page = {}) {
+            async function read(connection){
+                if(observationSource){await assertHistoryReady(connection,machine);}
+                return context(connection,machine,from,until,{padding,cutoff:cutoff(),...page,timeScale,observations:observationSource?.(connection)});
+            }
+            return page.classifierKey && page.workId ? transaction(pool,machine,read) : read(pool);
         },
         async work(machine) {
             machineName(machine);

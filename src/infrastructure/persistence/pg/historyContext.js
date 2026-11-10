@@ -23,17 +23,21 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const range = { from,until,paddingMs:padding,cursor,end:envelope,...(classifierKey && {classifierKey}),...(timeScale!==1 && {timeScale}),...(workId && {workId,workToken}) };
     if ((cursor !== null && !Number.isSafeInteger(cursor)) || (envelope !== null && !Number.isSafeInteger(envelope))) { throw new TypeError('Invalid history cursor'); }
     const claim=await classifierClaim(pool,machine,{workId,workToken,from,until,cursor,end:envelope});
-    if (from<cutoff && !claim?.started) {
+    if (from<cutoff && !claim) {
         const pending = cursor === null || envelope === null ? {rowCount:0} : await pool.query(`SELECT 1 FROM history_work WHERE machine=$1 AND from_ms=$2 AND until_ms=$3 AND cursor_ms=$4 AND end_ms=$5 LIMIT 1`,[machine,from,until,cursor,envelope]);
         if (!pending.rowCount) { return {available:false,items:[],segments:[],annotations:[],context:range}; }
     }
     const classifier=classifierKey ? await classifierSeed(pool,machine,cursor ?? from,classifierKey,{claim,cursor}) : null;
     let left = cursor ?? from-padding;
     if (classifierKey && cursor===null) { left=classifier ? classifier.at+1 : await source.start(machine); }
-    const right = Math.max(envelope ?? until,await source.boundary(machine,from,until,padding));
+    const right = classifierKey && envelope!==null ? envelope : Math.max(envelope ?? until,await source.boundary(machine,from,until,padding));
     const previous = await pool.query(`SELECT kind,name,start_time,end_time FROM segments WHERE machine=$1 AND kind='phase' AND start_time<=$2 ORDER BY start_time DESC LIMIT 1`,[machine,new Date(right/timeScale)]);
     const tail=classifierKey ? await pool.query("SELECT max(end_time) AS end_time FROM segments WHERE machine=$1 AND kind='phase'",[machine]) : null;
-    const end = Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale),tail?.rows[0]?.end_time ? new Date(tail.rows[0].end_time).getTime()*timeScale : -Infinity);
+    const end = classifierKey && envelope!==null ? envelope : Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale),tail?.rows[0]?.end_time ? new Date(tail.rows[0].end_time).getTime()*timeScale : -Infinity);
+    if(classifierKey && claim && envelope===null){
+        await pool.query('UPDATE history_work SET end_ms=$3 WHERE id=$1 AND machine=$2',[workId,machine,end]);
+        range.end=end;
+    }
     // Fetch timestamp keys only, then read at most 250 complete groups. Never fetch the raw dependency tail.
     const rawPage = await source.page(machine,left,end);
     const page=classifierKey ? await classifierPage(pool,machine,rawPage,classifierKey) : rawPage;

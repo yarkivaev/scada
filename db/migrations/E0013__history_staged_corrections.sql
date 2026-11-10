@@ -1,3 +1,4 @@
+ALTER TABLE history_annotations ADD COLUMN IF NOT EXISTS consumed BOOLEAN DEFAULT true;
 ALTER TABLE history_work ADD COLUMN IF NOT EXISTS generation UUID NOT NULL DEFAULT gen_random_uuid();
 ALTER TABLE history_work ADD COLUMN IF NOT EXISTS correction_from BIGINT;
 ALTER TABLE history_work ADD COLUMN IF NOT EXISTS correction_until BIGINT;
@@ -49,11 +50,11 @@ BEGIN
     hi := 'epoch'::timestamptz+(w.correction_until/p_scale)*interval '1 millisecond';
     SELECT least(lo,COALESCE(min(start_time),lo)),greatest(hi,COALESCE(max(end_time),hi)) INTO lo,hi
         FROM history_corrections WHERE work_id=w.id AND generation=w.generation;
-    INSERT INTO history_annotations(machine,kind,start_time,name,end_time,duration,tags,properties,resolved)
-        SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
+    INSERT INTO history_annotations(machine,kind,start_time,name,end_time,duration,tags,properties,resolved,consumed)
+        SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved,consumed FROM segments
         WHERE machine=p_machine AND kind='phase' AND start_time<=hi AND end_time>=lo
         ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),
-            duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved;
+            duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved,consumed=EXCLUDED.consumed;
     UPDATE segments SET end_time=lo,duration=greatest(0,extract(epoch FROM lo-start_time)),updated_at=clock_timestamp()
         WHERE machine=p_machine AND kind='phase' AND start_time<lo AND end_time>lo;
     DELETE FROM segments WHERE machine=p_machine AND kind='phase' AND start_time>=lo
@@ -77,11 +78,11 @@ BEGIN
             inherited := COALESCE(NULLIF(NULLIF(owner.properties,''),'null')::jsonb,'{}'::jsonb);
             IF jsonb_typeof(incoming)<>'object' THEN incoming:='{}'::jsonb; END IF;
             IF jsonb_typeof(inherited)<>'object' THEN inherited:='{}'::jsonb; END IF;
-            INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved,updated_at)
+            INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed,updated_at)
                 VALUES(p_machine,item.kind,item.name,a,b,CASE WHEN item.duration=0 AND b=item.end_time AND NOT endpoint_cut THEN 0 ELSE extract(epoch FROM b-a) END,
-                    item.options,COALESCE(owner.tags,item.tags),(incoming||(inherited-keys))::text,COALESCE(owner.resolved,item.resolved),clock_timestamp())
+                    item.options,COALESCE(owner.tags,item.tags),(incoming||(inherited-keys))::text,COALESCE(owner.resolved,item.resolved),COALESCE(owner.consumed,true),clock_timestamp())
                 ON CONFLICT(machine,kind,start_time) DO UPDATE SET name=EXCLUDED.name,end_time=EXCLUDED.end_time,duration=EXCLUDED.duration,
-                    options=EXCLUDED.options,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved,updated_at=EXCLUDED.updated_at;
+                    options=EXCLUDED.options,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved,consumed=EXCLUDED.consumed,updated_at=EXCLUDED.updated_at;
             inserted:=inserted+1; a:=b;
         END LOOP;
         -- A real user cut at the final singleton is retained; ordinary heartbeat ends are not cuts.
@@ -91,8 +92,8 @@ BEGIN
             inherited := COALESCE(NULLIF(NULLIF(owner.properties,''),'null')::jsonb,'{}'::jsonb);
             IF jsonb_typeof(incoming)<>'object' THEN incoming:='{}'::jsonb; END IF;
             IF jsonb_typeof(inherited)<>'object' THEN inherited:='{}'::jsonb; END IF;
-            INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved)
-                VALUES(p_machine,item.kind,item.name,item.end_time,item.end_time,0,item.options,owner.tags,(incoming||(inherited-keys))::text,owner.resolved)
+            INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed)
+                VALUES(p_machine,item.kind,item.name,item.end_time,item.end_time,0,item.options,owner.tags,(incoming||(inherited-keys))::text,owner.resolved,COALESCE(owner.consumed,true))
                 ON CONFLICT(machine,kind,start_time) DO NOTHING;
         END IF;
     END LOOP;

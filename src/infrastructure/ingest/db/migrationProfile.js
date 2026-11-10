@@ -27,7 +27,8 @@ const privilegedOnly = new Set([
     'E0005__historical_telemetry_grants.sql',
     'E0008__metric_receipts_grants.sql',
     'E0012__external_history_grants.sql',
-    'E0014__history_correction_grants.sql'
+    'E0014__history_correction_grants.sql',
+    'E0016__history_retention_grants.sql'
 ]);
 
 /**
