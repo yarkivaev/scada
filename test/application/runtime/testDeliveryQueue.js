@@ -2,12 +2,19 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import deliveryQueue from '../../../src/application/runtime/deliveryQueue.js';
+import factory from '../../../src/application/runtime/deliveryQueue.js';
+
+const owned=[];
+function deliveryQueue(...args) { const item=factory(...args); owned.push(item); return item; }
 
 describe('Node delivery queue', () => {
     let directory;
     beforeEach(async () => { directory = await mkdtemp(path.join(os.tmpdir(), 'queue-')); });
-    afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
+    afterEach(async () => {
+        await Promise.all(owned.splice(0).map(item=>{return item.close();}));
+        const probe=factory(directory,{maxBytes:10000,factory() {throw new Error('offline');}});
+        try { await probe.open(); } finally { await probe.close(); await rm(directory,{recursive:true,force:true}); }
+    });
     it('accepts while offline, recovers destinations after restart and drains independently of source', async () => {
         const options = { maxBytes: 10000, factory() { throw new Error('offline'); } };
         const first = deliveryQueue(directory, options);
