@@ -49,10 +49,11 @@ export default function assignmentAgent({ nodeId, file, store, runtime, validate
     }
     return {
         tick,
-        async start() {
+        status() { return { hasAssignment: Boolean(state.desired), appliedGeneration: state.appliedGeneration }; },
+        async start({ waitForInitialTick = true } = {}) {
             const saved = await loadSnapshot(file);
             if (saved) { await reconcile(saved, true); }
-            await tick();
+            if (waitForInitialTick) { await tick(); } else { void tick().catch(onError); }
             state.timer = setInterval(() => { void tick(); }, intervalMs);
         },
         async stop() { state.stopped = true; clearInterval(state.timer); await state.pending; }

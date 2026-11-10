@@ -722,3 +722,11 @@ to false only after all MQTT clients have authenticated credentials. A frozen
 broker PodTemplate cannot adopt these mounts: unfreeze it for a controlled
 restart while preserving the claim. Definitions import does not delete an
 existing guest user; retire it explicitly after all dependent clients reconnect.
+
+### Collector recovery and durable delivery references
+
+Collector health opens before local spool recovery; `/live` remains responsive and `/ready` stays negative until recovery and a saved/initial assignment are applied. Cached assignments start without waiting for the first network reconciliation. `COLLECTOR_RECOVERY_TIMEOUT_MS` defaults to 900000 and bounds local initialization; exceeding it terminates startup for the external supervisor. Validate recovery duration against measured queue capacity before activation.
+
+Spooled destination descriptors retain secret references. Draining a recovered queue resolves the current secret for each logical recipient, so credential rotation does not freeze a password in queued observations. Source connection credentials are still resolved at resource construction. Scheduler updates preserve a potentially working replica until another matching reader reports fresh progress, except explicit current-generation failure.
+
+Central canonical ingestion propagates the receiver session ownership predicate through schema initialization and admission. It checks ownership again after authoritative state/clock reads and before writes; a lost session cannot allocate a newer revision from a delayed SELECT. Already submitted old-revision inserts remain safe under canonical winner ordering.

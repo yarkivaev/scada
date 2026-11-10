@@ -71,6 +71,27 @@ describe('native central admission',function() {
         assert.equal(client.writes[0].values[0].reason,'too_old');
     });
 
+    it('fences a former owner whose delayed state read observes newer committed admissions',async function(){
+        const client=memory();let current=[];let release;let entered;let active=true;
+        const blocked=new Promise(resolve=>{entered=resolve;});
+        const gate=new Promise(resolve=>{release=resolve;});
+        client.query=async()=>{return {json:async()=>{return structuredClone(current);}};};
+        const insert=client.insert;
+        client.insert=async(request)=>{await insert(request);if(request.table==='scada.metrics_state_v4'){current=request.values;}};
+        const former={...client,async query(request){entered();await gate;return client.query(request);}};
+        const stale=admission(former,[point(1000,42)],{admittedAt:1000,batchId:'1'.repeat(64),active:()=>{return active;}},{now:()=>{return 2000;}})
+            .then(()=>{return null},error=>{return error});
+        await blocked;active=false;
+        await admission(client,[point(1000,42)],{admittedAt:1000,batchId:'1'.repeat(64)},{now:()=>{return 2000;}});
+        await admission(client,[point(1000,99)],{admittedAt:1000,batchId:'2'.repeat(64)},{now:()=>{return 2000;}});
+        release();const error=await stale;
+        const points=client.writes.filter(request=>{return request.table==='scada.metrics_points_v4';}).flatMap(request=>{return request.values;});
+        const winner=points.reduce((left,right)=>{return BigInt(left.revision)>BigInt(right.revision)?left:right;});
+        assert.equal(winner.value,99);
+        assert.match(error?.message??'',/ownership/u);
+        assert.equal(current.find(row=>{return row.key==='';}).committed_seq,'2');
+    });
+
     it('rejects direct windows exceeding the bounded reader certificate expansion',async function(){
         const client=memory();
         await assert.rejects(admission(client,[{...point(1000),compactWindowMs:3600001}],{admittedAt:1000,batchId:'f'.repeat(64)},{now:()=>{return 1000}}),/compactWindowMs/u);

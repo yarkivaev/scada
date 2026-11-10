@@ -1,4 +1,5 @@
 import nativeMetricsInsert from './nativeMetricsInsert.js';
+import nativeMetricsOwnership from './nativeMetricsOwnership.js';
 import {createHash} from 'node:crypto';
 import nativeMetricsClock from './nativeMetricsClock.js';
 import centralPoint from '../../ingest/telemetry/centralPoint.js';
@@ -57,25 +58,34 @@ async function committedState(client,points,admittedAt) {
     return {states,seq};
 }
 async function persist(client,unique,rejected,states,options) {
+    nativeMetricsOwnership(options);
     if(unique.size){await nativeMetricsInsert(client,[...unique.values()]);}
+    nativeMetricsOwnership(options);
     if(rejected.length){await client.insert({table:'scada.metrics_rejected_v4',values:rejected,format:'JSONEachRow',clickhouse_settings:settings});}
     const publishedAt=await nativeMetricsClock(client,options);
+    nativeMetricsOwnership(options);
     for(const state of states){if(state.published_at===null||state.key===''){state.published_at=publishedAt;}}
     await client.insert({table:'scada.metrics_state_v4',values:states,format:'JSONEachRow',clickhouse_settings:settings});
 }
-/** Requires the serialized SAC head and one authoritative read-after-write target. */
-async function nativeMetricsAdmission(client,records,context={},options={}) {
-    if(records.length>1000){throw new TypeError('Central admission head exceeds 1000 points');}
-    const points=normalize(records);
+function admissionContext(points,context,options) {
     const now=options.now??Date.now;
     const admittedAt=context.admittedAt??now();
     const batchId=context.batchId??createHash('sha256').update(JSON.stringify({points,admittedAt})).digest('hex');
     if(!Number.isSafeInteger(admittedAt)||!/^[a-f0-9]{64}$/u.test(batchId)){throw new TypeError('Invalid central admission context');}
+    return {now,admittedAt,batchId};
+}
+/** Requires the serialized SAC head and one authoritative read-after-write target. */
+async function nativeMetricsAdmission(client,records,context={},options={}) {
+    nativeMetricsOwnership(context);
+    if(records.length>1000){throw new TypeError('Central admission head exceeds 1000 points');}
+    const points=normalize(records);
+    const {now,admittedAt,batchId}=admissionContext(points,context,options);
     if(!points.length){return;}
     const {states,seq}=await committedState(client,points,admittedAt);
+    nativeMetricsOwnership(context);
     const topics=topicStates(points,states,{seq,revision:(seq*1024n)+1023n,publishedAt:now(),admittedAt});
     const publishedAt=now();
     const {unique,rejected}=admissionRows(points,topics,admittedAt,batchId,seq);
-    await persist(client,unique,rejected,[...topics.values(),{key:'',latest:0,closed_before:0,published_at:publishedAt,committed_seq:seq.toString(),revision:((seq*1024n)+1023n).toString()}],options);
+    await persist(client,unique,rejected,[...topics.values(),{key:'',latest:0,closed_before:0,published_at:publishedAt,committed_seq:seq.toString(),revision:((seq*1024n)+1023n).toString()}],{...options,active:context.active});
 }
 export default nativeMetricsAdmission;

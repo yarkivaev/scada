@@ -16,7 +16,7 @@ export default function centralQueueSession(settings, projection, diagnostics) {
             while(delivery.active()) {
                 try {
                     const { records, admittedAt, batchId } = decodeBatch(delivery.content,settings.target);
-                    await projection.write(records,{admittedAt,batchId});
+                    await projection.write(records,{admittedAt,batchId,active:delivery.active});
                     diagnostics.accepted?.();return;
                 } catch(error) {
                     diagnostics.failed(error);
@@ -25,5 +25,5 @@ export default function centralQueueSession(settings, projection, diagnostics) {
             }
         }
     }, { queueOptions:settings.queueOptions,prefetch:1,exclusive:false,maxMessageBytes:MAX_BATCH_BYTES,maxPendingBytes:MAX_BATCH_BYTES,
-        preserveOnCapacity:true,stopTimeoutMs:120000,onError:diagnostics.failed });
+        preserveOnCapacity:true,stopTimeoutMs:120000,onError:diagnostics.failed,...(settings.connect&&{connect:settings.connect}) });
 }

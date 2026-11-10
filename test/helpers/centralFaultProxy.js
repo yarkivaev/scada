@@ -1,7 +1,7 @@
 import http from 'node:http';
 
 /** Hold a real INSERT either before commit or after commit before its reply. */
-export default async function centralFaultProxy(backend,beforeCommit=false) {
+export default async function centralFaultProxy(backend,beforeCommit=false,{prefix='INSERT INTO scada.metrics_points_v4',loseResponse=true}={}) {
     let notify;
     let failed;
     let forwardDone;
@@ -18,7 +18,7 @@ export default async function centralFaultProxy(backend,beforeCommit=false) {
         for await(const chunk of request) {chunks.push(chunk);}
         const body=Buffer.concat(chunks);
         const query=new URL(request.url,backend).searchParams.get('query')||body.toString();
-        const held=first&&query.trim().startsWith('INSERT INTO scada.metrics_points_v4');
+        const held=first&&query.trim().startsWith(prefix);
         if(held){first=false;if(beforeCommit){notify();await withheld;}}
         const upstream=await fetch(new URL(request.url,backend),{method:request.method,
             headers:{'content-type':request.headers['content-type']||'text/plain',...(request.headers.authorization?{authorization:request.headers.authorization}:{})},
@@ -26,7 +26,8 @@ export default async function centralFaultProxy(backend,beforeCommit=false) {
         const result=await upstream.text();
         if(held) {
             if(!upstream.ok){throw new Error(result);}
-            forwardDone();if(!beforeCommit){notify();}await withheld;response.destroy();return;
+            forwardDone();if(!beforeCommit){notify();}await withheld;
+            if(loseResponse){response.destroy();return;}
         }
         response.writeHead(upstream.status,{'content-type':upstream.headers.get('content-type')||'text/plain'});
         response.end(result);

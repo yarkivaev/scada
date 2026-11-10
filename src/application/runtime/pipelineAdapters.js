@@ -12,7 +12,9 @@ import resolveSecrets from './resolveSecrets.js';
 function configured(spec, context) {
     const options = { maxRecords: spec.limits?.maxRecords, maxBytes: spec.limits?.maxBytes, budget: context.budget };
     const defined = Object.fromEntries(Object.entries(options).filter(([, value]) => { return value !== undefined; }));
-    return { ...resolveSecrets(spec, context.secrets),
+    const { sinks, ...source } = spec;
+    return { ...resolveSecrets(source, context.secrets),
+        ...(sinks !== undefined && { sinks: structuredClone(sinks) }),
         config: { ...resolveSecrets(spec.config, context.secrets), ...defined },
         options: { ...resolveSecrets(spec.options, context.secrets), ...defined } };
 }

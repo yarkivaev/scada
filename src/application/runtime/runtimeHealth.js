@@ -4,7 +4,7 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 function response(runtime, histogram, request, result) {
     if (!['/live', '/ready', '/status'].includes(request.url)) { result.writeHead(404).end(); return; }
     const state = runtime.status();
-    const ready = !state.fatal && !state.stopping && !state.tasks.some((task) => {
+    const ready = state.initialized !== false && !state.fatal && !state.stopping && !state.tasks.some((task) => {
         return task.state === 'failed' || ['failed', 'degraded'].includes(task.health);
     });
     const body = request.url === '/status' ? { ...state, memory: process.memoryUsage(), eventLoopP99Ms: histogram.percentile(99) / 1e6 } : { ready };

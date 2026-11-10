@@ -16,7 +16,7 @@ import { admissionDomain, targetIdentity, encodeBatch, decodeBatch, MAX_BATCH_BY
 import amqpMetricsIngest from '../../src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import siteSyncTargets from '../../src/application/sync/siteSyncTargets.js';
 import amqpSource from '../../src/infrastructure/streams/amqpSource.js';
-import {centralQueueOptions} from '../../src/infrastructure/ingest/telemetry/centralQueueSession.js';
+import centralQueueSession, {centralQueueOptions} from '../../src/infrastructure/ingest/telemetry/centralQueueSession.js';
 
 import centralFaultProxy from '../helpers/centralFaultProxy.js';
 /* eslint-disable no-await-in-loop */
@@ -185,6 +185,26 @@ describe('ClickHouse native admission and immutable compact history', function()
             const graph=await clickhouseSeries(reader,'density',{start:new Date(BASE+1000),end:new Date(BASE+3000)},1000,'');
             assert.deepEqual(graph.map(({timestamp,value})=>{return {ts:timestamp.getTime()-BASE,value};}),[{ts:1000,value:42},{ts:3000,value:42}],'A chart inside a compacted constant window keeps its constant coverage');
         } finally {await reader.close();await sink.stop();}
+    });
+    it('fences a former SAC owner paused before the authoritative state SELECT executes',async function(){
+        const topic='delayed-state-select';
+        const proxy=await centralFaultProxy(url,true,{prefix:'SELECT * FROM scada.metrics_state_v4 FINAL',loseResponse:false});
+        const projection=canonicalMetrics(proxy.url,domain);
+        const config=centralPolicy(policy);let activeConnection;
+        const old=centralQueueSession({url:broker,queue:config.queue,queueOptions:centralQueueOptions(config),target:targetIdentity(url),
+            async connect(address){activeConnection=await amqp.connect(address);return activeConnection;}},projection,{failed(){}});
+        const standby=centralMetricsSink(env());
+        await old.start();await standby.start();
+        try{
+            await standby.write([point(topic,0,42)]);
+            await proxy.blocked;
+            await activeConnection.close();
+            await standby.write([point(topic,0,99)]);
+            await eventually(()=>{return rows(topic);},[{ts:0,value:99}]);
+            proxy.release();await proxy.forwarded;await old.stop();
+            assert.deepEqual(await rows(topic),[{ts:0,value:99}],
+                'A retired delivery must not allocate a newer revision from a delayed state read');
+        }finally{proxy.release();await old.stop();await standby.stop();await projection.stop();await proxy.stop();}
     });
     [false,true].forEach((beforeCommit) => { it(`does not let a delayed old INSERT overwrite a newer native winner across failover ${beforeCommit?'before CH commit':'after CH commit'}`, async function() {
         const topic=beforeCommit?'ambiguous-before':'ambiguous-after';

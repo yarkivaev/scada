@@ -9,8 +9,13 @@ function clockSkew(value) {
 function copies(task) { return task.pinnedNode ? 1 : task.copies ?? 2; }
 function freshRead(report, input, { now, freshnessMs, controlEpoch, clockSkewMs }) {
     return inEpoch(report, controlEpoch) && report?.tasks?.some((row) => {
-        return row.taskId === input.taskId && row.generation === input.generation && row.state === 'running'
+        return row.taskId === input.taskId && row.generation === input.generation && row.state === 'running' && !['degraded', 'failed'].includes(row.health)
             && Number.isFinite(row.lastRead) && row.lastRead <= now + clockSkewMs && now - row.lastRead <= freshnessMs;
+    });
+}
+function failedRead(report, input, controlEpoch) {
+    return input && inEpoch(report, controlEpoch) && report?.tasks?.some((row) => {
+        return row.taskId === input.taskId && row.generation === input.generation && row.state === 'failed';
     });
 }
 function updateAllowed(task, node, slots, reports, { now, freshnessMs, controlEpoch, clockSkewMs }) {
@@ -21,8 +26,10 @@ function updateAllowed(task, node, slots, reports, { now, freshnessMs, controlEp
         return freshRead(reports.get(slot.id), input, { now, freshnessMs, controlEpoch, clockSkewMs });
     });
     const healthy = owners.filter((slot) => { return freshRead(reports.get(slot.id), slot.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
-    const outdated = owners.filter((slot) => { return wanted(task, slot) && !modern.includes(slot) && !(copies(task) > 1 && healthy.length === 1 && healthy[0].id === slot.id); });
-    return (modern.length === 0 || ready) && outdated[0]?.id === node.id;
+    function failed(slot) { return failedRead(reports.get(slot.id), slot.assignments.find((row) => { return row.taskId === task.taskId; }), controlEpoch); }
+    const outdated = owners.filter((slot) => { return wanted(task, slot) && !modern.includes(slot)
+        && (copies(task) === 1 || failed(slot) || healthy.some((other) => { return other.id !== slot.id; })); });
+    return (modern.length === 0 || ready || failed(node)) && outdated[0]?.id === node.id;
 }
 function snapshots(slots, taskMap, { version: catalogVersion, controlEpoch = 'initial' }, reports, timing) {
     return Object.fromEntries(slots.map((node) => {
