@@ -63,25 +63,40 @@ volumeMode: Filesystem
 - name: POSTGRES_URL
   valueFrom:
     secretKeyRef:
-      name: {{ .Values.postgres.secret }}
+      name: {{ default .Values.postgres.secret .Values.postgres.runtimeSecret }}
       key: url
+{{- if eq .Values.postgres.migrationsMode "verify" }}
+- name: SUPERVISOR_MIGRATIONS
+  value: "verify"
+{{- else }}
 - name: POSTGRES_ADMIN_URL
   valueFrom:
     secretKeyRef:
       name: {{ .Values.postgres.secret }}
       key: adminUrl
 {{- end }}
+{{- end }}
 {{- if .Values.rabbitmq.enabled }}
 - name: STOMP_URL
   value: {{ printf "stomp://%s-rabbitmq:61613" (include "scada.prefix" .) | quote }}
+{{- if .Values.rabbitmq.runtimeSecret }}
+{{- range $name := list "STOMP_LOGIN" "STOMP_PASSCODE" "AMQP_URL" }}
+- name: {{ $name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ $.Values.rabbitmq.runtimeSecret | quote }}
+      key: {{ $name }}
+{{- end }}
+{{- else }}
 - name: STOMP_LOGIN
   value: guest
 - name: STOMP_PASSCODE
   value: guest
-- name: STOMP_HOST
-  value: /
 - name: AMQP_URL
   value: {{ printf "amqp://guest:guest@%s-rabbitmq:5672" (include "scada.prefix" .) | quote }}
+{{- end }}
+- name: STOMP_HOST
+  value: /
 {{- end }}
 {{- if .Values.clickhouse.enabled }}
 - name: CLICKHOUSE_HOST

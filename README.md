@@ -208,7 +208,45 @@ SQL files in `db/migrations/` use profile prefixes:
 | `E*` | Edge only (metrics tables, retention) |
 | `C*` | Central only (central privileges, including segment DELETE) |
 
-Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup via `POSTGRES_ADMIN_URL`.
+Set `SINK_DB_PROFILE=central|edge`. By default, migrations run at supervisor-sink
+startup via `POSTGRES_ADMIN_URL` (`SUPERVISOR_MIGRATIONS=apply`).
+
+After a separate administrative bootstrap has applied the image's complete
+migration set, set `SUPERVISOR_MIGRATIONS=verify` and remove `POSTGRES_ADMIN_URL`
+from the runtime container. Startup then uses only `POSTGRES_URL` to SELECT the
+recorded versions in `public.schema_migrations`. It checks shared and selected
+profile migrations, including privileged migrations, before starting consumers or
+HTTP. An absent/inaccessible registry or any missing migration stops startup;
+it never creates the registry or falls back to administrative credentials.
+Collector task-state migration remains separately opt-in, as in apply mode.
+This verifies migration records, not schema checksums or effective DML privileges.
+
+The restricted runtime role needs database CONNECT, public schema USAGE,
+`GRANT SELECT ON public.schema_migrations TO <runtime_role>`, and the DML/sequence
+grants required by its enabled pipelines and APIs. It needs no schema CREATE,
+registry INSERT, table ownership or elevated role attributes for verification.
+Do not mount an administrative Secret into verify-mode runtime containers.
+Complete each image's bootstrap and role grants before switching it; retain the
+administrative identity only in the separate migration job. Use the exact main
+commit whose mandatory checks passed before releasing a new image.
+
+For chart-managed PostgreSQL, select this boundary with:
+
+```yaml
+postgres:
+  migrationsMode: verify
+  secret: postgres-bootstrap
+  runtimeSecret: postgres-runtime
+```
+
+`runtimeSecret` must differ from the bootstrap Secret and contain the restricted
+connection string under `url`. The chart injects it as POSTGRES_URL, sets
+SUPERVISOR_MIGRATIONS=verify, and omits POSTGRES_ADMIN_URL from both application
+containers. Bootstrap credentials remain on PostgreSQL. Apply mode keeps the
+legacy adminUrl reference; an optional runtimeSecret can separately supply its
+POSTGRES_URL. With postgres.enabled=false, explicit application env values
+continue to configure external databases without generated PostgreSQL settings.
+Do not add administrative credentials through env/envFrom when selecting verify.
 
 ## Environment (supervisor-sink / siteServer)
 
@@ -216,7 +254,8 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 |----------|---------|
 | `STOMP_URL` | RabbitMQ STOMP broker |
 | `POSTGRES_URL` | Application DB user (`supervisor_sink`) |
-| `POSTGRES_ADMIN_URL` | Admin user for migrations |
+| `POSTGRES_ADMIN_URL` | Admin user for apply-mode migrations; omit in verify mode |
+| `SUPERVISOR_MIGRATIONS` | `apply` (default) or `verify`; other values fail startup |
 | `SINK_DB_PROFILE` | `central` or `edge` |
 | `SINK_PIPELINES` | `false` skips STOMP segment, decision, and alert consumers. The site container sets this and a `supervisor-sink` container keeps the default |
 | `SEGMENT_REPAIR_HISTORY_ON_START` | `false` preserves closed historical boundaries at ingest startup. Omitted or `true` retains the existing same-name gap repair. Live ingest and silent-open handling remain active. |
@@ -596,3 +635,15 @@ Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP tel
 ### MQTT publisher recovery
 
 An unexpected MQTT publisher close/offline/error retires the session and notifies `onFatal` once. Intentional `stop()` does not notify failure. Modbus runtime tasks propagate publisher failure to collector `/ready` and `/live` (503). Run the collector under its liveness supervisor: it must retire the failed executor and create a fresh one, which reconnects after the broker returns. Uncertain publications are not automatically replayed. Broker restart regression covers failed health, old poll cleanup, and confirmed fresh measurements from the replacement executor.
+
+### Broker credential Secrets
+
+Set `rabbitmq.definitionsSecret` to a separately provisioned Secret with the key
+`definitions.json`; the chart then omits definitions from its ConfigMap. Set
+`rabbitmq.runtimeSecret` for `AMQP_URL`, `STOMP_LOGIN` and `STOMP_PASSCODE`.
+Other clients can reference the same or narrower Secrets explicitly. Anonymous
+MQTT remains compatible by default; set `rabbitmq.extraConfig["mqtt.allow_anonymous"]`
+to false only after all MQTT clients have authenticated credentials. A frozen
+broker PodTemplate cannot adopt these mounts: unfreeze it for a controlled
+restart while preserving the claim. Definitions import does not delete an
+existing guest user; retire it explicitly after all dependent clients reconnect.

@@ -6,7 +6,7 @@ import segmentPipeline, {
 } from '../infrastructure/ingest/pipelines/segmentPipeline.js';
 import decisionPipeline from '../infrastructure/ingest/pipelines/decisionPipeline.js';
 import alertPipeline from '../infrastructure/ingest/pipelines/alertPipeline.js';
-import migrate, { migratePrivileged } from '../infrastructure/ingest/db/migrate.js';
+import migrate, { migratePrivileged, verifyMigrations } from '../infrastructure/ingest/db/migrate.js';
 import stateDataFromPool from '../infrastructure/persistence/stateDataFromPool.js';
 import { parseRequestTimeoutMs } from '../infrastructure/ingest/parseRequestTimeoutMs.js';
 import pg from 'pg';
@@ -38,6 +38,13 @@ function historyRepair(value) {
     return value === 'true';
 }
 
+function migrationMode(value = 'apply') {
+    if (!['apply', 'verify'].includes(value)) {
+        throw new TypeError('SUPERVISOR_MIGRATIONS must be apply or verify');
+    }
+    return value;
+}
+
 export function readDeploymentConfig(env) {
     const root = path.join(appRoot, '../..');
     const prefetch = Number(env.STOMP_PREFETCH || '128');
@@ -50,6 +57,7 @@ export function readDeploymentConfig(env) {
         stomp: env.STOMP_URL,
         postgres: env.POSTGRES_URL,
         postgresAdmin: env.POSTGRES_ADMIN_URL,
+        migrationsMode: migrationMode(env.SUPERVISOR_MIGRATIONS),
         apiPort: parseInt(
             env.STATE_HTTP_PORT || env.INTERNAL_API_PORT || '8081',
             10
@@ -92,6 +100,23 @@ function startPipelines(cfg, pool, health) {
     return Promise.all(pipelines.map((pipeline) => { return pipeline.start(); }));
 }
 
+async function prepareDatabase(cfg, pool) {
+    if (cfg.migrationsMode === 'verify') {
+        await verifyMigrations(pool, cfg.migrationsDir, cfg.sinkDbProfile);
+        return;
+    }
+    if (!cfg.postgresAdmin) {
+        throw new Error('POSTGRES_ADMIN_URL is required for supervisor-sink database migrations');
+    }
+    const adminPool = holdClient(new pg.Pool({ connectionString: cfg.postgresAdmin }));
+    try {
+        await migrate(adminPool, cfg.migrationsDir, cfg.sinkDbProfile);
+        await migratePrivileged(adminPool, cfg.migrationsDir, cfg.sinkDbProfile);
+    } finally {
+        await adminPool.end();
+    }
+}
+
 /**
  * Wires STOMP pipelines, migrations, and state data access from env config.
  * HTTP binding uses edgeApi (metrics, checkpoint, retention).
@@ -120,16 +145,7 @@ export default function supervisorSink(env = process.env, options = {}) {
         pool,
         dataAccess,
         async run(httpServer) {
-            if (!cfg.postgresAdmin) {
-                throw new Error('POSTGRES_ADMIN_URL is required for supervisor-sink database migrations');
-            }
-            const adminPool = holdClient(new pg.Pool({ connectionString: cfg.postgresAdmin }));
-            try {
-                await migrate(adminPool, cfg.migrationsDir, cfg.sinkDbProfile);
-                await migratePrivileged(adminPool, cfg.migrationsDir, cfg.sinkDbProfile);
-            } finally {
-                await adminPool.end();
-            }
+            await prepareDatabase(cfg, pool);
             if (cfg.pipelines) {
                 await startPipelines(cfg, pool, health);
             }

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import supervisorSink from '../../src/application/supervisorSink.js';
+import fs from 'node:fs/promises';
+import pg from 'pg';
+import supervisorSink, { readDeploymentConfig } from '../../src/application/supervisorSink.js';
 import stateDataFromMemory from '../../src/infrastructure/persistence/stateDataFromMemory.js';
 import { createEdgeApi } from '../../src/infrastructure/http/edge/edgeApi.js';
 
@@ -63,5 +65,47 @@ describe('supervisorSink state data', function() {
         } finally {
             await sink.pool.end();
         }
+    });
+});
+
+
+describe('supervisorSink migration mode', function() {
+    it('rejects unrecognized migration modes before constructing a pool', function() {
+        assert.throws(() => { readDeploymentConfig({SUPERVISOR_MIGRATIONS:'skip'}); }, /SUPERVISOR_MIGRATIONS/u);
+    });
+
+    it('still requires administrative credentials in legacy mode', async function() {
+        const sink = supervisorSink({SINK_PIPELINES:'false'});
+        try { await assert.rejects(sink.run(), /POSTGRES_ADMIN_URL is required/u); }
+        finally { await sink.pool.end(); }
+    });
+
+    for (const adminUrl of [undefined,'postgresql://must-not-be-used/scada']) {
+    it(`verifies through runtime pool with admin URL ${adminUrl ? 'ignored' : 'absent'}`, async function() {
+        const files = (await fs.readdir('db/migrations')).filter((name) => {
+            return name.endsWith('.sql') && !name.startsWith('C') && !name.startsWith('V0009');
+        });
+        const sink = supervisorSink({SUPERVISOR_MIGRATIONS:'verify',SINK_PIPELINES:'false',
+            POSTGRES_ADMIN_URL:adminUrl});
+        const original = Object.getOwnPropertyDescriptor(pg,'Pool');
+        Object.defineProperty(pg,'Pool',{value:function value() { throw new Error('Admin pool constructed'); }});
+        sink.pool.query = async (sql) => {
+            assert.match(sql, /^SELECT version FROM public\.schema_migrations/u);
+            return {rows:files.map((version) => { return {version}; })};
+        };
+        try { await sink.run(); }
+        finally { Object.defineProperty(pg,'Pool',original); await sink.pool.end(); }
+    });
+
+    }
+
+    it('fails before HTTP startup if migration verification fails', async function() {
+        const sink = supervisorSink({SUPERVISOR_MIGRATIONS:'verify',SINK_PIPELINES:'false'});
+        let started = false;
+        sink.pool.query = async () => { return {rows:[]}; };
+        try {
+            await assert.rejects(sink.run({start() { started = true; }}), /Missing database migrations/u);
+            assert.equal(started,false);
+        } finally { await sink.pool.end(); }
     });
 });
