@@ -17,40 +17,52 @@ export default function deliverySessions(factory, timeoutMs = 10000) {
         })();
         return entry.closing;
     }
-    function session(key, descriptor) {
+    async function session(key, descriptor, signal) {
+        while (!sessions.has(key) && sessions.size >= 64) {
+            const idle = [...sessions].find(([, item]) => { return item.opened && !item.closing && item.reserved === 0 && item.pending.size === 0; });
+            if (!idle) { throw new Error('Delivery session capacity exceeded'); }
+            // Evict only actually settled sessions; never release active publication reservations.
+            // eslint-disable-next-line no-await-in-loop
+            await retire(...idle);
+        }
+        if (state.closed || signal.aborted) { throw signal.reason || new Error('Delivery sessions closed'); }
         let entry = sessions.get(key);
         if (entry?.closing) { throw new Error('Delivery session is closing'); }
         if (!entry) {
             if (sessions.size >= 64) { throw new Error('Delivery session capacity exceeded'); }
             const sink = factory(descriptor);
-            entry = { sink, pending: new Set(), opened: false };
+            entry = { sink, pending: new Set(), opened: false, reserved: 0 };
             entry.opening = Promise.resolve().then(() => { return sink.start?.(); }).finally(() => { entry.opened = true; });
             sessions.set(key, entry);
             void entry.opening.catch(() => { return retire(key, entry); }).catch(() => {
                 // Failed shutdown keeps the failed opening fenced.
             });
         }
+        entry.reserved += 1;
+        sessions.delete(key); sessions.set(key, entry);
         return entry;
     }
     return {
         write(descriptor, event) {
             if (state.closed) { throw new Error('Delivery sessions closed'); }
             const key = JSON.stringify(descriptor);
-            const entry = session(key, descriptor);
             const controller = new AbortController();
-            const settled = entry.opening.then(() => {
-                if (controller.signal.aborted || entry.closing) { throw controller.signal.reason || new Error('Delivery session is closing'); }
-                return entry.sink.write([event], { signal: controller.signal });
+            let entry;
+            const settled = session(key, descriptor, controller.signal).then(current => {
+                entry = current; entry.pending.add(settled); entry.reserved -= 1;
+                return entry.opening.then(() => {
+                    if (controller.signal.aborted || entry.closing) { throw controller.signal.reason || new Error('Delivery session is closing'); }
+                    return entry.sink.write([event], { signal: controller.signal });
+                });
             });
-            entry.pending.add(settled);
             let completed = false;
-            void settled.finally(() => { completed = true; entry.pending.delete(settled); }).catch(() => {
+            void settled.finally(() => { completed = true; entry?.pending.delete(settled); }).catch(() => {
                 // A publication rejection is independent of other confirms on this session.
             });
             const result = deadline(() => { return settled; }, timeoutMs).catch((error) => {
                 if (!completed) {
                     controller.abort(error);
-                    void retire(key, entry).catch(() => {
+                    void (entry ? retire(key, entry) : Promise.resolve()).catch(() => {
                         // Actual work and ownership remain fenced if stop cannot complete.
                     });
                 }

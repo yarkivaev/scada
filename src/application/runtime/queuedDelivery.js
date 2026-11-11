@@ -12,7 +12,7 @@ export default function queuedDelivery(env, secrets, supplied) {
     }) : undefined);
     function nextDelay(result) {
         const status = queue.status?.();
-        if (result?.failed === 0 && result.delivered > 0 && status?.ready !== false && status?.drainFull && status.pending > 0) {
+        if (result?.delivered > 0 && status?.ready !== false && status?.drainFull && status.pending > 0) {
             burst += 1;
             const delay = burst < 4 ? 0 : 25;
             if (burst === 4) { burst = 0; }
