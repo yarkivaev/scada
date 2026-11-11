@@ -1,5 +1,6 @@
 import { capacity, counters } from './spoolDatabase.js';
 import { decoded, encoded } from './spoolCodec.js';
+import { indexAck, indexInsert } from './spoolReplay.js';
 
 export function insert(db, value, maxBytes, maxRecords) {
     const existing = db.prepare('SELECT fingerprint FROM events WHERE id=?').get(value.id);
@@ -17,6 +18,7 @@ export function insert(db, value, maxBytes, maxRecords) {
         ...value, destinations: value.destinations ? JSON.stringify(value.destinations.map((item) => { return item.id; })) : null,
         sequence: totals.sequence + 1
     });
+    indexInsert(db, value, totals.sequence + 1);
     db.prepare('UPDATE counters SET bytes=bytes+?,records=records+1,sequence=sequence+1 WHERE id=1').run(value.bytes);
 }
 function remove(db, row) {
@@ -31,6 +33,7 @@ export function acknowledge(db, id, recipient) {
     const row = db.prepare('SELECT * FROM events WHERE id=?').get(id);
     if (!row) { return; }
     if (!JSON.parse(row.recipients).includes(recipient)) { throw new Error('Unknown recipient'); }
+    indexAck(db, id, recipient);
     const remaining = JSON.parse(row.remaining).filter((item) => { return item !== recipient; });
     if (!remaining.length) { remove(db, row); return; }
     const record = decoded(row, db);

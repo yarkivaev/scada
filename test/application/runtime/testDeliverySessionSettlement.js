@@ -18,7 +18,7 @@ const recipients=[{id:'owner',type:'amqp',url:{$secret:'AMQP_URL_OWNER'}}];
 function event(eventId){return {eventId,exchange:'events',routingKey:'point',body:Buffer.from(`exact-${eventId}`)};}
 describe('queue with actual AMQP publication settlement',()=>{
  let directory;const owned=[];
- function queue(options={}){const value=queueFactory(directory,{maxBytes:100000,...options});owned.push(value);return value;}
+ function queue(options={}){const value=queueFactory(directory,{maxBytes:100000,failureCooldownMs:0,...options});owned.push(value);return value;}
  beforeEach(async()=>{directory=await mkdtemp(path.join(os.tmpdir(),'queue-actual-sink-'));});
  afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));await rm(directory,{recursive:true,force:true});});
  it('fences a late confirmation after caller abort and retries with rotated credentials on a fresh session',async()=>{

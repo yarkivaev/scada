@@ -10,7 +10,7 @@ function gate(){let resolve;const promise=new Promise(done=>{resolve=done;});ret
 async function until(probe){const end=Date.now()+500;while(!probe()){assert(Date.now()<end,'fixture condition deadline');await pause(2);}}
 describe('bounded pipelined delivery confirmations',()=>{
  let directory;const owned=[];
- function queue(options={}){const value=createQueue(directory,{maxBytes:1000000,...options});owned.push(value);return value;}
+ function queue(options={}){const value=createQueue(directory,{maxBytes:1000000,failureCooldownMs:0,...options});owned.push(value);return value;}
  beforeEach(async()=>{directory=await mkdtemp(path.join(os.tmpdir(),'pipeline-queue-'));});
  afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));await rm(directory,{recursive:true,force:true});});
  it('initiates a bounded window in stable order and shares opening before any write',async()=>{

@@ -19,6 +19,10 @@ export default function deliveryQueue(directory, options) {
     if (!Number.isSafeInteger(batchSize) || batchSize <= 0) { throw new TypeError('Positive safe batchSize required'); }
     const publications = deliveryPublications(commands, sessions, options);
     const receiptWindow = Math.min(publications.limit, options.maxOperations ?? 128);
+    const clock = options.clock ?? (() => { return performance.now(); });
+    const cooldown = options.failureCooldownMs ?? 10000;
+    if (!Number.isSafeInteger(cooldown) || cooldown < 0) { throw new TypeError('Nonnegative safe failureCooldownMs required'); }
+    const blocked = new Map();
     const state = { draining: false, closed: false, full: false };
     async function drain() {
         state.draining = true;
@@ -32,16 +36,22 @@ export default function deliveryQueue(directory, options) {
         }
         async function flush() { commands.flush(); await Promise.all(receipts); }
         function receive(row, id) {
+            const target = row.targets[id];
             const receipt = Promise.resolve().then(() => { return publications.publish(row, id); })
-                .then(() => { result.delivered += 1; }, failure).finally(() => { receipts.delete(receipt); });
+                .then(() => { result.delivered += 1; blocked.delete(target); }, error => {
+                    blocked.delete(target); blocked.set(target, clock() + cooldown);
+                    if (blocked.size > 128) { blocked.delete(blocked.keys().next().value); }
+                    failure(error);
+                }).finally(() => { receipts.delete(receipt); });
             receipts.add(receipt);
         }
         async function advance(row, id) {
-            if (!state.closed) { receive(row, id); }
+            if (!state.closed && (blocked.get(row.targets[id]) ?? -Infinity) <= clock()) { receive(row, id); }
             if (receipts.size >= receiptWindow) { await Promise.race(receipts); }
         }
         try {
-            const rows = await commands.barrier(() => { return spool.pending(batchSize); });
+            for (const [target, until] of blocked) { if (until <= clock()) { blocked.delete(target); } }
+            const rows = await commands.barrier(() => { return spool.pendingFair(batchSize, blocked.keys()); });
             Object.assign(state, { full: rows.length === batchSize });
             for (const row of rows) {
                 for (const id of row.remaining) {

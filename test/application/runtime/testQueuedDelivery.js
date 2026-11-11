@@ -12,10 +12,10 @@ describe('bounded queued delivery scheduling',()=>{
         try{await delivery.open();await until(()=>{return calls.length>=6;});assert(calls[4]-calls[3]>=15,'bounded burst must yield before the fifth page');assert.equal(pending,0);}
         finally{await delivery.stop();}
     });
-    it('backs off after any recipient failure rather than immediately retrying an offline full page',async()=>{
+    it('continues healthy progress when another recipient fails',async()=>{
         let calls=0;const queue={async open(){},async close(){},status(){return {ready:true,pending:100,drainFull:true};},async drain(){calls+=1;return {delivered:99,failed:1};}};
         const delivery=queuedDelivery({},null,queue);
-        try{await delivery.open();await until(()=>{return calls>0;});await pause(60);assert.equal(calls,1);}finally{await delivery.stop();}
+        try{await delivery.open();await until(()=>{return calls>0;});await until(()=>{return calls>=6;});assert(calls>=6);}finally{await delivery.stop();}
     });
     it('backs off when a purportedly full page makes no durable progress',async()=>{
         let calls=0;const queue={async open(){},async close(){},status(){return {ready:true,pending:100,drainFull:true};},async drain(){calls+=1;return {delivered:0,failed:0};}};

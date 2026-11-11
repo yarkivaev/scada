@@ -3,13 +3,14 @@ import path from 'node:path';
 import { lstat, mkdir, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { format, initialize } from './spoolFormat.js';
+import { replayFiles, replayIndex } from './spoolReplay.js';
 
 // POSIX closes release this process's advisory locks for an inode, even from unrelated descriptors.
 // Reserve directory identity before opening ANY owner descriptor, including rejected contenders.
 const registry = Symbol.for('@yarkivaev/scada/delivery-spool-owners');
 globalThis[registry] ??= new Set();
 const owners = globalThis[registry];
-const files = ['owner.sqlite', 'delivery.sqlite'].flatMap((name) => { return [name, `${name}-journal`, `${name}-wal`, `${name}-shm`]; });
+const files = [...['owner.sqlite', 'delivery.sqlite'].flatMap((name) => { return [name, `${name}-journal`, `${name}-wal`, `${name}-shm`]; }), ...replayFiles];
 export async function regular(file) {
     try {
         const info = await lstat(file);
@@ -60,6 +61,7 @@ export async function database(directory) {
         db.pragma('cache_size = -2048'); db.pragma('wal_autocheckpoint = 256');
         db.pragma('journal_size_limit = 1048576'); db.pragma('secure_delete = FAST');
         if (!existing) { initialize(db); }
+        await replayIndex(db, directory);
         return { db, owner: { close() { try { owner.close(); } finally { owners.delete(key); } } } };
     } catch (error) {
         try { db?.close(); } finally { try { owner?.close(); } finally { owners.delete(key); } }
