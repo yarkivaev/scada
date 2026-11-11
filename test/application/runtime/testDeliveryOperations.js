@@ -58,6 +58,11 @@ describe('delivery operation batching',()=>{
         await ticket.commit();await waiting;assert.deepEqual(groups,[['receipt']]);assert.equal(queue.status().operations,0);
         const cancelled=queue.prepare(build('cancelled'));cancelled.cancel();await assert.rejects(cancelled.commit(),/settled/u);assert.equal(queue.status().operations,0);
     });
+    it('accounts retained network bytes separately from committed mutation-group bytes',async()=>{
+        const queue=await factory(async operations=>{return operations.map(()=>{return {ok:true};});},{maxPendingBytes:1000,groupCommit:{maxBytes:100}});
+        const ticket=queue.prepare(()=>{return {operation:'ack',bytes:10,retainedBytes:800};});assert.equal(queue.status().bytes,810);
+        await assert.rejects(queue.mutate(build('append',200)),/byte capacity/u);await ticket.commit();assert.deepEqual(queue.status(),{operations:0,bytes:0});
+    });
     it('rejects malformed grouped outcomes without releasing any reservation twice',async()=>{
         const queue=await factory(async()=>{return [undefined];});await assert.rejects(queue.mutate(build('a')),/Invalid grouped/u);assert.deepEqual(queue.status(),{operations:0,bytes:0});
     });

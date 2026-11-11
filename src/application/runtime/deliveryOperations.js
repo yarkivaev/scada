@@ -27,7 +27,7 @@ export default function deliveryOperations(apply, options = {}) {
     }
     function release(bytes) { state.operations -= 1; state.bytes -= bytes; notifyIdle(); }
     function settle(job, result) {
-        release(job.bytes);
+        release(job.reservedBytes ?? job.bytes);
         if (result.ok) { job.resolve(result.value); } else { job.reject(result.error); }
     }
     function group() {
@@ -77,25 +77,27 @@ export default function deliveryOperations(apply, options = {}) {
             schedule(job.kind === 'barrier' || state.operations >= Math.min(config.maxRecords, config.maxOperations) ? 0 : config.maxDelayMs);
         });
     }
-    function checkBytes(bytes) {
+    function checkBytes(bytes, retainedBytes = 0) {
         positive(bytes, 'Mutation bytes', true);
-        if (state.bytes + bytes > config.maxPendingBytes) { throw new Error('Delivery pending byte capacity exceeded'); }
+        positive(retainedBytes, 'Retained bytes', true);
+        if (state.bytes + bytes + retainedBytes > config.maxPendingBytes) { throw new Error('Delivery pending byte capacity exceeded'); }
         if (bytes > config.maxBytes) { throw new Error('Delivery group byte capacity exceeded'); }
     }
     function prepare(build) {
         reserve();
         let value;
         try {
-            value = build(checkBytes); checkBytes(value.bytes);
+            value = build(checkBytes); checkBytes(value.bytes, value.retainedBytes);
         } catch (error) { release(0); throw error; }
-        state.bytes += value.bytes;
+        const reservedBytes = value.bytes + (value.retainedBytes ?? 0);
+        state.bytes += reservedBytes;
         let settled = false;
         return {
             commit() {
                 if (settled) { return Promise.reject(new Error('Delivery reservation already settled')); }
-                settled = true; return enqueue({ kind: 'mutation', ...value });
+                settled = true; return enqueue({ kind: 'mutation', ...value, reservedBytes });
             },
-            cancel() { if (!settled) { settled = true; release(value.bytes); } }
+            cancel() { if (!settled) { settled = true; release(reservedBytes); } }
         };
     }
     return {
