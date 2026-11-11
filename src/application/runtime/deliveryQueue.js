@@ -1,10 +1,8 @@
 import deliverySpool from '../../infrastructure/persistence/runtime/deliverySpool.js';
 import deliverySessions from './deliverySessions.js';
 import deliveryOperations from './deliveryOperations.js';
+import deliveryPublications from './deliveryPublications.js';
 
-function confirmed(event) {
-    return { ...event, options: { ...event.options, persistent: true, mandatory: true, messageId: event.eventId } };
-}
 function snapshot(operation, checkBytes) {
     const json = JSON.stringify(operation); checkBytes(Buffer.byteLength(json));
     const frozen = JSON.parse(json);
@@ -19,43 +17,37 @@ export default function deliveryQueue(directory, options) {
     const sessions = deliverySessions(options.factory, options.writeTimeoutMs);
     const batchSize = options.batchSize ?? 100;
     if (!Number.isSafeInteger(batchSize) || batchSize <= 0) { throw new TypeError('Positive safe batchSize required'); }
-    const receiptWindow = Math.min(options.groupCommit?.maxRecords ?? 64, options.maxOperations ?? 128);
+    const publications = deliveryPublications(commands, sessions, options);
+    const receiptWindow = Math.min(publications.limit, options.maxOperations ?? 128);
     const state = { draining: false, closed: false, full: false };
-    async function publish(record, id) {
-        if (state.closed) { throw new Error('Delivery queue closed'); }
-        // Reserve the eventual receipt BEFORE publication; confirmation can never lose its admission slot.
-        const receipt = commands.prepare((checkBytes) => { return snapshot({ kind: 'ack', eventId: record.event.eventId, recipient: id }, checkBytes); });
-        try {
-            const descriptor = record.event.destinations.find((item) => { return item.id === id; });
-            await sessions.write(descriptor, confirmed(record.event.observation));
-            return { receipt: receipt.commit() };
-        } catch (error) { receipt.cancel(); throw error; }
-    }
     async function drain() {
         state.draining = true;
         const result = { delivered: 0, failed: 0 };
-        const receipts = [];
+        const receipts = new Set();
         function failure(error) {
             result.failed += 1;
             try { options.onError?.(error); } catch {
                 // Observers cannot prevent independent recipient progress or release.
             }
         }
-        async function flush() { commands.flush(); await Promise.all(receipts.splice(0)); }
-        async function receive(row, id) {
-            try {
-                const sent = await publish(row, id);
-                receipts.push(sent.receipt.then(() => { result.delivered += 1; }, failure));
-            } catch (error) { failure(error); }
-            if (receipts.length >= receiptWindow) { await flush(); }
+        async function flush() { commands.flush(); await Promise.all(receipts); }
+        function receive(row, id) {
+            const receipt = Promise.resolve().then(() => { return publications.publish(row, id); })
+                .then(() => { result.delivered += 1; }, failure).finally(() => { receipts.delete(receipt); });
+            receipts.add(receipt);
+        }
+        async function advance(row, id) {
+            if (!state.closed) { receive(row, id); }
+            if (receipts.size >= receiptWindow) { await Promise.race(receipts); }
         }
         try {
             const rows = await commands.barrier(() => { return spool.pending(batchSize); });
             Object.assign(state, { full: rows.length === batchSize });
             for (const row of rows) {
                 for (const id of row.remaining) {
+                    // Actual timed-out publications retain their global slots across page/caller completion.
                     // eslint-disable-next-line no-await-in-loop
-                    await receive(row, id);
+                    await advance(row, id);
                 }
             }
             return result;
@@ -83,9 +75,10 @@ export default function deliveryQueue(directory, options) {
                 await state.activeDrain?.catch(() => {
                     // Drain caller receives the original error.
                 });
+                await sessions.close();
                 await commands.idle();
-                try { await sessions.close(); } finally { await spool.close(); }
-            })();
+                await spool.close();
+            })().catch((error) => { state.closing = null; throw error; });
             return state.closing;
         },
         status() {
