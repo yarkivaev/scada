@@ -754,3 +754,25 @@ No observation is merged, sampled or discarded by batching. An `accept()` promis
 The positive safe-integer `maxInFlight` option defaults to32. A drain initiates at most that many publications concurrently, in stored order per logical AMQP session. All concurrent writers await the same session opening; one mandatory return does not retire independent confirms. Receipt admission and serialized publication bytes are reserved before network publication, then the receipt is queued only after its individual mandatory confirmation. The retained publication bytes count toward `maxPendingBytes`, separately from receipt mutation bytes counted toward the group byte limit. Confirmed receipts accumulate in a bounded window; `drain()` counts them delivered only after their FULL commit. Graceful close rejects new source submissions, flushes existing submissions, waits for the active drain and its receipts, then closes sessions and persistence. Caller write deadlines abort the actual AMQP writer and retire its session. A caller timeout alone does not release a publication slot or its prospective ACK reservation; late actual success still commits its receipt, and late callbacks from an aborted AMQP generation cannot ACK a retry. A custom factory that ignores both AbortSignal and stop remains fenced and bounded until actual settlement. Close fails after its bounded session wait and retains spool ownership if that work cannot quiesce; retry close after settlement. The existing crash-after-confirm/before-local-receipt replay contract remains unchanged.
 
 Healthy full drain pages with durable progress continue on subsequent event-loop turns; after four pages the scheduler pauses 25 ms. Failed, empty or zero-progress pages back off 1s. This removes the former 100-event/s scheduling ceiling without spinning on an offline recipient. Actual append and online catch-up throughput still require qualification on the target filesystem; a serial producer awaiting every individual acceptance cannot benefit from concurrent group formation.
+
+### Bounded native history commits
+
+Native history receivers advertise `nativeTailProtocol: preserve-known-suffix-v1`
+on configuration. Workers must negotiate this before starting. A computed
+terminal anchor must not clip an existing segment whose known end lies beyond
+the observed page. An unchanged exterior anchor can be omitted entirely.
+
+An exterior row requires `context.nativeTailMode` with that protocol and a
+`preserveSuffix` object identifying a current segment by `kind`, `name`,
+`start_time`, and `end_time`. Under the existing context revision lock, the
+receiver checks its class, extent and current ownership. Archive-only rows
+cannot justify exterior changes. Changing a current segment inside the page
+must retain any unobserved suffix, potentially as a piece starting one
+millisecond after the page end; unseen cut collisions fail atomically.
+Conservative page-boundary cuts remain protected, so a paged transition can
+leave additional adjacent same-class pieces. No new exterior observations or
+classes are inferred. A rejected commit leaves both projection and work intact.
+
+Applicable children carry operator metadata and `consumed`; existing rows keep
+their stored consumed state. This native protocol is separate from the staged
+stateful correction protocol used with external raw observation stores.

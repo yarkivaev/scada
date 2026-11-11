@@ -12,6 +12,17 @@ function stagedSource(time,offsets=[0,1000,5000],sample=(offset)=>{return offset
         async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}).map(row=>{return {...row,value:sample(row.time-time)};}),continuity:[{from:left,until:right}]};}
     };};
 }
+// These paging tests emulate a worker; retain already known exterior rather than submitting the old destructive payload.
+async function nativeCommit(store,machine,id,rows,{snapshot,claim}) {
+    const until=snapshot.context.page.until;const segments=[...rows];
+    for (const owner of snapshot.segments) {
+        const change=segments.find(item=>{return (item.kind??'phase')===owner.kind&&new Date(item.start_time).getTime()===new Date(owner.start_time).getTime();});
+        if(change&&new Date(owner.end_time).getTime()>until&&(change.name!==owner.name||new Date(change.end_time).getTime()<new Date(owner.end_time).getTime())){
+            segments.push({...owner,start_time:new Date(until+1),preserveSuffix:owner});
+        }
+    }
+    return store.commit(machine,id,segments,{...claim,nativeTailMode:'preserve-known-suffix-v1'});
+}
 describe('Historical telemetry PostgreSQL', function historyTests() {
     this.timeout(120000);
     let container;
@@ -561,7 +572,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
                 await assert.rejects(store.commit(machine,work.id,rows,claim),(error)=>{return error.statusCode===409;});
                 context=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
             }
-            await store.commit(machine,work.id,rows,{...context.context,revision:context.revision,workToken:work.token});
+            await nativeCommit(store,machine,work.id,rows,{snapshot:context,claim:{...context.context,revision:context.revision,workToken:work.token}});
             // Restart loses all application memory between every page.
             store=historyPg(pool);
             pages+=1;
@@ -571,7 +582,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const original=(await pool.query('SELECT end_time,tags FROM history_annotations WHERE machine=$1 AND start_time=$2',[machine,new Date(time)])).rows[0];
         assert.equal(original.end_time.getTime(),time+12030000);
         assert.equal(seen.size,12001);
-        assert.equal(Number((await pool.query('SELECT count(*) FROM segments WHERE machine=$1',[machine])).rows[0].count),12001);
+        const projected=(await pool.query('SELECT start_time FROM segments WHERE machine=$1',[machine])).rows;
+        const keys=new Set(projected.map(row=>{return row.start_time.getTime();}));
+        for(const point of seen){assert.ok(keys.has(point),'every observed classification remains projected');}
+        assert.ok(projected.length>=12001);
         assert.ok(pages>40);
     });
 
@@ -637,7 +651,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             if (live) { rows.push({name:'off',start_time:new Date(time+10002000),end_time:new Date(time+10002000),duration:0}); }
             return rows;
         }
-        await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        await nativeCommit(store,machine,work.id,heatRows(snapshot),{snapshot,claim:{...snapshot.context,revision:snapshot.revision,workToken:work.token}});
         await store.accept(machine,[{eventId:'live-off',channel:'power',time:time+10002000,value:0}]);
         const live=(await store.work(machine)).items.find((item)=>{return item.id!==original.id;});
         const current=await store.context(machine,live.from,live.until,2000);
@@ -646,7 +660,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         do {
             work=(await store.work(machine)).items.find((item)=>{return item.id===original.id;});
             snapshot=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
-            await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+            await nativeCommit(store,machine,work.id,heatRows(snapshot),{snapshot,claim:{...snapshot.context,revision:snapshot.revision,workToken:work.token}});
         } while (snapshot.context.page.next!==null);
         /* eslint-enable no-await-in-loop */
         assert.equal((await store.work(machine)).items.length,0);
@@ -678,7 +692,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             }
             return rows;
         }
-        await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        await nativeCommit(store,machine,work.id,heatRows(snapshot),{snapshot,claim:{...snapshot.context,revision:snapshot.revision,workToken:work.token}});
         await store.accept(machine,[{eventId:'live-heat',channel:'power',time:time+10002000,value:20},{eventId:'live-off',channel:'power',time:time+10003000,value:0}]);
         const live=(await store.work(machine)).items.find((item)=>{return item.id!==original.id;});
         const current=await store.context(machine,live.from,live.until,2000);
@@ -687,7 +701,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         do {
             work=(await store.work(machine)).items.find((item)=>{return item.id===original.id;});
             snapshot=await store.context(machine,work.from,work.until,2000,{cursor:work.cursor,end:work.end});
-            await store.commit(machine,work.id,heatRows(snapshot),{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+            await nativeCommit(store,machine,work.id,heatRows(snapshot),{snapshot,claim:{...snapshot.context,revision:snapshot.revision,workToken:work.token}});
         } while (snapshot.context.page.next!==null);
         /* eslint-enable no-await-in-loop */
         assert.equal((await store.work(machine)).items.length,0);

@@ -1,3 +1,4 @@
+import nativeHistoryBounds, {nativeTailProtocol} from './historyNativeBounds.js';
 import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
 import historyContext from './historyContext.js';
 import historyAdmission, {assertHistoryReady} from './historyAdmission.js';
@@ -88,8 +89,12 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
         if (observationSource) { await assertHistoryReady(client,machine); }
         const latest = base?.revision ? await unchanged(client, machine, base, {observationSource,timeScale}) : null;
-        if (latest && segments.some((item) => { return new Date(item.end_time).getTime()>Math.round(latest.context.page.until/timeScale); })) {
-            throw new TypeError('Segment extends beyond bounded history page; upgrade history worker');
+        const exteriors = nativeHistoryBounds(segments, latest, base, timeScale);
+        for (const item of exteriors) {
+            // An unseen existing cut must never be overwritten by a new exterior piece.
+            // eslint-disable-next-line no-await-in-loop
+            const conflict = await client.query('SELECT 1 FROM segments WHERE machine=$1 AND kind=$2 AND start_time=$3', [machine, item.kind ?? 'phase', item.start_time]);
+            if (conflict.rowCount) { throw new TypeError('History suffix collides with a cut outside the observed page'); }
         }
         if(base?.replace){
             const next=await historyCorrection(client,machine,work.rows[0],segments,{base,context:latest,timeScale});
@@ -103,8 +108,8 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
         for (const item of segments) {
             // Only computed fields change. User cuts/labels must be applied by caller before commit.
             // eslint-disable-next-line no-await-in-loop
-            await client.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(machine,kind,start_time) DO UPDATE
+            await client.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(machine,kind,start_time) DO UPDATE
                 SET name=EXCLUDED.name,end_time=EXCLUDED.end_time,duration=EXCLUDED.duration,options=EXCLUDED.options,updated_at=clock_timestamp(),
                 tags=CASE WHEN segments.name=EXCLUDED.name THEN segments.tags ELSE EXCLUDED.tags END,
                 properties=CASE WHEN segments.name=EXCLUDED.name THEN segments.properties ELSE EXCLUDED.properties END,
@@ -112,7 +117,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
             [machine, item.kind ?? 'phase', item.name, item.start_time, item.end_time, item.duration,
                 typeof item.options === 'string' ? item.options : JSON.stringify(item.options ?? null),
                 typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags ?? null),
-                typeof item.properties === 'string' ? item.properties : JSON.stringify(item.properties ?? null), item.resolved ?? true]);
+                typeof item.properties === 'string' ? item.properties : JSON.stringify(item.properties ?? null), item.resolved ?? true, item.consumed ?? true]);
         }
         const converged=await saveCheckpoint(client,machine,base?.checkpoint,latest);
         await advance(client,machine,workId,converged ? {next:null} : latest?.context.page);
@@ -134,7 +139,7 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
                 const source=observationSource?.(client);
                 const result=await historyConfigure(client,machine,topics,bucketMs*timeScale,{retentionDays,observations:source});
                 await configureClassifier(client,machine,classifierKey,source);
-                return {...result,...((timeScale!==1 || classifierKey) && {timeScale}),...(classifierKey && {classifierProtocol:historyProtocol})};
+                return {...result,...((timeScale!==1 || classifierKey) && {timeScale}),...(!classifierKey && {nativeTailProtocol}),...(classifierKey && {classifierProtocol:historyProtocol})};
             },true);
         },
         async purge() {

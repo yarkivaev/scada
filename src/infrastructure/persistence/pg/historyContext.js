@@ -50,7 +50,7 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const annotations = await pool.query(`SELECT a.kind,a.name,a.start_time,a.end_time,a.duration,
         CASE WHEN s.machine IS NOT NULL THEN s.tags ELSE a.tags END AS tags,
         CASE WHEN s.machine IS NOT NULL THEN s.properties ELSE a.properties END AS properties,
-        CASE WHEN s.machine IS NOT NULL THEN s.resolved ELSE a.resolved END AS resolved
+        CASE WHEN s.machine IS NOT NULL THEN s.resolved ELSE a.resolved END AS resolved,CASE WHEN s.machine IS NOT NULL THEN s.consumed ELSE NULL END AS consumed
         FROM history_annotations a LEFT JOIN segments s ON s.machine=a.machine AND s.kind=a.kind AND s.start_time=a.start_time AND s.name=a.name
         WHERE a.machine=$1 AND a.kind='phase' AND a.start_time<=$3 AND a.end_time>=$2
         AND (COALESCE(a.tags,'') NOT IN ('','null','[]') OR COALESCE(a.properties,'') NOT IN ('','null','{}')) ORDER BY a.start_time,a.name LIMIT 10001`,
