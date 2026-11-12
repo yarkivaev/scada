@@ -364,7 +364,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
     it('atomically accepts first value, ignores conflicts and records persistent work', async () => {
         const store = historyPg(pool);
-        const time = Date.now() - 10000;
+        const time = Math.floor(Date.now()/30000)*30000-90000;
         await store.accept('m1', [{ eventId: 'a', channel: 'power', time, value: 1 }]);
         await store.accept('m1', [{ eventId: 'b', channel: 'power', time, value: 2 }]);
         const context = await store.context('m1', time, time);
@@ -383,7 +383,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
     it('keeps work pending when an operator changes the context during classification', async () => {
         const store = historyPg(pool);
-        const time = Date.now() - 2000;
+        const time = Math.floor(Date.now()/30000)*30000-120000;
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES('race','phase','off',$1,$2,1)", [new Date(time), new Date(time+1000)]);
         await store.accept('race', [{eventId:'race',channel:'power',time,value:0}]);
         const context = await store.context('race',time,time+1000);
@@ -397,7 +397,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     it('creates historical work atomically when persisted telemetry arrives without supervisor', async () => {
         const store = historyPg(pool);
         await store.configure('offline', [{topic:'MX210/icht-1/GET/AI3/VALUE',channel:'power'}]);
-        const time=Date.now()-5000;
+        const time=Math.floor(Date.now()/30000)*30000-150000;
         await pool.query('INSERT INTO metrics(topic,ts,value) VALUES($1,$2,$3)', ['MX210/icht-1/GET/AI3/VALUE',new Date(time),5]);
         assert.equal((await store.work('offline')).items.length,1);
         assert.equal((await store.context('offline',time,time)).items[0].value,5);
@@ -406,7 +406,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     it('rejects stale work claims after the bucket was expanded or recreated', async () => {
         const store = historyPg(pool);
         await store.configure('claim', [{topic:'claim/power',channel:'power'}],30000);
-        const time=Math.floor(Date.now()/30000)*30000;
+        const time=Math.floor(Date.now()/30000)*30000-180000;
         await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time),1]);
         const first=(await store.work('claim')).items[0];
         await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time+25000),2]);
@@ -507,7 +507,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
 
     it('refreshes pending segment write time for the existing silence watchdog', async () => {
-        const store=historyPg(pool); const time=Date.now()-10000;
+        const store=historyPg(pool); const time=Math.floor(Date.now()/30000)*30000-210000;
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,updated_at) VALUES('fresh','phase','off',$1,$2,0,now()-interval '1 hour')",[new Date(time),new Date(time+1000)]);
         await store.accept('fresh',[{eventId:'fresh',channel:'a',time,value:0}]);
         const work=(await store.work('fresh')).items[0]; const context=await store.context('fresh',time,time);
@@ -516,7 +516,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
 
     it('imports already persisted telemetry on first topic registration without duplicate work on restart', async () => {
-        const store=historyPg(pool); const time=Date.now()-1000;
+        const store=historyPg(pool); const time=Math.floor(Date.now()/30000)*30000-240000;
         await pool.query('INSERT INTO metrics VALUES($1,$2,$3)',['before/config',new Date(time),8]);
         await store.configure('bootstrap',[{topic:'before/config',channel:'a'}]);
         assert.equal((await store.context('bootstrap',time,time)).items[0].value,8);
@@ -531,7 +531,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await store.accept('priority',points);
         await store.accept('priority',[{eventId:'latest',channel:'a',time:now,value:20}]);
         const work=(await store.work('priority')).items;
-        assert.equal(work.length,8); assert.equal(work[0].until,now);
+        assert.equal(work.length,8); assert.equal(work[0].until,now-60000);
     });
 
     it('durably pages more than 10000 changing observations with restart, response loss and context CAS', async () => {
@@ -708,6 +708,86 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.ok(sawLive,'final correction must classify the already-processed live observation');
         const off=await pool.query('SELECT name FROM segments WHERE machine=$1 AND start_time=$2',[machine,new Date(time+10003000)]);
         assert.equal(off.rows[0]?.name,'heat');
+    });
+
+    it('withholds the furnace bucket that is still receiving observations', async () => {
+        const machine='открытый-бакет';
+        const store=historyPg(pool);
+        await store.configure(machine,[{topic:'открытый/бакет',channel:'power'}],30000);
+        const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
+        const open=Math.floor(now/30000)*30000+1500;
+        const closed=open-30000;
+        await store.accept(machine,[
+            {eventId:`закрытый-${closed}`,channel:'power',time:closed,value:3.5},
+            {eventId:`открытый-${open}`,channel:'power',time:open,value:4.5}
+        ]);
+        const offered=(await store.work(machine)).items.some((item)=>{return item.until>=Math.floor(now/30000)*30000;});
+        assert.equal(offered,false,'open furnace bucket was handed to the worker');
+    });
+
+    it('offers a furnace bucket once its window has closed', async () => {
+        const machine='закрытый-бакет';
+        const store=historyPg(pool);
+        await store.configure(machine,[{topic:'закрытый/бакет',channel:'power'}],30000);
+        const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
+        const closed=Math.floor(now/30000)*30000-30000+800;
+        await store.accept(machine,[{eventId:`закрытый-${closed}`,channel:'power',time:closed,value:8.5}]);
+        const offered=(await store.work(machine)).items.some((item)=>{return item.until===closed;});
+        assert.equal(offered,true,'closed furnace bucket was withheld');
+    });
+
+    it('does not fold the still-open furnace bucket into a closed page', async () => {
+        const machine='граница-страницы';
+        const store=historyPg(pool);
+        await store.configure(machine,[{topic:'граница/страницы',channel:'power'}],30000);
+        const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
+        const open=Math.floor(now/30000)*30000+1200;
+        const closed=open-30000;
+        await store.accept(machine,[
+            {eventId:`граница-закрытый-${closed}`,channel:'power',time:closed,value:1.25},
+            {eventId:`граница-открытый-${open}`,channel:'power',time:open,value:9.25}
+        ]);
+        const work=(await store.work(machine)).items.find((item)=>{return item.until===closed;});
+        const snapshot=await store.context(machine,work.from,work.until,60000);
+        assert.equal(snapshot.items.some((point)=>{return point.time===open;}),false,'closed page included the open bucket');
+    });
+
+    it('removes an identical interior start covered by the committed segment', async () => {
+        const machine='слияние-внутри';
+        const store=historyPg(pool);
+        await store.configure(machine,[{topic:'слияние/внутри',channel:'power'}],30000);
+        const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
+        const closed=Math.floor(now/30000)*30000-60000;
+        const start=new Date(closed-10000);
+        const mid=new Date(closed-9000);
+        const end=new Date(closed-4000);
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties,options) VALUES
+            ($1,'phase','on',$2,$3,1,'[]','{}','[]'),($1,'phase','on',$3,$4,5,'[]','{}','[]')`,[machine,start,mid,end]);
+        await store.accept(machine,[{eventId:`слияние-${closed}`,channel:'power',time:closed,value:2.2}]);
+        const work=(await store.work(machine)).items.find((item)=>{return item.until===closed;});
+        const snapshot=await store.context(machine,work.from,work.until,0);
+        await store.commit(machine,work.id,[{kind:'phase',name:'on',start_time:start,end_time:end,duration:6,tags:'[]',properties:'{}',options:'[]',resolved:true,consumed:true}],{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        const left=await pool.query(`SELECT count(*) AS n FROM segments WHERE machine=$1 AND kind='phase'`,[machine]);
+        assert.equal(Number(left.rows[0].n),1,'identical interior start survived the commit');
+    });
+
+    it('keeps a differently tagged start inside a committed span', async () => {
+        const machine='чужая-метка';
+        const store=historyPg(pool);
+        await store.configure(machine,[{topic:'чужая/метка',channel:'power'}],30000);
+        const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
+        const closed=Math.floor(now/30000)*30000-90000;
+        const start=new Date(closed-10000);
+        const mid=new Date(closed-9000);
+        const end=new Date(closed-4000);
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties,options) VALUES
+            ($1,'phase','off',$2,$3,1,'[]','{}','[]'),($1,'phase','off',$3,$4,5,'["disconnector_switch"]','{}','[]')`,[machine,start,mid,end]);
+        await store.accept(machine,[{eventId:`чужая-${closed}`,channel:'power',time:closed,value:6.6}]);
+        const work=(await store.work(machine)).items.find((item)=>{return item.until===closed;});
+        const snapshot=await store.context(machine,work.from,work.until,0);
+        await store.commit(machine,work.id,[{kind:'phase',name:'off',start_time:start,end_time:end,duration:6,tags:'[]',properties:'{}',options:'[]',resolved:true,consumed:true}],{...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        const kept=await pool.query(`SELECT count(*) AS n FROM segments WHERE machine=$1 AND tags='["disconnector_switch"]'`,[machine]);
+        assert.equal(Number(kept.rows[0].n),1,'operator cause was deleted with the identical cuts');
     });
 
 });

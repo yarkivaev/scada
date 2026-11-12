@@ -1,4 +1,6 @@
 import nativeHistoryBounds, {nativeTailProtocol} from './historyNativeBounds.js';
+import historyAbsorb from './historyAbsorb.js';
+import historyFence from './historyFence.js';
 import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
 import historyContext from './historyContext.js';
 import historyAdmission, {assertHistoryReady} from './historyAdmission.js';
@@ -105,6 +107,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
             SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
             WHERE machine=$1 AND start_time<=$3 AND end_time>=$2
             ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine,new Date((latest?.context.page.from ?? base.from)/timeScale),new Date((latest?.context.page.until ?? base.until)/timeScale)]);
+        await historyAbsorb(client, machine, segments);
         for (const item of segments) {
             // Only computed fields change. User cuts/labels must be applied by caller before commit.
             // eslint-disable-next-line no-await-in-loop
@@ -166,7 +169,9 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
         async work(machine) {
             machineName(machine);
             if (observationSource) { try { await assertHistoryReady(pool,machine); } catch (error) { if (error.statusCode===409) { return {items:[]}; } throw error; } }
-            const result = await pool.query('SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end FROM history_work WHERE machine=$1 ORDER BY until_ms DESC,created_at,id LIMIT 8', [machine]);
+            const fence = observationSource ? null : await historyFence(pool, machine);
+            const result = await pool.query(`SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end
+                FROM history_work WHERE machine=$1 ${fence === null ? '' : 'AND until_ms < $2'} ORDER BY until_ms DESC,created_at,id LIMIT 8`, fence === null ? [machine] : [machine, fence]);
             return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until),cursor:row.cursor === null ? null : Number(row.cursor),end:row.end === null ? null : Number(row.end) }; }) };
         },
         commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, {base, observationSource,timeScale}); }
