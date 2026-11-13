@@ -26,7 +26,8 @@ describe('Local history durable AMQP integration', function receiverTests() {
     let url;
     const queue = 'scada.telemetry.history';
     const patterns = ['MX210.icht-1.#'];
-    const time = Date.now() - 1000;
+    // Keep all observations in a closed history bucket before requesting work.
+    const time = Math.floor(Date.now() / 30000) * 30000 - 30000;
     before(async () => {
         rabbit = await new GenericContainer('rabbitmq:3.13-management').withEnvironment({ RABBITMQ_DEFAULT_USER: 'test', RABBITMQ_DEFAULT_PASS: 'test' }).withExposedPorts(5672).withWaitStrategy(Wait.forListeningPorts()).start();
         postgres = await new GenericContainer('postgres:16-alpine').withEnvironment({ POSTGRES_PASSWORD: 'test' }).withExposedPorts(5432).start();
