@@ -12,7 +12,7 @@ export default async function historySeed(pool, machine, before, maxGap, {observ
         SELECT DISTINCT time_ms FROM history_observations WHERE machine=$1 AND time_ms<$2
     ), gaps AS (
         SELECT time_ms,time_ms-lag(time_ms) OVER (ORDER BY time_ms) AS gap FROM times
-    ), boundary AS (
+    ), boundary AS MATERIALIZED (
         SELECT COALESCE(max(time_ms) FILTER (WHERE gap>$3),min(time_ms)) AS at FROM gaps
     ) SELECT DISTINCT ON (channel) channel,time_ms AS time,value,boundary.at AS since FROM history_observations,boundary
         WHERE machine=$1 AND time_ms>=boundary.at AND time_ms<$2 ORDER BY channel,time_ms DESC`, [machine,before,maxGap]);
