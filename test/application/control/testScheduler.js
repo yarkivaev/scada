@@ -176,3 +176,50 @@ describe('conservative placement policy handoff', () => {
         assert.equal(schedule({...catalog,version:'v2',tasks:[]},[reading('a')],current,{now:100000}).a.assignments.length,0);
     });
 });
+describe('declared placement priority', () => {
+    const nodes = [{ id: 'a', capacity: 10 }, { id: 'b', capacity: 10 }, { id: 'c', capacity: 10 }];
+    it('keeps the preferred node even when another eligible node is less loaded', () => {
+        const input = { version: 'v1', nodes, tasks: [
+            { taskId: 'busy', spec: { adapter: 'test' }, pinnedNode: 'b', cost: 5 },
+            { taskId: 's', spec: { adapter: 'test' }, copies: 1, preference: ['b', 'a'], eligibleNodes: ['a', 'b', 'c'] }
+        ] };
+        const result = schedule(input, ['a', 'b', 'c'].map((id) => { return report(id, 1000); }), {}, { now: 1000 });
+        assert.equal(result.b.assignments.some((row) => { return row.taskId === 's'; }), true);
+        assert.equal(result.a.assignments.some((row) => { return row.taskId === 's'; }), false);
+    });
+    it('moves a single calculation to the next preference when the preferred node is silent', () => {
+        const input = { version: 'v1', nodes, tasks: [
+            { taskId: 's', spec: { adapter: 'test' }, copies: 1, preference: ['b', 'a'], eligibleNodes: ['a', 'b'] }
+        ] };
+        const result = schedule(input, [report('a', 1000), report('c', 1000)], {}, { now: 1000 });
+        assert.equal(result.a.assignments.some((row) => { return row.taskId === 's'; }), true);
+    });
+    it('skips a preferred node that has no remaining capacity', () => {
+        const input = { version: 'v1', nodes: [{ id: 'b', capacity: 1 }, { id: 'a', capacity: 10 }], tasks: [
+            { taskId: 'busy', spec: { adapter: 'test' }, pinnedNode: 'b', cost: 1 },
+            { taskId: 's', spec: { adapter: 'test' }, copies: 1, cost: 1, preference: ['b', 'a'], eligibleNodes: ['a', 'b'] }
+        ] };
+        const result = schedule(input, [report('a', 1000), report('b', 1000)], {}, { now: 1000 });
+        assert.equal(result.a.assignments.some((row) => { return row.taskId === 's'; }), true);
+        assert.equal(result.b.assignments.some((row) => { return row.taskId === 's'; }), false);
+    });
+    it('calculates on the node that already stores the sensor', () => {
+        const nodes = [{ id: 'home', capacity: 10 }, { id: 'cache', capacity: 10 }];
+        const input = { version: 'v1', nodes, tasks: [
+            { taskId: 'sensor', spec: { adapter: 'test' }, copies: 1, pinnedNode: 'cache' },
+            { taskId: 'calc', spec: { adapter: 'test' }, copies: 1, preference: ['home', 'cache'], eligibleNodes: ['home', 'cache'], near: ['sensor'] }
+        ] };
+        const result = schedule(input, [report('home', 1000), report('cache', 1000)], {}, { now: 1000 });
+        assert.equal(result.cache.assignments.some((row) => { return row.taskId === 'calc'; }), true);
+        assert.equal(result.home.assignments.some((row) => { return row.taskId === 'calc'; }), false);
+    });
+    it('retires a lower preference after two preferred copies are confirmed', () => {
+        const task = { taskId: 's', spec: { adapter: 'test' }, copies: 2, preference: ['c', 'b'], eligibleNodes: ['a', 'b', 'c'] };
+        const current = Object.fromEntries(['a', 'b', 'c'].map((id) => { return [id, { generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
+        const reports = ['a', 'b', 'c'].map((id) => { return report(id, 1000, [{ taskId: 's', generation: 1, state: 'running', lastRead: 1000 }]); });
+        const result = schedule({ version: 'v1', nodes, tasks: [task] }, reports, current, { now: 1000 });
+        assert.equal(result.a.assignments.length, 0);
+        assert.equal(result.b.assignments.length, 1);
+        assert.equal(result.c.assignments.length, 1);
+    });
+});

@@ -7,11 +7,41 @@ function clockSkew(value) {
     if (!Number.isFinite(value) || value <= 0) { throw new TypeError('Positive finite clock skew bound required'); }
 }
 function copies(task) { return task.pinnedNode ? 1 : task.copies ?? 2; }
+function preferenceRank(task, id) {
+    if (!task.preference) { return 0; }
+    const index = task.preference.indexOf(id);
+    return index < 0 ? task.preference.length : index;
+}
+function hasCache(task, node) {
+    if (!task.near?.length) { return 0; }
+    const held = new Set(node.assignments.map((row) => { return row.taskId; }));
+    return task.near.some((id) => { return held.has(id); }) ? 0 : 1;
+}
+function byPlace(task) {
+    return (left, right) => {
+        return hasCache(task, left) - hasCache(task, right) || preferenceRank(task, left.id) - preferenceRank(task, right.id) || left.load / left.capacity - right.load / right.capacity || left.id.localeCompare(right.id);
+    };
+}
 function freshRead(report, input, { now, freshnessMs, controlEpoch, clockSkewMs }) {
     return inEpoch(report, controlEpoch) && report?.tasks?.some((row) => {
         return row.taskId === input.taskId && row.generation === input.generation && row.state === 'running' && !['degraded', 'failed'].includes(row.health)
             && Number.isFinite(row.lastRead) && row.lastRead <= now + clockSkewMs && now - row.lastRead <= freshnessMs;
     });
+}
+function retain(slots, tasks, owners, observed, timing) {
+    for (const task of tasks) {
+        const confirmed = owners(task).filter((node) => {
+            const input = node.assignments.find((row) => { return row.taskId === task.taskId; });
+            return wanted(task, node) && node.assignments.some((row) => { return row.taskId === task.taskId && same(row.spec, task.spec); }) && freshRead(observed.get(node.id), input, timing);
+        });
+        if (confirmed.length >= copies(task)) {
+            const ordered = task.preference ? [...confirmed].sort(byPlace(task)) : confirmed;
+            const keep = new Set(ordered.slice(0, copies(task)).map((node) => { return node.id; }));
+            slots.filter((node) => { return node.live && !keep.has(node.id); }).forEach((node) => {
+                node.assignments = node.assignments.filter((row) => { return row.taskId !== task.taskId; });
+            });
+        }
+    }
 }
 function failedRead(report, input, controlEpoch) {
     return input && inEpoch(report, controlEpoch) && report?.tasks?.some((row) => {
@@ -64,7 +94,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
         const assignments = previous.assignments.filter((row) => { return !live(node.id) || taskMap.has(row.taskId); });
         return { ...node, previous, assignments: [...assignments], live: live(node.id), load: assignments.reduce((total, row) => { return total + (taskMap.get(row.taskId)?.cost ?? 1); }, 0) };
     });
-    const tasks = [...catalog.tasks].sort((a, b) => { return Number(Boolean(b.pinnedNode)) - Number(Boolean(a.pinnedNode)) || a.taskId.localeCompare(b.taskId); });
+    const tasks = [...catalog.tasks].sort((a, b) => { return Number(Boolean(b.pinnedNode)) - Number(Boolean(a.pinnedNode)) || Number(Boolean(a.near?.length)) - Number(Boolean(b.near?.length)) || a.taskId.localeCompare(b.taskId); });
     function owners(task) {
         return slots.filter((node) => {
             const input = node.assignments.find((row) => { return row.taskId === task.taskId; });
@@ -81,7 +111,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
             const surviving = active.some((node) => { return freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
             const waiting = surviving && missing.some((node) => { return now - (observed.get(node.id)?.receivedAt ?? 0) < replacementDelayMs; });
             const candidates = slots.filter((node) => { return node.live && wanted(task, node) && !active.includes(node) && !node.assignments.some((row) => { return row.taskId === task.taskId; }) && node.load + (task.cost ?? 1) <= node.capacity; });
-            candidates.sort((a, b) => { return a.load / a.capacity - b.load / b.capacity || a.id.localeCompare(b.id); });
+            candidates.sort(byPlace(task));
             if (active.length <= round && active.length < copies(task) && !waiting && candidates.length) {
                 const node = candidates[0];
                 node.assignments.push({ taskId: task.taskId, specVersion: 1, generation: 0, assignedAt: now, spec: task.spec });
@@ -89,15 +119,6 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
             }
         }
     }
-    for (const task of tasks) {
-        const active = owners(task);
-        const confirmed = active.filter((node) => { return wanted(task, node) && node.assignments.some((row) => { return row.taskId === task.taskId && same(row.spec, task.spec); }) && freshRead(observed.get(node.id), node.assignments.find((row) => { return row.taskId === task.taskId; }), { now, freshnessMs, controlEpoch, clockSkewMs }); });
-        if (confirmed.length >= copies(task)) {
-            const keep = new Set(confirmed.slice(0, copies(task)).map((node) => { return node.id; }));
-            slots.filter((node) => { return node.live && !keep.has(node.id); }).forEach((node) => {
-                node.assignments = node.assignments.filter((row) => { return row.taskId !== task.taskId; });
-            });
-        }
-    }
+    retain(slots, tasks, owners, observed, { now, freshnessMs, controlEpoch, clockSkewMs });
     return snapshots(slots, taskMap, catalog, observed, { now, freshnessMs, clockSkewMs });
 }

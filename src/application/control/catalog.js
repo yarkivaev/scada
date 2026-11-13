@@ -12,7 +12,9 @@ export default function validateCatalog(catalog) {
     for (const task of catalog.tasks) {
         if (typeof task.taskId !== 'string' || tasks.has(task.taskId) || !task.spec?.adapter || !Number.isSafeInteger(task.copies ?? 2) || (task.copies ?? 2) < 1
             || !Number.isFinite(task.cost ?? 1) || (task.cost ?? 1) <= 0 || (task.pinnedNode && !nodes.has(task.pinnedNode))
-            || (task.eligibleNodes && (!Array.isArray(task.eligibleNodes) || task.eligibleNodes.some((id) => { return !nodes.has(id); })))) {
+            || (task.eligibleNodes && (!Array.isArray(task.eligibleNodes) || task.eligibleNodes.some((id) => { return !nodes.has(id); })))
+            || (task.preference && (!Array.isArray(task.preference) || new Set(task.preference).size !== task.preference.length || task.preference.some((id) => { return !nodes.has(id) || (task.eligibleNodes && !task.eligibleNodes.includes(id)); })))
+            || (task.near && (!Array.isArray(task.near) || new Set(task.near).size !== task.near.length || task.near.some((id) => { return !identifier.test(id); })))) {
             throw new TypeError('Invalid control task');
         }
         if ((task.spec.adapter === 'serial' || String(task.spec.from ?? '').startsWith('rtu:')) && !task.pinnedNode) { throw new TypeError('Serial task requires pinnedNode'); }
