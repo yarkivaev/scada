@@ -204,8 +204,8 @@ describe('declared placement priority', () => {
         assert.equal(result.b.assignments.some((row) => { return row.taskId === 's'; }), false);
     });
     it('calculates on the node that already stores the sensor', () => {
-        const nodes = [{ id: 'home', capacity: 10 }, { id: 'cache', capacity: 10 }];
-        const input = { version: 'v1', nodes, tasks: [
+        const localNodes = [{ id: 'home', capacity: 10 }, { id: 'cache', capacity: 10 }];
+        const input = { version: 'v1', nodes: localNodes, tasks: [
             { taskId: 'sensor', spec: { adapter: 'test' }, copies: 1, pinnedNode: 'cache' },
             { taskId: 'calc', spec: { adapter: 'test' }, copies: 1, preference: ['home', 'cache'], eligibleNodes: ['home', 'cache'], near: ['sensor'] }
         ] };
