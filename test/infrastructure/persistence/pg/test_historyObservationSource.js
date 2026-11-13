@@ -6,6 +6,7 @@ import * as scada from '../../../../index.js';
 describe('historical context with external observations', function() {
     const pool = {async query(sql) {
         if (/history_observations/u.test(sql)) { throw new Error('Raw observation table must not be read for external history'); }
+        if (/AS open_ms/u.test(sql)) { return {rows:[{open_ms:30000}],rowCount:1}; }
         if (/FROM segments|FROM history_annotations|FROM history_admissions/u.test(sql)) { return {rows:[],rowCount:0}; }
         throw new Error(`Unexpected domain-state query: ${sql}`);
     }};
