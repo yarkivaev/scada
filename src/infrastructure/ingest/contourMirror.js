@@ -1,6 +1,7 @@
 import { contourBody, contourKey } from '../../domain/contour/contourSegment.js';
 import { contourRead } from '../persistence/pg/contourSegments.js';
 import stompSend from '../streams/stompSend.js';
+import amqpSink from '../streams/amqpSink.js';
 
 /**
  * Publishes one page of stored edge segments.
@@ -25,5 +26,17 @@ export function contourSend(url, destination, options) {
         return bodies.reduce((chain, body) => {
             return chain.then(() => { return stompSend(url, destination, body, options); });
         }, Promise.resolve());
+    };
+}
+
+/** Publishes each body to the admitted queue the segments-to-central shovel already drains. */
+export function contourAmqp(url, queue) {
+    const sink = amqpSink(url);
+    const opened = sink.start();
+    return function send(bodies) {
+        const records = bodies.map((body) => {
+            return { exchange: '', routingKey: queue, body: JSON.stringify(body) };
+        });
+        return opened.then(() => { return sink.write(records); });
     };
 }

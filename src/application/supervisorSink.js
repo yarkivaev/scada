@@ -155,7 +155,7 @@ export default function supervisorSink(env = process.env, options = {}) {
                 await startPipelines(cfg, pool, health);
             }
             health.started();
-            if (cfg.sinkDbProfile === 'edge' && cfg.stomp && env.CONTOUR_MIRROR !== 'false') {
+            if (cfg.sinkDbProfile === 'edge' && env.CONTOUR_MIRROR !== 'false' && (cfg.stomp || env.HISTORY_AMQP_URL)) {
                 contourLoop(pool, env);
             }
             if (httpServer) {
