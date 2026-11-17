@@ -6,9 +6,8 @@ import userDecisionSink from '../sinks/userDecisionSink.js';
 /**
  * Pipeline for logging operator tag decisions from RabbitMQ to PostgreSQL.
  *
- * Subscribes to the user_decisions STOMP exchange and inserts each received
- * decision into the user_decisions audit table. Decisions carry machine,
- * start timestamp, operator identity, and full JSON payload.
+ * Subscribes to the user_decisions queue, applies each decision to segments,
+ * and appends the same payload to the user_decisions audit table.
  *
  * @example
  *   const pipeline = decisionPipeline(
