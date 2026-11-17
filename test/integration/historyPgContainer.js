@@ -49,7 +49,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('pins a finite classifier generation while same-bucket appends get their own work',async()=>{
-        const machine='finite-appends';const time=Date.now()-10000;let offsets=[0,1000,5000];
+        const machine='finite-appends';const time=Math.floor(Date.now()/30000)*30000-60000;let offsets=[0,1000,5000];
         const store=historyPg(pool,{observations:()=>{return stagedSource(time,offsets)();}});
         await store.configure(machine,[{topic:'finite/appends',channel:'power'}],30000,'casting');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time]);
@@ -63,7 +63,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert(remaining.some(item=>{return item.id!==original.id && item.until===time+10000;}));
     });
     it('keeps prepared admission eligibility and registered unstarted work across a long outage',async()=>{
-        const machine='aged-admission';const time=Date.now()-10000;let clock=time+29*86400000;
+        const machine='aged-admission';const time=Math.floor(Date.now()/30000)*30000-60000;let clock=time+29*86400000;
         const store=historyPg(pool,{now:()=>{return clock;},observations:stagedSource(time,[0])});
         await store.configure(machine,[{topic:'aged/admission',channel:'power'}],30000,'casting');
         const records=[{topic:'aged/admission',ts:time,value:1}];await store.prepare(records);
@@ -76,7 +76,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await store.work(machine)).items.length,0);
     });
     it('classifies external raw history without copying it into PostgreSQL and fences changed external context', async () => {
-        const time=Date.now()-10000;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
         let value=7;
         const external=()=>{return {
             async boundary(){return time+1000;},
@@ -99,7 +99,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await store.work('external-source')).items.length,0);
     });
     it('keeps external history unreadable until every rebatched admission has durable completion', async () => {
-        const time=Date.now()-10000;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
         const machine='external-admission';
         const records=[{topic:'external/admission',ts:new Date(time),value:1},{topic:'external/admission',ts:new Date(time+1000),value:2}];
         const source=()=>{return {async boundary(){return time+1000;},async page(id,left,end){return {from:left,until:end,next:null,end};},async read(){return {items:[],continuity:[]};},async seed(){return null;}};};
@@ -122,7 +122,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
     it('persists classifier checkpoints with pages and rejects commits from a replaced classifier', async () => {
         const machine='external-checkpoints';
-        const time=Date.now()-10000;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
         const points=[0,1000,2000,3000].map((offset)=>{return {eventId:`p${offset}`,channel:'power',time:time+offset,value:offset};});
         const external=()=>{return {
             async start(){return time;},async boundary(){return time+3000;},async seed(){return null;},
@@ -183,7 +183,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     });
     it('retains microsecond work coordinates while querying millisecond domain segments', async () => {
         const machine='microsecond-history';
-        const time=Date.now()*1000-10000000;
+        const time=(Math.floor(Date.now()/30000)*30000-60000)*1000;
         const source=()=>{return {async registered(){},async boundary(){return time+2;},async page(id,left,end){return {from:left,until:end,next:null,end};},async seed(){return null;},async read(){return {items:[{eventId:'micro1',channel:'power',time:time+1,value:1},{eventId:'micro2',channel:'power',time:time+2,value:2}],continuity:[{from:time+1,until:time+2}]};}};};
         const store=historyPg(pool,{observations:source,timeScale:1000,timestamp:(ts)=>{return Number(ts);}});
         const configured=await store.configure(machine,[{topic:'microseconds/power',channel:'power'}]);
@@ -199,7 +199,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(context.segments[0].name,'on');
     });
     it('rewinds another paged classifier claim when a late admission changes its processed prefix', async () => {
-        const machine='cross-work-rewind';const time=Date.now()-10000;
+        const machine='cross-work-rewind';const time=Math.floor(Date.now()/30000)*30000-60000;
         const source=()=>{return {async registered(){}};};
         const store=historyPg(pool,{observations:source});
         await store.configure(machine,[{topic:'cross-work/power',channel:'power'}],30000,'casting');
@@ -211,7 +211,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.notEqual(current.token,old.rows[0].token);
     });
     it('keeps valid paged classifier progress when new admissions only append beyond its cursor', async () => {
-        const machine='append-keeps-progress';const time=Date.now()-10000;
+        const machine='append-keeps-progress';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:()=>{return {async registered(){}};}});
         await store.configure(machine,[{topic:'append-progress/power',channel:'power'}],30000,'casting');
         const old=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms,cursor_ms,end_ms) VALUES(gen_random_uuid(),$1,$2,$3,$3,$4) RETURNING id,token',[machine,time,time+1000,time+9000]);
@@ -222,7 +222,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(current.token,old.rows[0].token);
     });
     it('publishes a complete staged casting correction atomically and applies the latest operator cuts and labels', async () => {
-        const machine='staged-casting';const time=Date.now()-10000;
+        const machine='staged-casting';const time=Math.floor(Date.now()/30000)*30000-60000;
         const points=[0,1000,5000].map(offset=>{return {eventId:`staged${offset}`,channel:'power',time:time+offset,value:offset};});
         const source=()=>{return {async registered(){},async start(){return time;},async seed(){return null;},async boundary(){return time+5000;},
             async page(id,left,end){const remaining=points.filter(p=>{return p.time>=left && p.time<=end;});return {from:left,until:remaining.length>2?remaining[1].time:end,next:remaining[2]?.time ?? null,end};},
@@ -254,7 +254,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'2');
     });
     it('converges staged replay without manufacturing a page cut or losing the unprocessed user tail', async () => {
-        const machine='staged-convergence';const time=Date.now()-10000;
+        const machine='staged-convergence';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,2000,3000,4000,5000,6000])});
         await store.configure(machine,[{topic:'staged-convergence/power',channel:'power'}],30000,'casting');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','on',$2,$3,3,$5),($1,'phase','on',$3,$4,3,$6)",
@@ -270,7 +270,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.deepEqual((await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[0,3000,['left']],[3000,6000,['right']]]);
     });
     it('removes obsolete automatic phases when the corrected casting history has no confirmed island', async () => {
-        const machine='staged-empty';const time=Date.now()-10000;
+        const machine='staged-empty';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,5000])});
         await store.configure(machine,[{topic:'staged-empty/power',channel:'power'}],30000,'casting');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','on',$2,$3,0,$4)",[machine,new Date(time),new Date(time+5000),JSON.stringify(['keep'])]);
@@ -282,7 +282,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await pool.query('SELECT tags FROM history_annotations WHERE machine=$1',[machine])).rows[0].tags,'["keep"]');
     });
     it('keeps a real user cut at the last singleton without leaving the preceding slice pending', async () => {
-        const machine='staged-final-cut';const time=Date.now()-10000;
+        const machine='staged-final-cut';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,5000])});
         await store.configure(machine,[{topic:'staged-final-cut/power',channel:'power'}],30000,'casting');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties) VALUES($1,'phase','on',$2,$3,5,$4,$6),($1,'phase','on',$3,$3,0,$5,$6)",
@@ -297,7 +297,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_rule==='fresh' && p.note==='keep';}));
     });
     it('does not advance staged work when a nonempty page omits its classifier checkpoint', async () => {
-        const machine='staged-missing-state';const time=Date.now()-10000;
+        const machine='staged-missing-state';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time)});
         await store.configure(machine,[{topic:'staged-missing-state/power',channel:'power'}],30000,'casting');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
@@ -307,7 +307,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await store.work(machine)).items[0].cursor,null);
     });
     it('discards an obsolete staged generation after a late point rewinds its processed prefix', async () => {
-        const machine='staged-rewind';const time=Date.now()-10000;let changed=false;
+        const machine='staged-rewind';const time=Math.floor(Date.now()/30000)*30000-60000;let changed=false;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000],offset=>{return changed && offset===0?99:offset;})});
         await store.configure(machine,[{topic:'staged-rewind/power',channel:'power'}],30000,'casting');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','on',$2,$3,0)",[machine,new Date(time),new Date(time+5000)]);
