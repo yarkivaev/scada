@@ -46,7 +46,7 @@ describe('historical context with external observations', function() {
             observations: () => { return {}; }
         }).work('см-α');
         assert.match(statements.join('\n'), /until_ms < \$2/u, 'external work still offered the live bucket');
-        assert.match(statements.join('\n'), /clock_timestamp\(\)\) \* \$2/u,
+        assert.match(statements.join('\n'), /clock_timestamp\(\)\) \* 1000 \* \$2/u,
             'external fence still used millisecond wall time against microsecond work');
     });
 });
