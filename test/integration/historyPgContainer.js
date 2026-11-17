@@ -525,13 +525,13 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.deepEqual((await store.work('bootstrap')).items,first);
     });
 
-    it('prioritizes current classification over a bounded historical batch', async () => {
+    it('does not claim the hottest closed bucket before older classifier pages', async () => {
         const store=historyPg(pool); const now=Date.now();
         const points=Array.from({length:12},(item,index)=>{return {eventId:`priority${index}`,channel:'a',time:now-(12-index)*60000,value:index};});
         await store.accept('priority',points);
         await store.accept('priority',[{eventId:'latest',channel:'a',time:now,value:20}]);
         const work=(await store.work('priority')).items;
-        assert.equal(work.length,8); assert.equal(work[0].until,now-60000);
+        assert.equal(work[0].until,now-12*60000,'work still claimed newest closed pages first');
     });
 
     it('durably pages more than 10000 changing observations with restart, response loss and context CAS', async () => {
@@ -725,12 +725,23 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(offered,false,'open furnace bucket was handed to the worker');
     });
 
+    it('does not offer the just-closed furnace bucket that can still receive observations', async () => {
+        const machine='только-что-закрытый';
+        const store=historyPg(pool);
+        await store.configure(machine,[{topic:'только-что/закрытый',channel:'power'}],30000);
+        const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
+        const closed=Math.floor(now/30000)*30000-30000+800;
+        await store.accept(machine,[{eventId:`только-что-${closed}`,channel:'power',time:closed,value:8.5}]);
+        const offered=(await store.work(machine)).items.some((item)=>{return item.until===closed;});
+        assert.equal(offered,false,'work still offered the just-closed bucket');
+    });
+
     it('offers a furnace bucket once its window has closed', async () => {
         const machine='закрытый-бакет';
         const store=historyPg(pool);
         await store.configure(machine,[{topic:'закрытый/бакет',channel:'power'}],30000);
         const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
-        const closed=Math.floor(now/30000)*30000-30000+800;
+        const closed=Math.floor(now/30000)*30000-60000+800;
         await store.accept(machine,[{eventId:`закрытый-${closed}`,channel:'power',time:closed,value:8.5}]);
         const offered=(await store.work(machine)).items.some((item)=>{return item.until===closed;});
         assert.equal(offered,true,'closed furnace bucket was withheld');
@@ -742,7 +753,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await store.configure(machine,[{topic:'граница/страницы',channel:'power'}],30000);
         const now=Number((await pool.query(`SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms`)).rows[0].ms);
         const open=Math.floor(now/30000)*30000+1200;
-        const closed=open-30000;
+        const closed=open-60000;
         await store.accept(machine,[
             {eventId:`граница-закрытый-${closed}`,channel:'power',time:closed,value:1.25},
             {eventId:`граница-открытый-${open}`,channel:'power',time:open,value:9.25}
