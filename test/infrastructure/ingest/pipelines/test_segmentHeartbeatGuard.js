@@ -14,11 +14,14 @@ function likePattern() {
     return found.groups.wildcard;
 }
 
-function allows(existing, incoming) {
+function allows(existing, incoming, kin = []) {
     const props = existing.properties === null || existing.properties === undefined ? '' : String(existing.properties);
     const later = Date.parse(incoming.end_time) > Date.parse(existing.end_time);
     const clause = existing.duration === 0 || incoming.duration > 0 || later;
-    const blocked = existing.duration > 0 && incoming.duration === 0 && like(props, likePattern());
+    const family = kin.some((row) => {
+        return Date.parse(row.start_time) > Date.parse(existing.start_time) && like(String(row.properties ?? ''), likePattern());
+    });
+    const blocked = existing.duration > 0 && incoming.duration === 0 && like(props, likePattern()) && family;
     return clause && !blocked;
 }
 
@@ -36,9 +39,21 @@ describe('segmentUpdateWhere split heartbeat', function() {
         const later = new Date(end.getTime() + 90000).toISOString();
         assert.strictEqual(allows({
             duration: rows[0].duration,
+            start_time: rows[0].start_time,
             end_time: rows[0].end_time,
             properties: rows[0].properties
-        }, { duration: 0, end_time: later }), false, 'a duration-0 heartbeat extended a closed split piece');
+        }, { duration: 0, end_time: later }, [rows[1]]), false, 'a duration-0 heartbeat extended a closed split piece');
+    });
+    it('still extends a silence-closed native split tail', function() {
+        const start = new Date('2026-11-17T04:38:14.235Z');
+        const frozen = new Date('2026-11-17T09:12:27.378Z').toISOString();
+        const later = new Date('2026-11-17T11:01:58.618Z').toISOString();
+        assert.strictEqual(allows({
+            duration: 16453.143,
+            start_time: start.toISOString(),
+            end_time: frozen,
+            properties: JSON.stringify({ split_of: String(start.getTime()) })
+        }, { duration: 0, end_time: later }), true, 'a later heartbeat could not reopen a singleton split tail');
     });
 
     it('still extends a closed segment that is not a split piece', function() {
