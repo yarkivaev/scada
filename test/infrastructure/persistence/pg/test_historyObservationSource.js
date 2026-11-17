@@ -49,4 +49,38 @@ describe('historical context with external observations', function() {
         assert.match(statements.join('\n'), /clock_timestamp\(\)\) \* 1000 \* \$2/u,
             'external fence still used millisecond wall time against microsecond work');
     });
+    it('does not claim the hottest closed bucket before older classifier pages', async function() {
+        const statements = [];
+        const work = {
+            async query(sql) {
+                statements.push(sql);
+                if (sql.includes('history_admissions')) { return { rowCount: 0, rows: [] }; }
+                if (sql.includes('open_ms')) { return { rows: [{ open_ms: 1700000040000000 }] }; }
+                return { rows: [] };
+            }
+        };
+        await scada.historyPg(work, {
+            retentionDays: 30, now: () => { return 1700000045000; }, timeScale: 1000,
+            observations: () => { return {}; }
+        }).work('см-α');
+        assert.match(statements.join('\n'), /until_ms < \$2[\s\S]*ORDER BY until_ms ASC/u,
+            'work still claimed newest closed pages first');
+    });
+    it('does not offer the just-closed furnace bucket that can still receive observations', async function() {
+        const statements = [];
+        const work = {
+            async query(sql) {
+                statements.push(sql);
+                if (sql.includes('history_admissions')) { return { rowCount: 0, rows: [] }; }
+                if (sql.includes('open_ms')) { return { rows: [{ open_ms: 1700000040000000 }] }; }
+                return { rows: [] };
+            }
+        };
+        await scada.historyPg(work, {
+            retentionDays: 30, now: () => { return 1700000045000; }, timeScale: 1000,
+            observations: () => { return {}; }
+        }).work('см-α');
+        assert.match(statements.join('\n'), /until_ms < \$2 - /u,
+            'work still offered the just-closed bucket');
+    });
 });

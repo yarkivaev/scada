@@ -44,7 +44,7 @@ async function stamp(client,machine,time) {
 async function enqueue(client,mapping,row) {
     const pending=await client.query('SELECT id FROM history_work WHERE machine=$1 AND cursor_ms IS NULL AND end_ms IS NULL AND floor(from_ms::numeric/$2)=floor($3::numeric/$2) ORDER BY created_at LIMIT 1',[mapping.machine,mapping.bucket_ms,row.time]);
     if(pending.rowCount){
-        await client.query('UPDATE history_work SET token=gen_random_uuid(),generation=gen_random_uuid(),started=false,classifier_checkpoint=NULL,correction_from=NULL,correction_until=NULL,from_ms=least(from_ms,$2),until_ms=greatest(until_ms,$2) WHERE id=$1',[pending.rows[0].id,row.time]);
+        await client.query('UPDATE history_work SET from_ms=least(from_ms,$2),until_ms=greatest(until_ms,$2) WHERE id=$1',[pending.rows[0].id,row.time]);
     }else{await client.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[mapping.machine,row.time]);}
 }
 /** Durable queue redelivery owns payload recovery. Barriers never expire on a timer. */
