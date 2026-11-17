@@ -1,6 +1,9 @@
 import assert from 'assert';
+import postgresSink from '../../../../src/infrastructure/streams/postgresSink.js';
 import segmentPipeline, {
+    segmentColumns,
     segmentConflict,
+    segmentFillColumns,
     segmentUpdateColumns,
     segmentUpdateWhere,
     segmentsIngestDestination,
@@ -58,6 +61,24 @@ describe('segmentPipeline upsert configuration', function() {
         assert.ok(
             !segmentUpdateColumns.includes('tags'),
             'regular segment UPSERT must not overwrite operator tags'
+        );
+    });
+
+    it('writes a tag carried by the segment queue message and keeps the stored tag when a later message omits it', async function() {
+        const queries = [];
+        const sink = postgresSink('postgresql://localhost/db', 'segments', segmentColumns, {
+            pool: { query(sql) { queries.push(sql); return Promise.resolve({ rowCount: 1 }); } },
+            conflict: segmentConflict,
+            update: segmentUpdateColumns,
+            fill: segmentFillColumns,
+            updateWhere: segmentUpdateWhere
+        });
+        await sink.write([{ machine: `печь-${Math.random()}`, kind: 'phase', name: 'off', start_time: new Date().toISOString(),
+            end_time: new Date().toISOString(), duration: 3, options: null, tags: JSON.stringify(['приём']), properties: null,
+            resolved: true, updated_at: new Date().toISOString() }]);
+        assert.ok(
+            queries[0].includes('tags = COALESCE(EXCLUDED.tags, segments.tags)') && !queries[0].includes('tags = EXCLUDED.tags,'),
+            'segment queue upsert dropped a tag that arrived on the message'
         );
     });
 
