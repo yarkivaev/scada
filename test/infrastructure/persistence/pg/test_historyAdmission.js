@@ -32,4 +32,33 @@ describe('history admission lease watermark', function() {
             ['см-α', 'lead', 1700000015000, 'lead:см-α:1700000015000'],
             'admission did not stamp the lease lead in milliseconds');
     });
+    it('does not rotate a started classifier token when the same bucket still receives observations', async function() {
+        const statements = [];
+        const client = {
+            async query(sql, params = []) {
+                statements.push({ sql, params });
+                if (sql.includes('FROM history_topics')) {
+                    return { rowCount: 1, rows: [{
+                        machine: 'см-α', topic: 'OPCUA/t/GET/x/VALUE', bucket_ms: 30000000,
+                        retention_days: 30, retained_from: -9007199254740991
+                    }] };
+                }
+                if (sql.includes('FROM history_admissions') && sql.includes('event_id=ANY')) {
+                    const ids = params[0];
+                    return { rowCount: ids.length, rows: ids.map((id) => { return { event_id: id, admitted_at: 1700000000000000 }; }) };
+                }
+                if (sql.includes('SELECT id') && sql.includes('FROM history_work')) {
+                    return { rowCount: 1, rows: [{ id: 'work-α', started: true, cursor_ms: null }] };
+                }
+                return { rowCount: 0, rows: [] };
+            },
+            release() {}
+        };
+        await historyAdmission({ connect: async () => { return client; }, query: client.query }, {
+            timeScale: 1000, timestamp: (ts) => { return Number(ts); }
+        }).complete([{ topic: 'OPCUA/t/GET/x/VALUE', ts: '1700000015000000', value: 1.25 }]);
+        assert.equal(statements.some((row) => {
+            return /UPDATE history_work SET[\s\S]*token=gen_random_uuid\(\)[\s\S]*WHERE id=\$1/u.test(row.sql);
+        }), false, 'same-bucket admission still rotated a started work token');
+    });
 });

@@ -171,7 +171,8 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
             if (observationSource) { try { await assertHistoryReady(pool,machine); } catch (error) { if (error.statusCode===409) { return {items:[]}; } throw error; } }
             const fence = await historyFence(pool, machine, timeScale);
             const result = await pool.query(`SELECT id,token,machine AS "streamId",from_ms AS "from",until_ms AS "until",cursor_ms AS cursor,end_ms AS end
-                FROM history_work WHERE machine=$1 AND until_ms < $2 ORDER BY until_ms DESC,created_at,id LIMIT 8`, [machine, fence]);
+                FROM history_work WHERE machine=$1 AND until_ms < $2 - COALESCE((SELECT bucket_ms FROM history_topics WHERE machine=$1 LIMIT 1), 30000 * $3)
+                ORDER BY until_ms ASC,created_at,id LIMIT 8`, [machine, fence, timeScale]);
             return { items: result.rows.map((row) => { return { ...row, from: Number(row.from), until: Number(row.until),cursor:row.cursor === null ? null : Number(row.cursor),end:row.end === null ? null : Number(row.end) }; }) };
         },
         commit(machine, workId, segments, base) { return commit(pool, machine, workId, segments, {base, observationSource,timeScale}); }

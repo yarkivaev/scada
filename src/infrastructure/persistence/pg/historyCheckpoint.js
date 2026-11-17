@@ -21,7 +21,7 @@ export async function classifierSeed(pool,machine,before,key,{claim,cursor}={}) 
     return result.rowCount ? {at:Number(result.rows[0].time_ms),state:result.rows[0].state} : null;
 }
 export async function classifierPage(pool,machine,page,key) {
-    const target=await pool.query('SELECT time_ms FROM history_checkpoints WHERE machine=$1 AND classifier_key=$2 AND time_ms BETWEEN $3 AND $4 ORDER BY time_ms LIMIT 1',[machine,key,page.from,page.until]);
+    const target=await pool.query('SELECT time_ms FROM history_checkpoints WHERE machine=$1 AND classifier_key=$2 AND valid AND time_ms BETWEEN $3 AND $4 ORDER BY time_ms LIMIT 1',[machine,key,page.from,page.until]);
     if (!target.rowCount || Number(target.rows[0].time_ms)===page.until) { return page; }
     const until=Number(target.rows[0].time_ms);
     return {...page,until,next:until+1};
