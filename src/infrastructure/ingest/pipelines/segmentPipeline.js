@@ -19,7 +19,7 @@ import retagSink from '../sinks/retagSink.js';
 export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_time', 'duration',
                                'options', 'tags', 'properties', 'resolved', 'updated_at'];
 export const segmentConflict = ['machine', 'kind', 'start_time'];
-export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved', 'updated_at'];
+export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'tags', 'resolved', 'updated_at'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'properties', 'resolved'];
 export const segmentUpdateWhere = '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\'))';
 export const segmentsIngestDestination = '/queue/scada.segments.ingest';

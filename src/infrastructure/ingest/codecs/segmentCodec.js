@@ -29,7 +29,8 @@ function familyRecord(parsed) {
 export function decodeSegment(raw) {
     try {
         const parsed = JSON.parse(raw.payload);
-        return parsed.type === 'split-family' ? familyRecord(parsed) : segmentNormalize(parsed);
+        if (parsed.type === 'split-family') { return familyRecord(parsed); }
+        return segmentNormalize(parsed);
     } catch (error) {
         error.permanent = true;
         throw error;

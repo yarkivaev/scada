@@ -53,8 +53,9 @@ describe('userDecisionSink', function() {
         const username = `operator_${Math.random()}`;
         const payload = JSON.stringify({ tags: [`heating_${Math.random()}`] });
         await sink.accept({ machine, startTime, username, operatorId: 1, decidedAt: startTime, payload });
+        const insert = pool.queries.find((query) => { return query.sql.includes('INSERT INTO user_decisions'); });
         assert.deepStrictEqual(
-            pool.queries[0].params,
+            insert.params,
             [machine, startTime, username, 1, startTime, payload],
             'should bind params in correct order'
         );
@@ -66,6 +67,57 @@ describe('userDecisionSink', function() {
             /Pool must have a query\(\) method/u,
             'should reject missing pool'
         );
+    });
+});
+
+describe('userDecisionSink segment state', function() {
+    it('writes the decision tags onto the segment', async function() {
+        const pool = fakePool();
+        const tag = `ковш-${Math.random().toString(16).slice(2)}`;
+        const sink = userDecisionSink(pool);
+        await sink.accept({ machine: 'печь', startTime: '2026-10-21T12:23:59.167Z',
+            username: 'оператор', decidedAt: '2026-10-21T12:24:00.000Z',
+            payload: JSON.stringify({ tags: [tag], properties: { note: 'шлак' } }) });
+        const update = pool.queries.find((query) => { return query.sql.includes('UPDATE segments'); });
+        assert.equal(update.params[0], JSON.stringify([tag]), 'decision tags were not written onto the segment');
+    });
+
+    it('clears segment tags when the decision carries an empty tag list', async function() {
+        const pool = fakePool();
+        const sink = userDecisionSink(pool);
+        await sink.accept({ machine: 'печь', startTime: '2026-10-19T06:52:04.487Z',
+            username: 'оператор', decidedAt: '2026-10-19T06:53:00.000Z',
+            payload: JSON.stringify({ tags: [], properties: {} }) });
+        const update = pool.queries.find((query) => { return query.sql.includes('UPDATE segments'); });
+        assert.equal(update.params[0], '[]', 'empty decision tags left the previous segment tag in place');
+    });
+
+    it('writes the split piece tag onto the segment', async function() {
+        const tag = `приёмка-${Math.random().toString(16).slice(2)}`;
+        const start = new Date(Date.UTC(2026, 10, 17, 7, 17, 9, 930));
+        const end = new Date(start.getTime() + 60000);
+        const queries = [];
+        const client = {
+            query(sql, params) { queries.push({ sql, params }); return Promise.resolve({ rows: [] }); },
+            release() {}
+        };
+        const pool = {
+            queries,
+            query(sql, params) {
+                queries.push({ sql, params });
+                if (String(sql).includes('FROM segments')) {
+                    return Promise.resolve({ rows: [{ name: 'off', start_time: start.toISOString(), end_time: end.toISOString(), duration: 60, properties: null }] });
+                }
+                return Promise.resolve({ rows: [] });
+            },
+            connect() { return Promise.resolve(client); }
+        };
+        const sink = userDecisionSink(pool);
+        await sink.accept({ machine: 'печь', startTime: start.toISOString(), username: 'оператор',
+            decidedAt: end.toISOString(),
+            payload: JSON.stringify({ tags: [], splits: [{ start: start.getTime() / 1000, end: end.getTime() / 1000, tag }] }) });
+        const painted = queries.some((query) => { return (query.params || []).includes(JSON.stringify([tag])); });
+        assert.equal(painted, true, 'split decision left the piece tag off the segment');
     });
 });
 

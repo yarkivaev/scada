@@ -1,10 +1,11 @@
 import processingErrorLog from '../processingErrorLog.js';
+import { applyDecision } from './decisionSegment.js';
 
 /**
- * Sink for inserting user tag decisions into the user_decisions audit table.
+ * Sink for operator decisions from the user_decisions queue.
  *
- * Each accepted record is persisted with machine, start_time, username,
- * operator_id, decided_at, and the full raw JSON payload.
+ * The decision is applied to segments first, then appended to the audit table.
+ * A tag list replaces stored tags. A split rewrites the matching off family.
  *
  * @example
  *   const sink = userDecisionSink(pool);
@@ -22,12 +23,13 @@ export default function userDecisionSink(pool) {
     }
     return {
         /**
-         * Inserts a user decision record into the user_decisions table.
+         * Applies the decision to segments, then inserts the audit row.
          *
          * @param {object} record - machine, startTime, username, operatorId, decidedAt, payload
          */
         async accept({ machine, startTime, username, operatorId, decidedAt, payload }) {
             try {
+                await applyDecision(pool, machine, startTime, payload);
                 await pool.query(
                     'INSERT INTO user_decisions (machine, start_time, username, operator_id, decided_at, payload) VALUES ($1, $2, $3, $4, $5, $6)',
                     [machine, startTime, username, operatorId ?? null, decidedAt, payload]
