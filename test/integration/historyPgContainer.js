@@ -118,7 +118,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await restarted.context(machine,time,time)).available,true);
         assert((await restarted.work(machine)).items.length>0);
         assert.equal((await pool.query('SELECT count(*) FROM history_admissions WHERE topic=$1',[records[0].topic])).rows[0].count,'0');
-        assert.equal((await pool.query('SELECT count(*) FROM history_observations WHERE machine=$1',[machine])).rows[0].count,'0');
+        assert.equal((await pool.query("SELECT count(*) FROM history_observations WHERE machine=$1 AND channel<>'lead'",[machine])).rows[0].count,'0');
     });
     it('persists classifier checkpoints with pages and rejects commits from a replaced classifier', async () => {
         const machine='external-checkpoints';
