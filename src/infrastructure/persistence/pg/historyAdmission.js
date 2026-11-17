@@ -37,6 +37,10 @@ export async function assertHistoryReady(pool,machine) {
     const result=await pool.query('SELECT 1 FROM history_admissions a JOIN history_topics t ON t.topic=a.topic WHERE t.machine=$1 LIMIT 1',[machine]);
     if (result.rowCount) { const error=new Error('Unfinished external telemetry admission'); error.statusCode=409; throw error; }
 }
+async function stamp(client,machine,time) {
+    await client.query('DELETE FROM history_observations WHERE machine=$1 AND channel=$2 AND time_ms<$3',[machine,'lead',time]);
+    await client.query('INSERT INTO history_observations(machine,channel,time_ms,event_id,value) VALUES($1,$2,$3,$4,0) ON CONFLICT DO NOTHING',[machine,'lead',time,`lead:${machine}:${time}`]);
+}
 async function enqueue(client,mapping,row) {
     const pending=await client.query('SELECT id FROM history_work WHERE machine=$1 AND cursor_ms IS NULL AND end_ms IS NULL AND floor(from_ms::numeric/$2)=floor($3::numeric/$2) ORDER BY created_at LIMIT 1',[mapping.machine,mapping.bucket_ms,row.time]);
     if(pending.rowCount){
@@ -68,6 +72,8 @@ export default function historyAdmission(pool,{now=Date.now,timeScale=1,timestam
                         await client.query('UPDATE history_checkpoints SET valid=false WHERE machine=$1 AND time_ms>=$2',[mapping.machine,Math.min(...times)]);
                         // eslint-disable-next-line no-await-in-loop
                         await client.query('UPDATE history_work SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,generation=gen_random_uuid(),classifier_checkpoint=NULL,correction_from=NULL,correction_until=NULL,started=false WHERE machine=$1 AND cursor_ms>$2',[mapping.machine,Math.min(...times)]);
+                        // eslint-disable-next-line no-await-in-loop
+                        await stamp(client,mapping.machine,Math.floor(Math.max(...times)/timeScale));
                     }
                     for (const row of eligible) {
                         // eslint-disable-next-line no-await-in-loop
