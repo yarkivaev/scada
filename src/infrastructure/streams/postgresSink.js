@@ -37,21 +37,17 @@ export function deduplicate(records, keys) {
  * @param {object} options - Sink options with conflict, update, and optional updateWhere
  * @returns {string} SQL suffix or empty string
  */
-function assignment(table, options) {
-  const replaced = Array.isArray(options.update) ? options.update.map((col) => {return `${col} = EXCLUDED.${col}`}) : [];
-  const filled = Array.isArray(options.fill) ? options.fill.map((col) => {return `${col} = COALESCE(EXCLUDED.${col}, ${table}.${col})`}) : [];
-  return [...replaced, ...filled];
-}
-
-function buildSuffix(table, options) {
+function buildSuffix(options) {
   if (!Array.isArray(options.conflict) || options.conflict.length === 0) {return '';}
   const cols = options.conflict.join(', ');
-  const sets = assignment(table, options);
-  if (sets.length === 0) {return ` ON CONFLICT (${cols}) DO NOTHING`;}
-  const guard = typeof options.updateWhere === 'string' && options.updateWhere.length > 0
-    ? ` WHERE ${options.updateWhere}`
-    : '';
-  return ` ON CONFLICT (${cols}) DO UPDATE SET ${sets.join(', ')}${guard}`;
+  if (Array.isArray(options.update) && options.update.length > 0) {
+    const sets = options.update.map((col) => {return `${col} = EXCLUDED.${col}`}).join(', ');
+    const guard = typeof options.updateWhere === 'string' && options.updateWhere.length > 0
+      ? ` WHERE ${options.updateWhere}`
+      : '';
+    return ` ON CONFLICT (${cols}) DO UPDATE SET ${sets}${guard}`;
+  }
+  return ` ON CONFLICT (${cols}) DO NOTHING`;
 }
 
 /**
@@ -75,8 +71,7 @@ function buildSuffix(table, options) {
  * @param {Array<string>} columns - Column names for insertion
  * @param {object} [options] - Optional configuration
  * @param {Array<string>} [options.conflict] - Columns for ON CONFLICT clause
- * @param {Array<string>} [options.update] - Columns replaced from the incoming row
- * @param {Array<string>} [options.fill] - Columns replaced only when the incoming value is present
+ * @param {Array<string>} [options.update] - Columns for DO UPDATE SET clause
  * @param {string} [options.updateWhere] - Optional WHERE guard on DO UPDATE
  * @param {object} [options.pool] - Existing pg Pool to reuse
  * @returns {object} Sink with write(records, client?) method
@@ -94,7 +89,7 @@ export default function postgresSink(url, table, columns, options = {}) {
   positive(options.stopTimeoutMs ?? 5000, 'stopTimeoutMs');
   const pool = options.pool || (options.createPool || ((config) => { return new pg.Pool(config); }))({ connectionString: url });
   let stopping;
-  const suffix = buildSuffix(table, options);
+  const suffix = buildSuffix(options);
   const conflict = Array.isArray(options.conflict) ? options.conflict : [];
   return {
     /**

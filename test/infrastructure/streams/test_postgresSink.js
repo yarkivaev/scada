@@ -144,16 +144,6 @@ describe('postgresSink', () => {
     );
   });
 
-  it('fills a column only when the queued value is present', async () => {
-    const queries = [];
-    const pool = { query(sql) { queries.push(sql); return Promise.resolve({ rowCount: 1 }); } };
-    const sink = postgresSink('postgresql://localhost:5432/db', 'segments', ['machine', 'tags'], {
-      pool, conflict: ['machine'], update: ['machine'], fill: ['tags']
-    });
-    await sink.write([{ machine: `печь-${Math.random()}`, tags: '["шлак"]' }]);
-    assert.ok(queries[0].includes('tags = COALESCE(EXCLUDED.tags, segments.tags)'), 'queued tag was not kept when a later message omitted it');
-  });
-
   it('routes write through an explicit client when provided', async () => {
     const pool = { query() { return Promise.reject(new Error('pool must not be used')); } };
     const clientQueries = [];

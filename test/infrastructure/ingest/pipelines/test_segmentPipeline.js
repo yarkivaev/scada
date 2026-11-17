@@ -3,7 +3,6 @@ import postgresSink from '../../../../src/infrastructure/streams/postgresSink.js
 import segmentPipeline, {
     segmentColumns,
     segmentConflict,
-    segmentFillColumns,
     segmentUpdateColumns,
     segmentUpdateWhere,
     segmentsIngestDestination,
@@ -39,46 +38,44 @@ function upsertStore(conflict, update) {
 }
 
 describe('segmentPipeline regular segment upsert', function() {
-    it('keeps operator tags when a regular segment message replays the same row', async function() {
+    it('clears stored tags when a later segment message carries an empty tag list', async function() {
         const machine = `ičt-${Math.random()}`;
         const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
-        const operatorTags = JSON.stringify([`heating_${Math.random()}`]);
         const store = upsertStore(segmentConflict, segmentUpdateColumns);
         await store.write([{ machine, kind: 'phase', name: 'on', start_time: start, end_time: start,
-            duration: 60, options: null, tags: operatorTags, properties: '{}', resolved: true }]);
+            duration: 60, options: null, tags: JSON.stringify([`heating_${Math.random()}`]), properties: '{}', resolved: true }]);
         await store.write([{ machine, kind: 'phase', name: 'on', start_time: start, end_time: start,
-            duration: 65, options: null, tags: null, properties: null, resolved: true }]);
+            duration: 65, options: null, tags: '[]', properties: null, resolved: true }]);
         assert.strictEqual(
             store.rows.get(`${machine}\u0000phase\u0000${start}`).tags,
-            operatorTags,
-            'regular segment upsert must not clobber operator-applied tags'
+            '[]',
+            'empty segment tags left the previous tag in place'
         );
     });
 });
 
 describe('segmentPipeline upsert configuration', function() {
-    it('does not list tags column in regular segment upsert update set', function() {
+    it('assigns tags from the conflicting segment row', function() {
         assert.ok(
-            !segmentUpdateColumns.includes('tags'),
-            'regular segment UPSERT must not overwrite operator tags'
+            segmentUpdateColumns.includes('tags'),
+            'segment conflict update omitted tags'
         );
     });
 
-    it('writes a tag carried by the segment queue message and keeps the stored tag when a later message omits it', async function() {
+    it('writes the incoming tags on conflict, including an empty list', async function() {
         const queries = [];
         const sink = postgresSink('postgresql://localhost/db', 'segments', segmentColumns, {
             pool: { query(sql) { queries.push(sql); return Promise.resolve({ rowCount: 1 }); } },
             conflict: segmentConflict,
             update: segmentUpdateColumns,
-            fill: segmentFillColumns,
             updateWhere: segmentUpdateWhere
         });
         await sink.write([{ machine: `печь-${Math.random()}`, kind: 'phase', name: 'off', start_time: new Date().toISOString(),
-            end_time: new Date().toISOString(), duration: 3, options: null, tags: JSON.stringify(['приём']), properties: null,
+            end_time: new Date().toISOString(), duration: 3, options: null, tags: '[]', properties: null,
             resolved: true, updated_at: new Date().toISOString() }]);
         assert.ok(
-            queries[0].includes('tags = COALESCE(EXCLUDED.tags, segments.tags)') && !queries[0].includes('tags = EXCLUDED.tags,'),
-            'segment queue upsert dropped a tag that arrived on the message'
+            queries[0].includes('tags = EXCLUDED.tags') && !queries[0].includes('COALESCE(EXCLUDED.tags'),
+            'conflict update kept stored tags when the message cleared them'
         );
     });
 
