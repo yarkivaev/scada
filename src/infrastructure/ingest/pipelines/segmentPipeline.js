@@ -15,6 +15,7 @@ import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import closeSilentOpen from '../sinks/closeSilentOpen.js';
 import continuedSegments from '../sinks/continuedSegments.js';
 import retagSink from '../sinks/retagSink.js';
+import { contourGate } from '../../persistence/pg/contourSegments.js';
 
 export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_time', 'duration',
                                'options', 'tags', 'properties', 'resolved', 'updated_at'];
@@ -68,7 +69,7 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const budget = silenceBudget(settings.segmentWindow || 15);
     const { segmentSink, splitSink } = segmentSinks(postgres, pool);
     const continued = continuedSegments(segmentSink, pool, budget);
-    const dispatch = segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
+    const dispatch = contourGate(segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool), pool);
     // eslint-disable-next-line prefer-const -- The timer codec closes over the source constructed with that codec.
     let source;
     const codec = segmentCodec(dispatch);

@@ -25,11 +25,21 @@ function familyRecord(parsed) {
     };
 }
 
+function contourRecord(parsed) {
+    if (typeof parsed.machine !== 'string' || typeof parsed.name !== 'string' || typeof parsed.storedAt !== 'string') {
+        throw new Error('Contour row missing stored edge identity');
+    }
+    const row = segmentNormalize(parsed);
+    return { ...row, type: 'contour', updated_at: new Date(parsed.storedAt).toISOString(), consumed: parsed.consumed !== false };
+}
+
 /** Decode once before admission so invalid envelopes never enter a transaction batch. */
 export function decodeSegment(raw) {
     try {
         const parsed = JSON.parse(raw.payload);
-        return parsed.type === 'split-family' ? familyRecord(parsed) : segmentNormalize(parsed);
+        if (parsed.type === 'split-family') { return familyRecord(parsed); }
+        if (parsed.type === 'contour') { return contourRecord(parsed); }
+        return segmentNormalize(parsed);
     } catch (error) {
         error.permanent = true;
         throw error;
