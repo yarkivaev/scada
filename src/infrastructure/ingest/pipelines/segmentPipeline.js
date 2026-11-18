@@ -98,10 +98,11 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         destination,
         async start() {
             if (settings.repairHistoryOnStart !== false) {
-                const repair = abutSegments(pool, budget);
-                void repair.catch((error) => {
+                try {
+                    await abutSegments(pool, budget);
+                } catch (error) {
                     processingErrorLog('abut_segments', error, { budgetSeconds: budget });
-                });
+                }
             }
             await source.start();
             await silence.start();
