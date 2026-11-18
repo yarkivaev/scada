@@ -8,6 +8,9 @@ function bounded(rows) {
     if (rows.length>10000) { throw new Error('History context capacity exceeded; retain work for bounded refinement'); }
     return rows;
 }
+function claimed(until, edge) {
+    return Math.min(until, edge);
+}
 async function segmentBoundary(pool,machine,right,segments,timeScale) {
     const last = segments.at(-1);
     if (!last) { return right; }
@@ -31,10 +34,10 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const classifier=classifierKey ? await classifierSeed(pool,machine,cursor ?? from,classifierKey,{claim,cursor}) : null;
     let left = cursor ?? from-padding;
     if (classifierKey && cursor===null) { left=classifier ? classifier.at+1 : await source.start(machine); }
-    const right = classifierKey && envelope!==null ? envelope : Math.max(envelope ?? until,await source.boundary(machine,from,until,padding));
+    const right = claimed(until, classifierKey && envelope!==null ? envelope : Math.max(envelope ?? until,await source.boundary(machine,from,until,padding)));
     const previous = await pool.query(`SELECT kind,name,start_time,end_time FROM segments WHERE machine=$1 AND kind='phase' AND start_time<=$2 ORDER BY start_time DESC LIMIT 1`,[machine,new Date(right/timeScale)]);
     const tail=classifierKey ? await pool.query("SELECT max(end_time) AS end_time FROM segments WHERE machine=$1 AND kind='phase'",[machine]) : null;
-    const extended = classifierKey && envelope!==null ? envelope : Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale),tail?.rows[0]?.end_time ? new Date(tail.rows[0].end_time).getTime()*timeScale : -Infinity);
+    const extended = claimed(until, classifierKey && envelope!==null ? envelope : Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale),tail?.rows[0]?.end_time ? new Date(tail.rows[0].end_time).getTime()*timeScale : -Infinity));
     const fence = !classifierKey && timeScale===1 ? await historyFence(pool, machine) : null;
     const end = fence!==null && until<fence ? Math.min(extended, fence-1) : extended;
     if(classifierKey && claim && envelope===null){

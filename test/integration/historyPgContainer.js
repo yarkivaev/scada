@@ -403,19 +403,24 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await store.context('offline',time,time)).items[0].value,5);
     });
 
-    it('rejects stale work claims after the bucket was expanded or recreated', async () => {
+    it('keeps a work claim when a later observation extends the same bucket', async () => {
         const store = historyPg(pool);
         await store.configure('claim', [{topic:'claim/power',channel:'power'}],30000);
         const time=Math.floor(Date.now()/30000)*30000-180000;
         await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time),1]);
         const first=(await store.work('claim')).items[0];
         await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time+25000),2]);
-        await assert.rejects(store.commit('claim',first.id,[],{workToken:first.token,from:time,until:time}),/claim changed/u);
-        const expanded=(await store.work('claim')).items[0];
-        await store.commit('claim',expanded.id,[],{workToken:expanded.token,from:time,until:time+25000});
-        await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['claim/power',new Date(time+26000),3]);
-        await assert.rejects(store.commit('claim',expanded.id,[],{workToken:expanded.token,from:time,until:time+25000}),/claim changed/u);
-        assert.equal((await store.work('claim')).items.length,1);
+        await store.commit('claim',first.id,[],{workToken:first.token,from:time,until:time});
+        assert.equal((await store.work('claim')).items.length,0,'An extended bucket still blocked the original claim');
+    });
+    it('rejects a rotated work token', async () => {
+        const store = historyPg(pool);
+        await store.configure('rotated', [{topic:'rotated/power',channel:'power'}],30000);
+        const time=Math.floor(Date.now()/30000)*30000-210000;
+        await pool.query('INSERT INTO metrics VALUES($1,$2,$3)', ['rotated/power',new Date(time),1]);
+        const first=(await store.work('rotated')).items[0];
+        await pool.query('UPDATE history_work SET token=gen_random_uuid() WHERE id=$1',[first.id]);
+        await assert.rejects(store.commit('rotated',first.id,[],{workToken:first.token,from:time,until:time}),/claim changed/u);
     });
     it('retains predecessor parameter values across continuous other-channel updates', async () => {
         const store=historyPg(pool);
