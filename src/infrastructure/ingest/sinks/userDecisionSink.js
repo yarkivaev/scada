@@ -28,14 +28,23 @@ export default function userDecisionSink(pool) {
          * @param {object} record - machine, startTime, username, operatorId, decidedAt, payload
          */
         async accept({ machine, startTime, username, operatorId, decidedAt, payload }) {
+            const context = { machine, startTime, username, operatorId, decidedAt, payload };
             try {
                 await applyDecision(pool, machine, startTime, payload);
+            } catch (error) {
+                if (!(error instanceof RangeError)) {
+                    processingErrorLog('decision_sink_insert', error, context);
+                    throw error;
+                }
+                processingErrorLog('decision_sink_refused', error, context);
+            }
+            try {
                 await pool.query(
                     'INSERT INTO user_decisions (machine, start_time, username, operator_id, decided_at, payload) VALUES ($1, $2, $3, $4, $5, $6)',
                     [machine, startTime, username, operatorId ?? null, decidedAt, payload]
                 );
             } catch (error) {
-                processingErrorLog('decision_sink_insert', error, { machine, startTime, username, operatorId, decidedAt, payload });
+                processingErrorLog('decision_sink_insert', error, context);
                 throw error;
             }
         }
