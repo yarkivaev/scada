@@ -57,10 +57,10 @@ describe('PostgreSQL startup history policy',function() {
         const db=pool();const pipeline=segmentPipeline('stomp://fixture','postgres://fixture',db,{});
         try {
             await pipeline.start();const rows=await history(db);
-            assert.equal(rows[0].end_time,rows[1].start_time);
-            assert.equal(rows[0].duration,15);
+            assert.equal(rows.length,1,'startup repair left a second same-name fragment');
+            assert.equal(rows[0].end_time,'2026-10-01T00:00:20.000001+00:00');
+            assert.equal(rows[0].duration,20);
             assert.equal(rows[0].tags,'["reason-a"]');
-            assert.equal(rows[1].tags,'["reason-b"]');
         } finally {await pipeline.stop();}
     });
     it('still closes a stale open interval without changing closed history',async()=>{
