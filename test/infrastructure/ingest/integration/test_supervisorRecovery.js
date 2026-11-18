@@ -241,9 +241,9 @@ describe('supervisor sink durable recovery integration', function() {
                 return rows.length > 1 || rows[0].duration > 0;
             });
             const result = await fixture.pool.query('SELECT start_time,end_time,duration FROM segments WHERE machine=$1 ORDER BY start_time', [machine]);
-            assert.equal(result.rows.length, 2);
-            assert.deepEqual(result.rows.map(value => {return value.duration}), [0, 10]);
-            assert.deepEqual(result.rows.map(value => {return value.end_time.getTime()}), [start + 12000, start + 20000]);
+            assert.deepEqual(result.rows.map(value => {return {
+                start: value.start_time.getTime(), end: value.end_time.getTime(), duration: value.duration
+            }}), [{ start, end: start + 20000, duration: 20 }], 'overlapping same-name restart still left two heatings');
         });
         it('retains repeated pending commands after continuing a closed segment', async () => {
             const start = 4102452000000;const machine = 'transaction-pending-continuity';
