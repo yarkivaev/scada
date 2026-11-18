@@ -22,4 +22,28 @@ describe('abutSegments', function() {
             'startup repair did not stop at the immediate next segment inside the budget'
         );
     });
+
+    it('deletes the next same-name row that overlaps or abuts inside the budget', async function() {
+        const queries = [];
+        const pool = {
+            query(sql, params) {
+                queries.push({ sql, params });
+                return Promise.resolve({ rowCount: 1 });
+            }
+        };
+        const budget = 20 + Math.floor(Math.random() * 15);
+        await abutSegments(pool, budget);
+        const sql = queries.map((item) => {
+            return item.sql.replace(/\s+/gu, ' ');
+        }).join(' ');
+        assert.ok(
+            sql.includes('DELETE FROM segments') &&
+                sql.includes('lead(start_time) OVER') &&
+                sql.includes('next_name') &&
+                queries.some((item) => {
+                    return item.params[0] === budget;
+                }),
+            'startup repair left overlapping same-name fragments in place'
+        );
+    });
 });

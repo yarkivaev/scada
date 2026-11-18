@@ -1,6 +1,6 @@
 import machineInPlant from '../../../../application/machineInPlant.js';
 import allowedSegmentTags from '../allowedSegmentTags.js';
-import segmentJson from '../json/segmentJson.js';
+import { segmentItems } from '../json/segmentJson.js';
 import timelineOperator from '../timelineOperator.js';
 import { errorResponse, jsonResponse, readBody, route, sendRouteError } from '@yarkivaev/simple-server';
 
@@ -97,7 +97,7 @@ export default function timelineRoute(basePath, plant, operatorOptions, decorate
                 });
             }
             const rows = await decorate(params.machineId, await result.machine.timeline.list(options));
-            jsonResponse({ items: rows.map(segmentJson) }).send(res);
+            jsonResponse({ items: segmentItems(rows) }).send(res);
         }),
         route('PATCH', `${basePath}/machines/:machineId/segments`, async (req, res, params) => {
             const result = machineInPlant(plant, params.machineId);

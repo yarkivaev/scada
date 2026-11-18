@@ -65,4 +65,34 @@ describe('segmentContinue', function() {
         }, row('on', priorStart, new Date(origin + 10_000).toISOString()));
         assert.strictEqual(joined.duration, 25, 'joined close kept the short fragment duration');
     });
+
+    it('keeps one start when the next same-name island begins before the pending heartbeat end', function() {
+        const budget = 20 + Math.floor(Math.random() * 20);
+        const origin = 1_701_200_000_000 + Math.floor(Math.random() * 1e8);
+        const priorStart = new Date(origin).toISOString();
+        const island = new Date(origin + 549).toISOString();
+        const heartbeat = new Date(origin + 20_000).toISOString();
+        const apply = segmentContinue(budget);
+        const joined = apply({
+            name: 'on',
+            start_time: island,
+            end_time: heartbeat,
+            duration: 0
+        }, row('on', priorStart, heartbeat));
+        assert.strictEqual(joined.start_time, priorStart, 'an overlapping same-name restart opened a second heating');
+    });
+
+    it('does not pull an earlier start onto a later prior row', function() {
+        const origin = 1_701_300_000_000 + Math.floor(Math.random() * 1e8);
+        const priorStart = new Date(origin).toISOString();
+        const incomingStart = new Date(origin - 5_000).toISOString();
+        const apply = segmentContinue(30);
+        const joined = apply({
+            name: 'on',
+            start_time: incomingStart,
+            end_time: new Date(origin + 10_000).toISOString(),
+            duration: 0
+        }, row('on', priorStart, new Date(origin + 20_000).toISOString()));
+        assert.strictEqual(joined.start_time, incomingStart, 'a historical start was rewritten onto a later segment');
+    });
 });
