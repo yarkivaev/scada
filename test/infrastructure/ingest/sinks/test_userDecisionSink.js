@@ -121,6 +121,53 @@ describe('userDecisionSink segment state', function() {
     });
 });
 
+describe('userDecisionSink domain refusal', function() {
+    it('keeps a closed off when a split tail stays open', async function() {
+        const start = new Date(Date.UTC(2026, 10, 18, 13, 48, 46, 734));
+        const closed = new Date(Date.UTC(2026, 10, 18, 15, 22, 0, 0));
+        const tail = new Date(Date.UTC(2026, 10, 18, 16, 17, 12, 592));
+        const queries = [];
+        const pool = {
+            queries,
+            query(sql, params) {
+                queries.push({ sql, params });
+                if (String(sql).includes('FROM segments')) {
+                    return Promise.resolve({
+                        rows: [{
+                            name: 'off',
+                            start_time: start.toISOString(),
+                            end_time: closed.toISOString(),
+                            duration: (closed.getTime() - start.getTime()) / 1000,
+                            properties: null
+                        }]
+                    });
+                }
+                return Promise.resolve({ rows: [] });
+            }
+        };
+        const sink = userDecisionSink(pool);
+        await sink.accept({
+            machine: 'печь-1',
+            startTime: start.toISOString(),
+            username: 'Востриков Игорь',
+            operatorId: 96,
+            decidedAt: tail.toISOString(),
+            payload: JSON.stringify({
+                machine: 'печь-1',
+                start: start.getTime() / 1000,
+                user: 'Востриков Игорь',
+                tags: [],
+                splits: [
+                    { start: start.getTime() / 1000, end: closed.getTime() / 1000, tag: 'analysis_wait' },
+                    { start: closed.getTime() / 1000, end: tail.getTime() / 1000, tag: 'slag_skimming', open: true }
+                ]
+            })
+        });
+        const insert = queries.find((query) => { return String(query.sql).includes('INSERT INTO user_decisions'); });
+        assert.ok(insert, 'a refused split still nacked the user_decisions message');
+    });
+});
+
 describe('userDecisionSink propagates query failure', function() {
     it('rejects when insert fails', async function() {
         const pool = {
