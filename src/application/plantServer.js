@@ -30,6 +30,14 @@ function timelineBusesInPlant(p) {
     return buses;
 }
 
+/**
+ * STOMP destination for live HMI timeline segments.
+ *
+ * @example
+ *   stompSource(url, timelineSegmentDestination, collector, credentials);
+ */
+export const timelineSegmentDestination = '/exchange/scada.segments/#';
+
 function wireTimelineSegments(stomp, plant) {
     if (!stomp || !stomp.url) {
         return undefined;
@@ -40,7 +48,7 @@ function wireTimelineSegments(stomp, plant) {
     }
     const credentials = { login: stomp.login, passcode: stomp.passcode, host: stomp.host };
     return stompTimelineSegments(
-        stompCollectorFactory(stomp.url, '/exchange/scada.segments', credentials),
+        stompCollectorFactory(stomp.url, timelineSegmentDestination, credentials),
         buses
     );
 }
