@@ -260,4 +260,37 @@ describe('timelineRoute kinds query', function() {
         );
         assert.strictEqual(JSON.parse(res.body).items[0].kind, kind, 'GET segments omitted kind');
     });
+
+    it('does not paint a stale duration-zero end as now', async function() {
+        const origin = 1_701_700_000_000 + Math.floor(Math.random() * 1e8);
+        const staleStart = new Date(origin);
+        const staleEnd = new Date(origin + 1000);
+        const openStart = new Date(origin + 8_000);
+        const scene = buildScene(false, {
+            listed: [
+                {
+                    name: 'on',
+                    start_time: staleStart,
+                    end_time: staleEnd,
+                    duration: 0
+                },
+                {
+                    name: 'on',
+                    start_time: openStart,
+                    end_time: new Date(origin + 8_500),
+                    duration: 0
+                }
+            ]
+        });
+        const res = mockRes();
+        await scene.api.handle(
+            mockReq('', { method: 'GET', url: `/api/v1/machines/${scene.machineId}/segments` }),
+            res
+        );
+        assert.strictEqual(
+            JSON.parse(res.body).items[0].end,
+            staleEnd.toISOString(),
+            'GET painted a stale duration-zero heating as still running'
+        );
+    });
 });

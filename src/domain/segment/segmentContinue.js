@@ -1,7 +1,8 @@
 /**
  * Pulls a later fragment of the same segment back onto the previous row
  * when the uncovered gap is still inside the segmentation continuity budget.
- * A supervisor restart then does not open a hole where metric samples continued.
+ * An overlapping island that starts before the pending heartbeat end stays
+ * one segment instead of a second heating.
  *
  * @param {number} budgetSeconds - maximum uncovered gap that stays one segment
  * @returns {function} apply(record, prior) -> record
@@ -19,8 +20,12 @@ export default function segmentContinue(budgetSeconds) {
         if (priorStart === record.start_time) {
             return record;
         }
-        const gap = Date.parse(record.start_time) - Date.parse(prior.end_time);
-        if (gap < 0 || gap > budgetSeconds * 1000) {
+        const incomingMs = Date.parse(record.start_time);
+        if (incomingMs < Date.parse(priorStart)) {
+            return record;
+        }
+        const gap = incomingMs - Date.parse(prior.end_time);
+        if (gap > budgetSeconds * 1000) {
             return record;
         }
         const startMs = Date.parse(priorStart);

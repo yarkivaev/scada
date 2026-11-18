@@ -60,4 +60,25 @@ describe('continuedSegments', function() {
         }]);
         assert.strictEqual(store.written[0].start_time, incoming, 'a discontinuous fragment reused the previous start');
     });
+
+    it('does not write a second start when the next same-name island overlaps a pending heartbeat', async function() {
+        const origin = 1_701_400_000_000 + Math.floor(Math.random() * 1e8);
+        const priorStart = new Date(origin).toISOString();
+        const heartbeat = new Date(origin + 20_000).toISOString();
+        const store = sink();
+        const wrapped = continuedSegments(store, priorPool({
+            name: 'on',
+            start_time: priorStart,
+            end_time: heartbeat
+        }), 30);
+        await wrapped.write([{
+            machine: `ičt-${Math.random()}`,
+            kind: 'phase',
+            name: 'on',
+            start_time: new Date(origin + 549).toISOString(),
+            end_time: heartbeat,
+            duration: 0
+        }]);
+        assert.strictEqual(store.written[0].start_time, priorStart, 'overlapping heating was stored as its own start');
+    });
 });
