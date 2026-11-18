@@ -1,4 +1,5 @@
 import nativeHistoryBounds, {nativeTailProtocol} from './historyNativeBounds.js';
+import claimConflict from './historyClaim.js';
 import historyAbsorb from './historyAbsorb.js';
 import historyFence from './historyFence.js';
 import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
@@ -49,7 +50,7 @@ function accept(pool, machine, items, cutoff) {
             // eslint-disable-next-line no-await-in-loop
             await client.query(`INSERT INTO history_work(id,machine,from_ms,until_ms)
                 VALUES(md5($1||':'||$2::text)::uuid,$1,$3,$3)
-                ON CONFLICT(id) DO UPDATE SET token=gen_random_uuid(),cursor_ms=NULL,end_ms=NULL,from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
+                ON CONFLICT(id) DO UPDATE SET from_ms=least(history_work.from_ms,excluded.from_ms),until_ms=greatest(history_work.until_ms,excluded.until_ms)`,
             [machine,Math.floor(time/bucket),time]);
         }
         return { inserted: added.length };
@@ -70,7 +71,7 @@ async function unchanged(client, machine, base, {observationSource,timeScale}) {
     return latest;
 }
 function checkClaim(work, base) {
-    if (String(work.token) !== base?.workToken || Number(work.from_ms)<base.from || Number(work.until_ms)>base.until || (work.cursor_ms === null ? null : Number(work.cursor_ms)) !== (base.cursor ?? null) || (work.end_ms === null ? null : Number(work.end_ms)) !== (base.end ?? null)) {
+    if (claimConflict(work, base)) {
         const error = new Error('History work claim changed');
         error.statusCode=409;
         throw error;

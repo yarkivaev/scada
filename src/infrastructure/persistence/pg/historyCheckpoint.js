@@ -1,3 +1,5 @@
+import claimConflict from './historyClaim.js';
+
 export async function assertClassifier(pool,machine,key) {
     if (typeof key!=='string' || !key || key.length>200) { throw new TypeError('Bounded classifier identity required'); }
     const current=await pool.query('SELECT classifier_key FROM history_classifiers WHERE machine=$1',[machine]);
@@ -5,9 +7,9 @@ export async function assertClassifier(pool,machine,key) {
 }
 export async function classifierClaim(pool,machine,{workId,workToken,from,until,cursor,end}) {
     if(!workId){return null;}
-    const result=await pool.query('SELECT classifier_checkpoint,started,from_ms,until_ms,cursor_ms,end_ms FROM history_work WHERE id=$1 AND machine=$2 AND token=$3',[workId,machine,workToken]);
+    const result=await pool.query('SELECT classifier_checkpoint,started,from_ms,until_ms,cursor_ms,end_ms,token FROM history_work WHERE id=$1 AND machine=$2 AND token=$3',[workId,machine,workToken]);
     const row=result.rows[0];
-    if(!row || Number(row.from_ms)!==from || Number(row.until_ms)!==until || (row.cursor_ms===null?null:Number(row.cursor_ms))!==cursor || (row.end_ms===null?null:Number(row.end_ms))!==end){const error=new Error('History work claim changed');error.statusCode=409;throw error;}
+    if(!row || claimConflict(row,{workToken,from,until,cursor,end})){const error=new Error('History work claim changed');error.statusCode=409;throw error;}
     return row;
 }
 export async function classifierSeed(pool,machine,before,key,{claim,cursor}={}) {
