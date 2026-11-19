@@ -50,4 +50,7 @@ export function pending(db, limit) {
     db.prepare('UPDATE counters SET sequence=? WHERE id=1').run(sequence);
     return rows.map((row) => { return decoded(row, db); });
 }
+export function listed(db, limit) {
+    return db.prepare('SELECT * FROM events ORDER BY sequence LIMIT ?').all(limit).map((row) => { return decoded(row, db); });
+}
 export function admission(db, maxBytes, maxRecords) { return capacity(db, maxBytes, maxRecords); }

@@ -91,6 +91,10 @@ export default function deliveryQueue(directory, options) {
             })().catch((error) => { state.closing = null; throw error; });
             return state.closing;
         },
+        peek(limit = 1000) {
+            if (state.closed) { return Promise.reject(new Error('Delivery queue closed')); }
+            return commands.barrier(() => { return spool.peek(limit); });
+        },
         status() {
             const usage = commands.status();
             return { ...spool.status(), queuedOperations: usage.operations, queuedBytes: usage.bytes, drainFull: state.full };

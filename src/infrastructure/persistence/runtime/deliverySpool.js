@@ -1,5 +1,5 @@
 import { capacity, checkpoint, counters, database } from './spoolDatabase.js';
-import { pending } from './spoolRecords.js';
+import { listed, pending } from './spoolRecords.js';
 import { pendingFair } from './spoolReplay.js';
 import spoolMutations from './spoolMutations.js';
 import spoolMigration from './spoolMigration.js';
@@ -60,6 +60,12 @@ export default function deliverySpool(directory, { maxBytes, maxRecords = 100000
             return exclusive(() => {
                 if (!Number.isSafeInteger(limit) || limit <= 0) { throw new TypeError('Positive pending limit required'); }
                 return commit(() => { return pendingFair(state.db, limit, blocked); });
+            });
+        },
+        peek(limit = 1000) {
+            return exclusive(() => {
+                if (!Number.isSafeInteger(limit) || limit <= 0) { throw new TypeError('Positive peek limit required'); }
+                return listed(state.db, limit);
             });
         },
         close() {
