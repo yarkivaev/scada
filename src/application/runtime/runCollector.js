@@ -28,12 +28,11 @@ function healthView(runtime, state) {
             initialized: state.initialized && (!state.agent || state.agent.status().appliedGeneration !== null) };
     } };
 }
-async function initialize(collector, owned, state, { env, registry }) {
+async function initialize(collector, owned, state, { env, registry, store }) {
     const { runtime } = collector;
     await owned.open?.();
     if (state.stopped) { throw new Error('Collector stopped during recovery'); }
-    if (env.COLLECTOR_CONTROL_ENDPOINTS) {
-        const store = controlStore(clientFromEnv(env, 'COLLECTOR_CONTROL'), env.COLLECTOR_CONTROL_PREFIX);
+    if (store) {
         state.agent = assignmentAgent({ nodeId: env.COLLECTOR_NODE_ID, file: env.COLLECTOR_ASSIGNMENT_FILE, store, runtime,
             validate(document) { return validateManifest(document, registry); },
             onError(error) { process.stderr.write(`collector control: ${error.name}\n`); } });
@@ -45,7 +44,9 @@ async function initialize(collector, owned, state, { env, registry }) {
 /** Local executable host. The external agent can instead use createRuntime directly. */
 // eslint-disable-next-line max-statements
 export default async function runCollector({ registry, env = process.env, argv = process.argv.slice(2), signals = true, manifestReader = readManifest, ...services }) {
-    const owned = runtimeServices(env, services);
+    const store = env.COLLECTOR_CONTROL_ENDPOINTS
+        ? controlStore(clientFromEnv(env, 'COLLECTOR_CONTROL'), env.COLLECTOR_CONTROL_PREFIX) : null;
+    const owned = runtimeServices(env, { ...services, cursor: services.cursor ?? store?.cursor });
     const runtime = createRuntime({ registry, ...owned });
     const state = { initialized: false, failed: false, health: null, reloading: false, stopped: false, detach: null, agent: null };
     const collector = {
@@ -73,7 +74,7 @@ export default async function runCollector({ registry, env = process.env, argv =
             handle: spoolSurface(owned.deliveryQueue, env.STATE_HTTP_TOKEN) }) }); }
         const recoveryMs = Number(env.COLLECTOR_RECOVERY_TIMEOUT_MS ?? 900000);
         if (!Number.isSafeInteger(recoveryMs) || recoveryMs < 1) { throw new TypeError('Positive collector recovery timeout required'); }
-        await deadline(() => { return initialize(collector, owned, state, { env, registry }); }, recoveryMs);
+        await deadline(() => { return initialize(collector, owned, state, { env, registry, store }); }, recoveryMs);
     } catch (error) {
         Object.assign(state, { failed: true });
         try { await collector.stop(); } catch (cleanup) { throw new AggregateError([error, cleanup], 'Collector startup cleanup failed'); }
