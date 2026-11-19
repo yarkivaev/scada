@@ -17,7 +17,8 @@ function likePattern() {
 function allows(existing, incoming, kin = []) {
     const props = existing.properties === null || existing.properties === undefined ? '' : String(existing.properties);
     const later = Date.parse(incoming.end_time) > Date.parse(existing.end_time);
-    const clause = existing.duration === 0 || incoming.duration > 0 || later;
+    const equal = Date.parse(incoming.end_time) === Date.parse(existing.end_time);
+    const clause = later || (equal && (incoming.duration >= existing.duration || existing.duration === 0));
     const family = kin.some((row) => {
         return Date.parse(row.start_time) > Date.parse(existing.start_time) && like(String(row.properties ?? ''), likePattern());
     });

@@ -9,7 +9,8 @@ import segmentPipeline, {
 
 function allows(existing, incoming) {
     const later = Date.parse(incoming.end_time) > Date.parse(existing.end_time);
-    return existing.duration === 0 || incoming.duration > 0 || later;
+    const equal = Date.parse(incoming.end_time) === Date.parse(existing.end_time);
+    return later || (equal && (incoming.duration >= existing.duration || existing.duration === 0));
 }
 
 function upsertStore(conflict, update) {
@@ -101,7 +102,7 @@ describe('segmentPipeline upsert configuration', function() {
     it('guards conflict update so a stale pending cannot reopen a completed span', function() {
         assert.strictEqual(
             segmentUpdateWhere,
-            '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\'))',
+            '(EXCLUDED.end_time > segments.end_time OR (EXCLUDED.end_time = segments.end_time AND (EXCLUDED.duration >= segments.duration OR segments.duration = 0))) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\'))',
             'segment upsert must keep a completed span against a pending heartbeat that is not later'
         );
     });
@@ -177,6 +178,29 @@ describe('segmentPipeline monotonic upsert', function() {
             store.rows.get(`${machine}\u0000phase\u0000${start}`).duration,
             span,
             'completed close did not overwrite the orphan one-second stub'
+        );
+    });
+
+    it('does not let an earlier one-second close shrink a later extension', async function() {
+        const machine = `cm-${Math.random()}`;
+        const start = new Date(1_700_000_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
+        const store = upsertStore(segmentConflict, segmentUpdateColumns);
+        const span = 20000 + Math.floor(Math.random() * 900);
+        const ended = new Date(Date.parse(start) + span * 1000).toISOString();
+        await store.write([{
+            machine, kind: 'phase', name: 'off', start_time: start,
+            end_time: ended, duration: span, options: null, tags: null,
+            properties: '{}', resolved: true
+        }]);
+        await store.write([{
+            machine, kind: 'phase', name: 'off', start_time: start,
+            end_time: new Date(Date.parse(start) + 1000).toISOString(),
+            duration: 1, options: null, tags: null, properties: '{}', resolved: true
+        }]);
+        assert.strictEqual(
+            store.rows.get(`${machine}\u0000phase\u0000${start}`).duration,
+            span,
+            'stale one-second close shrank a later covering off'
         );
     });
 });
