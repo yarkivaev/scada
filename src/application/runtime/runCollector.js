@@ -3,6 +3,7 @@ import collectorSignals from './collectorSignals.js';
 import createRuntime from './runtime.js';
 import runtimeServices from './runtimeServices.js';
 import runtimeHealth from './runtimeHealth.js';
+import spoolSurface from './spoolSurface.js';
 import deadline from './deadline.js';
 import assignmentAgent from '../control/agent.js';
 import controlStore from '../control/controlStore.js';
@@ -68,7 +69,8 @@ export default async function runCollector({ registry, env = process.env, argv =
     if (signals) { state.detach = collectorSignals(collector); }
     try {
         if (env.COLLECTOR_HEALTH_PORT) { Object.assign(state, { health: await runtimeHealth(healthView(runtime, state), {
-            port: Number(env.COLLECTOR_HEALTH_PORT), host: env.COLLECTOR_HEALTH_HOST ?? '127.0.0.1' }) }); }
+            port: Number(env.COLLECTOR_HEALTH_PORT), host: env.COLLECTOR_HEALTH_HOST ?? '127.0.0.1',
+            handle: spoolSurface(owned.deliveryQueue, env.STATE_HTTP_TOKEN) }) }); }
         const recoveryMs = Number(env.COLLECTOR_RECOVERY_TIMEOUT_MS ?? 900000);
         if (!Number.isSafeInteger(recoveryMs) || recoveryMs < 1) { throw new TypeError('Positive collector recovery timeout required'); }
         await deadline(() => { return initialize(collector, owned, state, { env, registry }); }, recoveryMs);

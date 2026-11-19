@@ -52,6 +52,15 @@ describe('Persistent delivery spool', () => {
         const rows = await spool.pending(); rows[0].event.value = 5;
         assert.equal((await spool.pending())[0].event.value, 1);
     });
+    it('lists undelivered observations without rotating the pending sequence', async () => {
+        const spool = deliverySpool(directory, { maxBytes: 10000 });
+        await spool.open();
+        await spool.append({ eventId: 'я', value: 7 }, ['one']);
+        const first = await spool.peek(8);
+        const second = await spool.peek(8);
+        assert.deepEqual(second.map((row) => { return row.event.eventId; }), first.map((row) => { return row.event.eventId; }),
+            'peek still rotated the spool sequence');
+    });
 });
 
 
