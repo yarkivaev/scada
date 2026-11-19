@@ -4,6 +4,15 @@ function encoded(value) { return Buffer.from(value).toString('base64'); }
 function decoded(value) { return Buffer.from(value, 'base64').toString(); }
 function put(key, value, lease) { return { request_put: { key: encoded(key), value: encoded(JSON.stringify(value)), ...(lease && { lease }) } }; }
 function revision(key, value) { return { key: encoded(key), target: 'MOD', result: 'EQUAL', mod_revision: String(value) }; }
+function cursor(call, root, range) {
+    return {
+        async load(taskId) {
+            const row = await range(`${root}/cursors/${taskId}`);
+            return row ? JSON.parse(decoded(row.value)) : null;
+        },
+        save(taskId, value) { return call('/v3/kv/put', put(`${root}/cursors/${taskId}`, value).request_put); }
+    };
+}
 export default function controlStore(call, prefix = '/scada/control') {
     const root = prefix.replace(/\/$/u, '');
     const lock = `${root}/leader`;
@@ -41,6 +50,7 @@ export default function controlStore(call, prefix = '/scada/control') {
             return Boolean(result.succeeded);
         },
         async assignment(id) { const row = await range(`${root}/assignments/${id}`); return row ? JSON.parse(decoded(row.value)) : null; },
+        cursor: cursor(call, root, range),
         report(id, value) { return call('/v3/kv/put', put(`${root}/reports/${id}`, value).request_put); },
         async publish(catalog, expectedRevision) {
             validateCatalog(catalog);

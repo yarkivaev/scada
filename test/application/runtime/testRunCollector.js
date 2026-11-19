@@ -37,4 +37,19 @@ describe('collector manifest entrypoint', () => {
         assert.deepEqual(events, ['start:1', 'stop:1']);
         await collector.stop();
     });
+    it('gives adapters a supplied control cursor', async () => {
+        let seen;
+        const cursor = { load() { return { id: 4 }; }, save() { return undefined; } };
+        const collector = await runCollector({
+            registry: new Map([['test', { validate() {}, resources() { return []; }, create(_spec, ctx) {
+                seen = ctx.cursor;
+                return { start() {}, stop() {} };
+            } }]]),
+            env: { COLLECTOR_MANIFEST: JSON.stringify({ assignments: [{ taskId: 'sokol-awgs:cm1', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }) },
+            argv: [], signals: false, cursor
+        });
+        await collector.reload();
+        assert.equal(seen, cursor, 'adapter did not receive the control cursor');
+        await collector.stop();
+    });
 });

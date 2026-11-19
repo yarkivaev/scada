@@ -127,3 +127,16 @@ it('makes an explicitly fatal asynchronous transport event sticky until executor
     await assert.rejects(runtime.apply({ taskId: 'two', specVersion: 1, generation: 1, spec: { adapter: 'test' } }), /fatal/u);
     await runtime.stop();
 });
+
+it('gives adapters the control cursor from runtime options', async () => {
+    let seen;
+    const cursor = { load() { return { id: 91 }; }, save() { return undefined; } };
+    const registry = new Map([['test', { validate() {}, resources() { return []; }, create(_spec, ctx) {
+        seen = ctx.cursor;
+        return { start() {}, stop() {} };
+    } }]]);
+    const runtime = createRuntime({ registry, cursor });
+    await runtime.apply({ taskId: 'sokol-awgs:cm1', specVersion: 1, generation: 1, spec: { adapter: 'test' } });
+    assert.equal(seen, cursor, 'adapter did not receive the control cursor');
+    await runtime.stop();
+});
