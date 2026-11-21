@@ -213,6 +213,45 @@ describe('declared placement priority', () => {
         assert.equal(result.cache.assignments.some((row) => { return row.taskId === 'calc'; }), true);
         assert.equal(result.home.assignments.some((row) => { return row.taskId === 'calc'; }), false);
     });
+    it('returns a single preferred copy to the restored home', () => {
+        const spec = { adapter: 'sokol-awgs', requireCheckpoint: true };
+        const input = { version: 'v1', nodes: [{ id: 'edge-2', capacity: 10 }, { id: 'edge-1', capacity: 10 }], tasks: [
+            { taskId: 'awgs', spec, copies: 1, preference: ['edge-2', 'edge-1'], eligibleNodes: ['edge-2', 'edge-1'] }
+        ] };
+        const current = {
+            'edge-1': { generation: 4, assignments: [{ taskId: 'awgs', generation: 4, assignedAt: 1, specVersion: 1, spec }] },
+            'edge-2': { generation: 4, assignments: [] }
+        };
+        const result = schedule(input, [
+            report('edge-1', 40000, [{ taskId: 'awgs', generation: 4, state: 'running', lastRead: 40000 }]),
+            report('edge-2', 40000)
+        ], current, { now: 40000, replacementDelayMs: 30000 });
+        assert.deepEqual(['edge-1', 'edge-2'].filter((id) => { return result[id].assignments.some((row) => { return row.taskId === 'awgs'; }); }),
+            ['edge-2'], 'restored home left the only poller on the cache');
+    });
+    it('does not pull a single copy off the node that already stores the sensor', () => {
+        const spec = { adapter: 'test' };
+        const input = { version: 'v1', nodes: [{ id: 'home', capacity: 10 }, { id: 'cache', capacity: 10 }], tasks: [
+            { taskId: 'sensor', spec, copies: 1, pinnedNode: 'cache' },
+            { taskId: 'calc', spec, copies: 1, preference: ['home', 'cache'], eligibleNodes: ['home', 'cache'], near: ['sensor'] }
+        ] };
+        const current = {
+            cache: { generation: 3, assignments: [
+                { taskId: 'sensor', generation: 3, assignedAt: 1, specVersion: 1, spec },
+                { taskId: 'calc', generation: 3, assignedAt: 1, specVersion: 1, spec }
+            ] },
+            home: { generation: 3, assignments: [] }
+        };
+        const result = schedule(input, [
+            report('home', 40000),
+            report('cache', 40000, [
+                { taskId: 'sensor', generation: 3, state: 'running', lastRead: 40000 },
+                { taskId: 'calc', generation: 3, state: 'running', lastRead: 40000 }
+            ])
+        ], current, { now: 40000, replacementDelayMs: 30000 });
+        assert.equal(result.cache.assignments.some((row) => { return row.taskId === 'calc'; }) && !result.home.assignments.some((row) => { return row.taskId === 'calc'; }),
+            true, 'failback stole calculation from the live sensor store');
+    });
     it('retires a lower preference after two preferred copies are confirmed', () => {
         const task = { taskId: 's', spec: { adapter: 'test' }, copies: 2, preference: ['c', 'b'], eligibleNodes: ['a', 'b', 'c'] };
         const current = Object.fromEntries(['a', 'b', 'c'].map((id) => { return [id, { generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }]; }));
