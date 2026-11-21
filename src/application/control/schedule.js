@@ -28,6 +28,30 @@ function freshRead(report, input, { now, freshnessMs, controlEpoch, clockSkewMs 
             && Number.isFinite(row.lastRead) && row.lastRead <= now + clockSkewMs && now - row.lastRead <= freshnessMs;
     });
 }
+function holderOf(slots, task) {
+    const holders = slots.filter((node) => { return node.assignments.some((row) => { return row.taskId === task.taskId; }); });
+    return holders.length === 1 ? holders[0] : null;
+}
+function destination(slots, task, holder, timing) {
+    const input = holder.assignments.find((row) => { return row.taskId === task.taskId; });
+    if (timing.now - (input.assignedAt ?? 0) < timing.replacementDelayMs) { return null; }
+    const candidates = slots.filter((node) => {
+        return node.live && wanted(task, node) && (node.id === holder.id || node.load + (task.cost ?? 1) <= node.capacity);
+    });
+    const home = [...candidates].sort(byPlace(task))[0];
+    return home && home.id !== holder.id ? home : null;
+}
+function reclaim(slots, tasks, timing) {
+    tasks.filter((task) => { return copies(task) === 1; }).forEach((task) => {
+        const holder = holderOf(slots, task);
+        const home = holder ? destination(slots, task, holder, timing) : null;
+        if (!home) { return; }
+        holder.assignments = holder.assignments.filter((row) => { return row.taskId !== task.taskId; });
+        holder.load -= task.cost ?? 1;
+        home.assignments.push({ taskId: task.taskId, specVersion: 1, generation: 0, assignedAt: timing.now, spec: task.spec });
+        home.load += task.cost ?? 1;
+    });
+}
 function retain(slots, tasks, owners, observed, timing) {
     for (const task of tasks) {
         const confirmed = owners(task).filter((node) => {
@@ -119,6 +143,7 @@ export default function schedule(catalog, reports, current, { now = Date.now(), 
             }
         }
     }
+    reclaim(slots, tasks, { now, replacementDelayMs });
     retain(slots, tasks, owners, observed, { now, freshnessMs, controlEpoch, clockSkewMs });
     return snapshots(slots, taskMap, catalog, observed, { now, freshnessMs, clockSkewMs });
 }
