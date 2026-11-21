@@ -27,6 +27,7 @@ describe('Native bounded history exterior',function(){
         await pool.query(await readFile(new URL('../../db/migrations/E0011__history_classifier_checkpoints.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0013__history_staged_corrections.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0015__history_retention_frontier.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0017__history_live_covering.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
 
