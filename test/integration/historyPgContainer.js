@@ -46,6 +46,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0011__history_classifier_checkpoints.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0013__history_staged_corrections.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0015__history_retention_frontier.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0017__history_live_covering.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('pins a finite classifier generation while same-bucket appends get their own work',async()=>{
@@ -504,6 +505,19 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             assert.equal((await client.query("SELECT count(*) FROM segments WHERE machine='role-stage'")).rows[0].count,'1');
             await client.query('DELETE FROM history_work WHERE id=$1',[staged.id]);
         } finally { await client.query('RESET ROLE'); client.release(); }
+    });
+
+    it('does not freeze a live covering that straddles a later empty correction page', async () => {
+        const machine=`cover-ж-${Math.random().toString(36).slice(2,8)}`;
+        const origin=Date.now()-7_243_283;
+        const page=origin+7_243_283;
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,0)",
+            [machine,new Date(origin),new Date(page+5_741)]);
+        const staged=(await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms,correction_from,correction_until) VALUES(gen_random_uuid(),$1,$2,$3,$2,$3) RETURNING id',
+            [machine,page,page+1000])).rows[0];
+        await pool.query('SELECT history_apply_correction($1,$2,1,false)',[staged.id,machine]);
+        assert.equal((await pool.query('SELECT duration FROM segments WHERE machine=$1 AND start_time=$2',[machine,new Date(origin)])).rows[0].duration,0,
+            'a later empty correction page froze a live covering');
     });
 
     it('refreshes pending segment write time for the existing silence watchdog', async () => {
