@@ -42,7 +42,7 @@ describe('closed history revision', function() {
     });
     it('pins closed-page revision into the history context', function() {
         const body = readFileSync(new URL('../../../../src/infrastructure/persistence/pg/historyContext.js', import.meta.url), 'utf8');
-        assert.match(body, /historyRevision\(snapshot, until, timeScale\)/u,
+        assert.match(body, /historyRevision\(snapshot, range\.until, timeScale\)/u,
             'history context still hashed the live padded snapshot');
     });
 });
