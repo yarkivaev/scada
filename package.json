@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.6.23",
+  "version": "2.6.24",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
     "@clickhouse/client": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@yarkivaev/simple-server": "1.0.2",
-    "@yarkivaev/source-to-sink": "2.0.0",
+    "@yarkivaev/source-to-sink": "2.0.1",
     "amqplib": "^0.10.9",
     "better-sqlite3": "^11.0.0",
     "modbus-serial": "^8.0.0",

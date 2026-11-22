@@ -58,6 +58,22 @@ describe('mx210Tcp', function() {
             }
         };
         mx210Metrics(device, collector).accept(registersWithAi1());
-        assert.strictEqual(accepted.length, 5, 'mx210 metrics did not emit five channels');
+        assert.strictEqual(
+            accepted.filter((row) => { return !row.topic.includes('source_alive'); }).length,
+            5,
+            'mx210 metrics did not emit five channels'
+        );
+    });
+
+    it('watermarks source_alive zero when the mx210 poll misses', async function() {
+        const device = `dev-${Math.random().toString(36).slice(2)}`;
+        const accepted = [];
+        const stamp = 1700000000000 + Math.floor(Math.random() * 4000);
+        await mx210Metrics(device, { accept(record) { accepted.push(record); } }).miss({ ts: stamp });
+        assert.deepEqual(
+            accepted[0],
+            { topic: `MX210/${device}/GET/source_alive/VALUE`, ts: stamp, value: 0 },
+            'a dark mx210 poll did not watermark source_alive'
+        );
     });
 });

@@ -30,17 +30,27 @@ function decode(low, high) {
  * @param {object} collector - Collector with accept(record)
  * @returns {object} Transformer with accept(registers)
  */
+function publish(collector, device, channel, ts, value) {
+    return collector.accept({
+        topic: `MX210/${device}/GET/${channel}/VALUE`,
+        ts,
+        value
+    });
+}
+
 export function mx210Metrics(device, collector) {
     return {
         accept(registers) {
             const ts = Date.now();
-            return Promise.all(layout.map((entry) => {
-                return collector.accept({
-                    topic: `MX210/${device}/GET/${entry.channel}/VALUE`,
-                    ts,
-                    value: decode(registers[entry.offset], registers[entry.offset + 1])
-                });
-            }));
+            return Promise.all([
+                ...layout.map((entry) => {
+                    return publish(collector, device, entry.channel, ts, decode(registers[entry.offset], registers[entry.offset + 1]));
+                }),
+                publish(collector, device, 'source_alive', ts, 1)
+            ]);
+        },
+        miss(row) {
+            return publish(collector, device, 'source_alive', Number(row?.ts) || Date.now(), 0);
         }
     };
 }

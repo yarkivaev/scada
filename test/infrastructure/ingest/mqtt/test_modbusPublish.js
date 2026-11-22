@@ -74,6 +74,40 @@ describe('modbusPublish', () => {
         );
     });
 
+    it('marks the source alive on a successful register window', async () => {
+        const received = [];
+        const stem = `MX210/ïcht-${Math.floor(Math.random() * 8) + 1}/GET`;
+        const transformer = registerPublish(
+            [{ point: 'holding:4000:cdab', topic: `${stem}/AI4/VALUE` }],
+            4000,
+            { accept(record) { received.push(record); } }
+        );
+        await transformer.accept([0, 16256]);
+        const alive = received.find((row) => { return row.topic.endsWith('/source_alive/VALUE'); });
+        assert.deepEqual(
+            { topic: alive?.topic, value: JSON.parse(alive.payload).value },
+            { topic: `${stem}/source_alive/VALUE`, value: 1 },
+            'a live poll did not mark source_alive'
+        );
+    });
+
+    it('watermarks source_alive zero when the register source misses', async () => {
+        const received = [];
+        const stem = `MX210/ïcht-${Math.floor(Math.random() * 8) + 1}/GET`;
+        const stamp = 1700000000000 + Math.floor(Math.random() * 9000);
+        const transformer = registerPublish(
+            [{ point: 'holding:4000:cdab', topic: `${stem}/AI4/VALUE` }],
+            4000,
+            { accept(record) { received.push(record); } }
+        );
+        await transformer.miss({ ts: stamp });
+        assert.deepEqual(
+            received.map((row) => { return { topic: row.topic, ...JSON.parse(row.payload) }; }),
+            [{ topic: `${stem}/source_alive/VALUE`, ts: stamp, value: 0 }],
+            'a dark poll did not watermark source_alive'
+        );
+    });
+
     it('builds a pipeline for a mapped device address', () => {
         const host = `192.0.2.${Math.floor(Math.random() * 200) + 1}`;
         const stem = `bay/ünit-${Math.random().toString(36).slice(2, 5)}`;
@@ -156,11 +190,15 @@ describe('explicit Modbus wire publication', function () {
         try {
             await pipeline.start(); await ready; await new Promise(setImmediate);
             await pipeline.stop();
-            assert.equal(received.length, 1);
+            assert.equal(received.length, 2);
             assert.equal(received[0].topic, 'legacy/device/voltage');
             assert.equal(received[0].payload.value, 1);
             assert.equal(typeof received[0].payload.ts, 'number');
             assert.equal(received[0].qos, 1);
+            assert.deepEqual(
+                { topic: received[1].topic, value: received[1].payload.value, qos: received[1].qos },
+                { topic: 'legacy/device/source_alive', value: 1, qos: 1 }
+            );
         } finally {
             await pipeline.stop();
             Object.assign(mqtt.MqttClient.prototype, mqttOriginal);
