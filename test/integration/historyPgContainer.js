@@ -134,6 +134,20 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await pool.query('SELECT count(*) FROM history_admissions WHERE topic=$1',[records[0].topic])).rows[0].count,'0');
         assert.equal((await pool.query("SELECT count(*) FROM history_observations WHERE machine=$1 AND channel<>'lead'",[machine])).rows[0].count,'0');
     });
+    it('does not conflict a classifier claim while a telemetry admission is still open', async () => {
+        const machine=`admit-ж-${Math.random().toString(36).slice(2,8)}`;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
+        const records=[{topic:`${machine}/power`,ts:time,value:1.25}];
+        const store=historyPg(pool,{observations:stagedSource(time,[0,1000])});
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+1000]);
+        const work=(await store.work(machine)).items[0];
+        await store.prepare(records);
+        const snapshot=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const result=await store.commit(machine,work.id,[],{from:work.from,until:work.until,cursor:work.cursor,end:work.end,workToken:work.token});
+        assert.equal(snapshot.available===false && result.applied===false && (await pool.query('SELECT 1 FROM history_work WHERE id=$1',[work.id])).rowCount===1,true,
+            'an open telemetry admission still conflicted a classifier claim');
+    });
     it('persists classifier checkpoints with pages and rejects commits from a replaced classifier', async () => {
         const machine='external-checkpoints';
         const time=Math.floor(Date.now()/30000)*30000-60000;
