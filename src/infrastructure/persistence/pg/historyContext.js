@@ -24,6 +24,7 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const range = { from,until,paddingMs:padding,cursor,end:envelope,...(classifierKey && {classifierKey}),...(timeScale!==1 && {timeScale}),...(workId && {workId,workToken}) };
     if ((cursor !== null && !Number.isSafeInteger(cursor)) || (envelope !== null && !Number.isSafeInteger(envelope))) { throw new TypeError('Invalid history cursor'); }
     const claim=await classifierClaim(pool,machine,{workId,workToken,from,until,cursor,end:envelope});
+    if(claim){range.from=Number(claim.from_ms);range.until=Number(claim.until_ms);}
     const held=claim && envelope===null && claim.end_ms!==null ? Number(claim.end_ms) : envelope;
     if (held!==null && envelope===null) { range.end=held; }
     if (from<cutoff && !claim) {
@@ -67,5 +68,5 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const last = observations.items.at(-1)?.time;
     const rightClosed = next === null && last !== undefined && segments.rows.some((row) => { return row.duration>0 && new Date(row.end_time).getTime()*timeScale>=last; });
     const snapshot = { page,initial,...(classifierKey && {classifierSeed:classifier}),annotations:annotations.rows,segments:segments.rows,...observations,rightClosed };
-    return { ...snapshot,available:true,revision:historyRevision(snapshot, until, timeScale),context:range };
+    return { ...snapshot,available:true,revision:historyRevision(snapshot, range.until, timeScale),context:range };
 }

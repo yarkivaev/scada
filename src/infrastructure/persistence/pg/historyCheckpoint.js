@@ -9,7 +9,7 @@ export async function classifierClaim(pool,machine,{workId,workToken,from,until,
     const row=result.rows[0];
     const stored=row && (row.cursor_ms===null?null:Number(row.cursor_ms));
     const bound=row && (row.end_ms===null?null:Number(row.end_ms));
-    if(!row || Number(row.from_ms)!==from || Number(row.until_ms)!==until || stored!==cursor || (end!==null && bound!==end)){
+    if(!row || Number(row.from_ms)>from || Number(row.until_ms)<until || stored!==cursor || (end!==null && bound!==end)){
         const error=new Error('History work claim changed');error.statusCode=409;throw error;
     }
     return row;

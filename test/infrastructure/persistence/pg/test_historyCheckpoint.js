@@ -16,6 +16,20 @@ describe('classifier history pages', function() {
         });
         assert.equal(Number(row.end_ms), 9000, 'a stored envelope still conflicted a first-page retry');
     });
+    it('does not reject a first page after unstarted work grew past the fetched until', async function() {
+        const pool = {
+            async query() {
+                return { rowCount: 1, rows: [{
+                    classifier_checkpoint: null, started: false,
+                    from_ms: '941', until_ms: '8124', cursor_ms: null, end_ms: null
+                }] };
+            }
+        };
+        const row = await classifierClaim(pool, 'см-ж', {
+            workId: 'work-ж', workToken: 'token-ж', from: 941, until: 5741, cursor: null, end: null
+        });
+        assert.equal(Number(row.until_ms), 8124, 'a grown unstarted bucket still conflicted its fetched claim');
+    });
     it('does not split a page on an invalidated checkpoint', async function() {
         const statements = [];
         const pool = {
