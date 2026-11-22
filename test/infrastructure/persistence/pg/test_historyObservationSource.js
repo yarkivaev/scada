@@ -31,6 +31,22 @@ describe('historical context with external observations', function() {
     it('does not advertise a stateful classifier protocol on the legacy PostgreSQL observation path', async function() {
         await assert.rejects(async()=>{await scada.historyPg(pool).configure('machine',[{topic:'a',channel:'power'}],30000,'casting');},/stateful|external/u);
     });
+    it('does not conflict a classifier claim while a telemetry admission is still open', async function() {
+        const connection={
+            async query(sql) {
+                if (sql==='BEGIN'||sql.startsWith('SELECT pg_advisory')||sql==='COMMIT'||sql==='ROLLBACK') { return {rows:[],rowCount:0}; }
+                if (sql.includes('FROM history_admissions')) { return {rowCount:1,rows:[{}]}; }
+                if (sql.includes('FROM history_work')) { return {rowCount:1,rows:[{id:'w1',token:'t1',from_ms:1000,until_ms:2000,cursor_ms:null,end_ms:null}]}; }
+                throw new Error(`Unexpected domain-state query: ${sql}`);
+            },
+            release() {}
+        };
+        const db={async connect(){return connection;},async query(...args){return connection.query(...args);}};
+        const store=scada.historyPg(db,{observations:()=>{return {};},now:()=>{return 0;}});
+        const snapshot=await store.context('см-α',1000,2000,0,{classifierKey:'casting',workId:'w1',workToken:'t1'});
+        const result=await store.commit('см-α','w1',[],{from:1000,until:2000,workToken:'t1'});
+        assert.equal(snapshot.available===false && result.applied===false,true,'an open telemetry admission still conflicted a classifier claim');
+    });
     it('does not offer the still-open external bucket to HistoryRun', async function() {
         const statements = [];
         const work = {

@@ -13,6 +13,10 @@ export const historyProtocol = 'stateful-correction-v1';
 function machineName(machine) {
     if (typeof machine !== 'string' || !machine || machine.length > 200) { throw new TypeError('machine required'); }
 }
+async function ready(connection, machine, hold) {
+    try { await assertHistoryReady(connection, machine); return null; }
+    catch (error) { if (error.statusCode===409 && hold) { return hold; } throw error; }
+}
 async function transaction(pool, machine, action, topology=false) {
     machineName(machine);
     const client = await pool.connect();
@@ -59,6 +63,13 @@ function context(pool,machine,from,until,options) {
     machineName(machine);
     return historyContext(pool,machine,from,until,options);
 }
+async function snapshot(connection, machine, range, page, observationSource) {
+    if (observationSource) {
+        const held=await ready(connection,machine,page.classifierKey&&page.workId&&{available:false,items:[],segments:[],annotations:[],context:{from:range.from,until:range.until,paddingMs:page.padding,...page}});
+        if (held) { return held; }
+    }
+    return context(connection,machine,range.from,range.until,{...page,observations:observationSource?.(connection)});
+}
 async function unchanged(client, machine, base, {observationSource,timeScale}) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
     const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,workId:base.workId,workToken:base.workToken,timeScale,observations:observationSource?.(client) });
@@ -89,7 +100,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
         if (!work.rowCount) { return { applied: false }; }
         checkClaim(work.rows[0],base);
         if (segments.length && !base?.revision) { throw new TypeError('History context revision required'); }
-        if (observationSource) { await assertHistoryReady(client,machine); }
+        if (observationSource) { const held=await ready(client,machine,{applied:false}); if (held) { return held; } }
         const latest = base?.revision ? await unchanged(client, machine, base, {observationSource,timeScale}) : null;
         const exteriors = nativeHistoryBounds(segments, latest, base, timeScale);
         for (const item of exteriors) {
@@ -160,10 +171,8 @@ export default function historyPg(pool, { retentionDays = 30, now = Date.now, ob
             if (observationSource) { throw new TypeError('External observations require durable telemetry admission'); }
             return accept(pool, machine, items, cutoff()); },
         context(machine, from, until, padding = 60000*timeScale, page = {}) {
-            async function read(connection){
-                if(observationSource){await assertHistoryReady(connection,machine);}
-                return context(connection,machine,from,until,{padding,cutoff:cutoff(),...page,timeScale,observations:observationSource?.(connection)});
-            }
+            const options={padding,cutoff:cutoff(),...page,timeScale};
+            function read(connection) { return snapshot(connection,machine,{from,until},options,observationSource); }
             return page.classifierKey && page.workId ? transaction(pool,machine,read) : read(pool);
         },
         async work(machine) {
