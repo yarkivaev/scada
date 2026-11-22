@@ -519,6 +519,33 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal((await pool.query('SELECT duration FROM segments WHERE machine=$1 AND start_time=$2',[machine,new Date(origin)])).rows[0].duration,0,
             'a later empty correction page froze a live covering');
     });
+    it('does not extend a closed classifier envelope through a live covering heartbeat', async () => {
+        const machine=`env-ж-${Math.random().toString(36).slice(2,8)}`;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000])});
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,0)",
+            [machine,new Date(time-8_124_283),new Date(Date.now()+5_741)]);
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
+        const work=(await store.work(machine)).items[0];
+        await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const stored=Number((await pool.query('SELECT end_ms FROM history_work WHERE id=$1',[work.id])).rows[0].end_ms);
+        assert.equal(stored,time+5000,'classifier work still absorbed a live covering heartbeat');
+    });
+    it('does not reject a closed classifier page when a live covering heartbeat moves after context', async () => {
+        const machine=`hb-ж-${Math.random().toString(36).slice(2,8)}`;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000])});
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,0)",
+            [machine,new Date(time-8_124_283),new Date(time+5000)]);
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
+        const work=(await store.work(machine)).items[0];
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        await pool.query('UPDATE segments SET end_time=$2,updated_at=clock_timestamp() WHERE machine=$1 AND duration=0',[machine,new Date(time+9000)]);
+        const result=await store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,checkpoint:{key:'casting',at:context.items.at(-1).time,state:{count:1}}});
+        assert.equal(result.applied,true,'a live covering heartbeat still conflicted a closed history page');
+    });
 
     it('refreshes pending segment write time for the existing silence watchdog', async () => {
         const store=historyPg(pool); const time=Math.floor(Date.now()/30000)*30000-210000;
