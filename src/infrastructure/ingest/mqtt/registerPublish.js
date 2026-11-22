@@ -53,6 +53,28 @@ export function measurementPlans(stream, mapping) {
  * @param {object} collector - collector with accept()
  * @returns {object} transformer with accept(registers)
  */
+function aliveTopic(topic) {
+    const parts = String(topic).split('/');
+    const index = parts.indexOf('GET');
+    if (index >= 0 && index + 1 < parts.length) {
+        parts[index + 1] = 'source_alive';
+        return parts.join('/');
+    }
+    parts[parts.length - 1] = 'source_alive';
+    return parts.join('/');
+}
+
+function emit(collector, topic, value, ts) {
+    return collector.accept({
+        payload: JSON.stringify({ ts, value }),
+        topic
+    });
+}
+
+function marks(rows) {
+    return [...new Set(rows.map((item) => { return aliveTopic(item.topic); }))];
+}
+
 export default function registerPublish(plans, origin, collector) {
     if (!collector || typeof collector.accept !== 'function') {
         throw new Error('Collector must have an accept() method');
@@ -70,15 +92,22 @@ export default function registerPublish(plans, origin, collector) {
          * @param {Array<number>} registers - uint16 window
          */
         accept(registers) {
-            return Promise.all(rows.map((item) => {
-                return collector.accept({
-                    payload: JSON.stringify({
-                        ts: Date.now(),
-                        value: decodePoint(item.point, origin, registers)
-                    }),
-                    topic: item.topic
-                });
-            }));
+            const ts = Date.now();
+            return Promise.all([
+                ...rows.map((item) => {
+                    return emit(collector, item.topic, decodePoint(item.point, origin, registers), ts);
+                }),
+                ...marks(rows).map((topic) => { return emit(collector, topic, 1, ts); })
+            ]);
+        },
+        /**
+         * Publishes a collector-clock watermark while the register source is dark.
+         *
+         * @param {{ts?: number}} row - collector timestamp
+         */
+        miss(row) {
+            const ts = Number(row?.ts) || Date.now();
+            return Promise.all(marks(rows).map((topic) => { return emit(collector, topic, 0, ts); }));
         }
     };
 }
