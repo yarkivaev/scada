@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import historyRevision from './historyRevision.js';
 import historySeed from './historySeed.js';
 import historyObservationsPg from './historyObservations.js';
 import {classifierClaim,classifierPage,classifierSeed} from './historyCheckpoint.js';
@@ -24,6 +24,8 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const range = { from,until,paddingMs:padding,cursor,end:envelope,...(classifierKey && {classifierKey}),...(timeScale!==1 && {timeScale}),...(workId && {workId,workToken}) };
     if ((cursor !== null && !Number.isSafeInteger(cursor)) || (envelope !== null && !Number.isSafeInteger(envelope))) { throw new TypeError('Invalid history cursor'); }
     const claim=await classifierClaim(pool,machine,{workId,workToken,from,until,cursor,end:envelope});
+    const held=claim && envelope===null && claim.end_ms!==null ? Number(claim.end_ms) : envelope;
+    if (held!==null && envelope===null) { range.end=held; }
     if (from<cutoff && !claim) {
         const pending = cursor === null || envelope === null ? {rowCount:0} : await pool.query(`SELECT 1 FROM history_work WHERE machine=$1 AND from_ms=$2 AND until_ms=$3 AND cursor_ms=$4 AND end_ms=$5 LIMIT 1`,[machine,from,until,cursor,envelope]);
         if (!pending.rowCount) { return {available:false,items:[],segments:[],annotations:[],context:range}; }
@@ -31,13 +33,14 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const classifier=classifierKey ? await classifierSeed(pool,machine,cursor ?? from,classifierKey,{claim,cursor}) : null;
     let left = cursor ?? from-padding;
     if (classifierKey && cursor===null) { left=classifier ? classifier.at+1 : await source.start(machine); }
-    const right = classifierKey && envelope!==null ? envelope : Math.max(envelope ?? until,await source.boundary(machine,from,until,padding));
-    const previous = await pool.query(`SELECT kind,name,start_time,end_time FROM segments WHERE machine=$1 AND kind='phase' AND start_time<=$2 ORDER BY start_time DESC LIMIT 1`,[machine,new Date(right/timeScale)]);
-    const tail=classifierKey ? await pool.query("SELECT max(end_time) AS end_time FROM segments WHERE machine=$1 AND kind='phase'",[machine]) : null;
-    const extended = classifierKey && envelope!==null ? envelope : Math.max(envelope ?? right,await segmentBoundary(pool,machine,right,previous.rows,timeScale),tail?.rows[0]?.end_time ? new Date(tail.rows[0].end_time).getTime()*timeScale : -Infinity);
+    const right = classifierKey && held!==null ? held : Math.max(held ?? until,await source.boundary(machine,from,until,padding));
+    const previous = await pool.query(`SELECT kind,name,start_time,end_time,duration FROM segments WHERE machine=$1 AND kind='phase' AND start_time<=$2 ORDER BY start_time DESC LIMIT 1`,[machine,new Date(right/timeScale)]);
+    const prior=previous.rows.at(-1);
+    const edge=classifierKey && prior && Number(prior.duration)===0 ? right : await segmentBoundary(pool,machine,right,previous.rows,timeScale);
+    const extended = classifierKey && held!==null ? held : Math.max(held ?? right,edge);
     const fence = !classifierKey && timeScale===1 ? await historyFence(pool, machine) : null;
     const end = fence!==null && until<fence ? Math.min(extended, fence-1) : extended;
-    if(classifierKey && claim && envelope===null){
+    if(classifierKey && claim && held===null){
         await pool.query('UPDATE history_work SET end_ms=$3 WHERE id=$1 AND machine=$2',[workId,machine,end]);
         range.end=end;
     }
@@ -64,5 +67,5 @@ export default async function historyContext(pool,machine,from,until,{padding,cu
     const last = observations.items.at(-1)?.time;
     const rightClosed = next === null && last !== undefined && segments.rows.some((row) => { return row.duration>0 && new Date(row.end_time).getTime()*timeScale>=last; });
     const snapshot = { page,initial,...(classifierKey && {classifierSeed:classifier}),annotations:annotations.rows,segments:segments.rows,...observations,rightClosed };
-    return { ...snapshot,available:true,revision:createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'),context:range };
+    return { ...snapshot,available:true,revision:historyRevision(snapshot, until, timeScale),context:range };
 }
