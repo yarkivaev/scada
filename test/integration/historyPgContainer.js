@@ -49,6 +49,19 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0017__history_live_covering.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
+    it('does not conflict a classifier claim after unstarted same-bucket work grows',async()=>{
+        const machine=`grow-ж-${Math.random().toString(36).slice(2,8)}`;
+        const time=Math.floor(Date.now()/30000)*30000-60000;
+        const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000])});
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time]);
+        const original=(await store.work(machine)).items[0];
+        const records=[{topic:`${machine}/power`,ts:time+1000,value:1}];
+        await store.prepare(records);await store.complete(records);
+        const snapshot=await store.context(machine,original.from,original.until,0,{classifierKey:'casting',workId:original.id,workToken:original.token});
+        const result=await store.commit(machine,original.id,[],{...snapshot.context,revision:snapshot.revision,workToken:original.token,replace:true,checkpoint:{key:'casting',at:snapshot.items.at(-1).time,state:{count:1}}});
+        assert.equal(result.applied,true,'grown unstarted work still conflicted its fetched classifier claim');
+    });
     it('pins a finite classifier generation while same-bucket appends get their own work',async()=>{
         const machine='finite-appends';const time=Math.floor(Date.now()/30000)*30000-60000;let offsets=[0,1000,5000];
         const store=historyPg(pool,{observations:()=>{return stagedSource(time,offsets)();}});
