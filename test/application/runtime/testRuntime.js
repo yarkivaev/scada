@@ -128,6 +128,17 @@ it('makes an explicitly fatal asynchronous transport event sticky until executor
     await runtime.stop();
 });
 
+it('records lastAccept when an assigned modbus reports a read', async () => {
+    const registry = new Map([['modbus', { validate() {}, resources() { return []; }, create(_spec, ctx) {
+        return { start() { ctx.report({ state: 'running', read: 1 }); }, stop() {} };
+    } }]]);
+    const runtime = createRuntime({ registry });
+    await runtime.apply({ taskId: `icht-${Math.floor(Math.random() * 1e6)}`, specVersion: 1, generation: 1, spec: { adapter: 'modbus' } });
+    const [task] = runtime.status().tasks;
+    await runtime.stop();
+    assert.equal(typeof task.lastAccept, 'number', 'assigned modbus did not record lastAccept');
+});
+
 it('gives adapters the control cursor from runtime options', async () => {
     let seen;
     const cursor = { load() { return { id: 91 }; }, save() { return undefined; } };

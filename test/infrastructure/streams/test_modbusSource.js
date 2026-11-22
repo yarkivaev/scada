@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import net from 'node:net';
 import { describe, it } from 'mocha';
+import ModbusRTU from 'modbus-serial';
 import modbusSource from '../../../src/infrastructure/streams/modbusSource.js';
 import fakeClock from './fakeClock.js';
 
@@ -418,6 +419,39 @@ describe('modbusSource', () => {
     const live = gate.live();
     await gate.close();
     assert.strictEqual(live, 0, 'stop during connect left a Modbus TCP socket open');
+  });
+
+  it('aborts a never-resolving holding-register read at the poll deadline', async function() {
+    this.timeout(2000);
+    const original = {
+      connectTCP: ModbusRTU.prototype.connectTCP,
+      readHoldingRegisters: ModbusRTU.prototype.readHoldingRegisters,
+      setTimeout: ModbusRTU.prototype.setTimeout,
+      destroy: ModbusRTU.prototype.destroy
+    };
+    let dropped = 0;
+    ModbusRTU.prototype.connectTCP = function connectTCP() { return Promise.resolve(); };
+    ModbusRTU.prototype.setTimeout = function setTimeout() {};
+    ModbusRTU.prototype.readHoldingRegisters = function readHoldingRegisters() { return new Promise(() => {}); };
+    ModbusRTU.prototype.destroy = function destroy(done) { dropped += 1; done?.(); };
+    const source = modbusSource(
+      '127.0.0.1',
+      1 + Math.floor(Math.random() * 60000),
+      0,
+      1,
+      0.05,
+      { accept() {} },
+      fakeClock(1000 + Math.floor(Math.random() * 900)),
+      { error() {} }
+    );
+    try {
+      source.start();
+      await settle(400);
+      assert.ok(dropped > 0, 'hung holding-register read was not aborted');
+    } finally {
+      await source.stop().catch(() => {});
+      Object.assign(ModbusRTU.prototype, original);
+    }
   });
 
   it('opens a new TCP socket after the device stays silent or drops the session', async function() {

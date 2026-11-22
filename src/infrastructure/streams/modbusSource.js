@@ -7,7 +7,8 @@ function read(bag, address, count) {
   return async function fetch(since, until, { signal } = {}) {
     const { client } = bag;
     try {
-      const result = await abortable(client.readHoldingRegisters(address, count), signal, () => { drop(client); });
+      const result = await deadline(abortable(client.readHoldingRegisters(address, count), signal, () => { drop(client); }),
+        Math.max(1, bag.interval * 1000), 'Modbus read', () => { drop(client); });
       return [result.data];
     } catch (err) {
       if (bag.client === client) { bag.lost(); }

@@ -71,7 +71,7 @@ export default async function runCollector({ registry, env = process.env, argv =
     try {
         if (env.COLLECTOR_HEALTH_PORT) { Object.assign(state, { health: await runtimeHealth(healthView(runtime, state), {
             port: Number(env.COLLECTOR_HEALTH_PORT), host: env.COLLECTOR_HEALTH_HOST ?? '127.0.0.1',
-            handle: spoolSurface(owned.deliveryQueue, env.STATE_HTTP_TOKEN) }) }); }
+            handle: spoolSurface(owned.deliveryQueue, env.STATE_HTTP_TOKEN), staleMs: Number(env.COLLECTOR_LIVE_STALE_MS ?? 30000) }) }); }
         const recoveryMs = Number(env.COLLECTOR_RECOVERY_TIMEOUT_MS ?? 900000);
         if (!Number.isSafeInteger(recoveryMs) || recoveryMs < 1) { throw new TypeError('Positive collector recovery timeout required'); }
         await deadline(() => { return initialize(collector, owned, state, { env, registry, store }); }, recoveryMs);
