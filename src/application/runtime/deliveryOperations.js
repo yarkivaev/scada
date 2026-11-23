@@ -13,19 +13,25 @@ function settings(options) {
     return config;
 }
 /** Bounded FIFO admission precedes serialization; every reservation includes actual in-flight writes. */
-/* eslint max-lines-per-function: ["error", 135], max-statements: ["error", 20] */
+/* eslint max-lines-per-function: ["error", 145], max-statements: ["error", 22] */
 export default function deliveryOperations(apply, options = {}) {
     const config = settings(options);
     const jobs = [];
+    const waiters = [];
     const state = { operations: 0, bytes: 0, running: false, timer: null, idle: null, wake: null };
-    function reserve() {
-        if (state.operations >= config.maxOperations) { throw new Error('Delivery operation capacity exceeded'); }
+    function notifyWait() {
+        if (waiters.length && state.operations < config.maxOperations) { state.operations += 1; waiters.shift()(); }
+    }
+    function occupy() {
+        if (state.operations >= config.maxOperations) { return false; }
         state.operations += 1;
+        return true;
     }
+    function wait() { return new Promise((resolve) => { waiters.push(resolve); }); }
     function notifyIdle() {
-        if (!state.operations && !state.running) { state.wake?.(); Object.assign(state, { idle: null, wake: null }); }
+        if (!state.operations && !state.running && !waiters.length) { state.wake?.(); Object.assign(state, { idle: null, wake: null }); }
     }
-    function release(bytes) { state.operations -= 1; state.bytes -= bytes; notifyIdle(); }
+    function release(bytes) { state.operations -= 1; state.bytes -= bytes; notifyWait(); notifyIdle(); }
     function settle(job, result) {
         release(job.reservedBytes ?? job.bytes);
         if (result.ok) { job.resolve(result.value); } else { job.reject(result.error); }
@@ -83,8 +89,7 @@ export default function deliveryOperations(apply, options = {}) {
         if (state.bytes + bytes + retainedBytes > config.maxPendingBytes) { throw new Error('Delivery pending byte capacity exceeded'); }
         if (bytes > config.maxBytes) { throw new Error('Delivery group byte capacity exceeded'); }
     }
-    function prepare(build) {
-        reserve();
+    function hold(build) {
         let value;
         try {
             value = build(checkBytes); checkBytes(value.bytes, value.retainedBytes);
@@ -100,14 +105,23 @@ export default function deliveryOperations(apply, options = {}) {
             cancel() { if (!settled) { settled = true; release(reservedBytes); } }
         };
     }
+    function prepare(build) {
+        if (occupy()) {
+            try { return hold(build); } catch (error) { return Promise.reject(error); }
+        }
+        return wait().then(() => { return hold(build); });
+    }
     return {
         prepare,
         mutate(build) {
-            try { return prepare(build).commit(); } catch (error) { return Promise.reject(error); }
+            if (occupy()) {
+                try { return hold(build).commit(); } catch (error) { return Promise.reject(error); }
+            }
+            return wait().then(() => { return hold(build).commit(); });
         },
         barrier(action) {
-            try { reserve(); return enqueue({ kind: 'barrier', action, bytes: 0 }); }
-            catch (error) { return Promise.reject(error); }
+            if (occupy()) { return enqueue({ kind: 'barrier', action, bytes: 0 }); }
+            return wait().then(() => { return enqueue({ kind: 'barrier', action, bytes: 0 }); });
         },
         flush() { if (jobs.length) { schedule(0); } },
         idle() {
