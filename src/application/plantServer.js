@@ -9,6 +9,7 @@ import userDecisions from '../infrastructure/messaging/stomp/userDecisions.js';
 import segmentRetags from '../infrastructure/messaging/stomp/segmentRetags.js';
 import { parseRequestTimeoutMs, virtualClock } from '@yarkivaev/simple-server';
 import inspectUpgrade from '../infrastructure/http/plant/inspect/inspectUpgrade.js';
+import gateTimelineBuses from './gateTimelineBuses.js';
 
 function stompCollectorFactory(stompUrl, destination, credentials) {
     return (collector) => {
@@ -49,7 +50,7 @@ function wireTimelineSegments(stomp, plant) {
     const credentials = { login: stomp.login, passcode: stomp.passcode, host: stomp.host };
     return stompTimelineSegments(
         stompCollectorFactory(stomp.url, timelineSegmentDestination, credentials),
-        buses
+        gateTimelineBuses(buses, postgresPool({}))
     );
 }
 
