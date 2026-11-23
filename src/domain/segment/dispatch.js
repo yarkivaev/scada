@@ -10,20 +10,20 @@ import { replaceSplit } from './splitFamily.js';
  * @returns {Promise<void>}
  */
 async function pendingInClient(segmentSink, closer, record, transaction) {
-    await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction);
+    await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction, record.name);
     await segmentSink.write([record], transaction);
 }
 async function persistPending(segmentSink, closer, pool, record) {
     const kind = record.kind || 'phase';
     if (!pool || typeof pool.connect !== 'function') {
-        await closer.close(record.machine, record.start_time, kind);
+        await closer.close(record.machine, record.start_time, kind, null, record.name);
         await segmentSink.write([record]);
         return;
     }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        await closer.close(record.machine, record.start_time, kind, client);
+        await closer.close(record.machine, record.start_time, kind, client, record.name);
         await segmentSink.write([record], client);
         await client.query('COMMIT');
     } catch (error) {

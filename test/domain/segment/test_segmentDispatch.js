@@ -77,6 +77,26 @@ describe('segmentDispatch', function() {
         assert.strictEqual(closer.calls.length, 1, 'open segment write did not close orphan rows first');
     });
 
+    it('passes the incoming name so a covering same-name open is not closed', async function() {
+        const closer = {
+            calls: [],
+            close(machine, start, kind, runner, name) {
+                this.calls.push({ machine, start, kind, runner, name });
+                return Promise.resolve();
+            }
+        };
+        const label = `off-${Math.random().toString(36).slice(2, 8)}`;
+        const route = segmentDispatch(fakeSink(), { accept() { return Promise.resolve(); } }, fakeSink(), closer);
+        await route.accept({
+            type: 'segment',
+            machine: `ičt-${Math.random()}`,
+            start_time: new Date(Math.floor(Math.random() * 1e12)).toISOString(),
+            duration: 0,
+            name: label
+        });
+        assert.strictEqual(closer.calls[0].name, label, 'orphan close did not receive the incoming segment name');
+    });
+
     it('runs orphan close and upsert in one transaction when pool is supplied', async function() {
         const steps = [];
         const client = {

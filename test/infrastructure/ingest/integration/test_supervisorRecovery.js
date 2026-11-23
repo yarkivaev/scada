@@ -228,7 +228,7 @@ describe('supervisor sink durable recovery integration', function() {
                 return result.rows[0].total === 2;
             });await until(empty);
             const result = await fixture.pool.query('SELECT duration FROM segments WHERE machine=$1 ORDER BY start_time', [machine]);
-            assert.deepEqual(result.rows.map(value => {return value.duration}), [1, 60]);
+            assert.deepEqual(result.rows.map(value => {return Number(value.duration)}), [60, 60]);
         });
         it('retains same-name continuity effects across a pending-to-terminal transition', async () => {
             const start = 4102448400000;const machine = 'transaction-continuity';
@@ -256,8 +256,9 @@ describe('supervisor sink durable recovery integration', function() {
                 return rows[0]?.end_time.getTime() === start + 3607000;
             });
             const result = await fixture.pool.query('SELECT duration,end_time FROM segments WHERE machine=$1 ORDER BY start_time', [machine]);
-            assert.deepEqual(result.rows.map(value => {return value.duration}), [1, 0]);
-            assert.deepEqual(result.rows.map(value => {return value.end_time.getTime()}), [start + 1000, start + 3607000]);
+            assert.deepEqual(result.rows.map(value => {return {
+                duration: Number(value.duration), end: value.end_time.getTime()
+            }}), [{ duration: 0, end: start + 3607000 }]);
         });
         it('commits segment, retag and split-family commands in their shared transaction', async () => {
             const start = 1700100000000;const machine = 'transaction-commands';
