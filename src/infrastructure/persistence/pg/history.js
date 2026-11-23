@@ -118,8 +118,8 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
             SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
             WHERE machine=$1 AND start_time<=$3 AND end_time>=$2
             ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine,new Date((latest?.context.page.from ?? base.from)/timeScale),new Date((latest?.context.page.until ?? base.until)/timeScale)]);
-        await historyAbsorb(client, machine, segments);
-        for (const item of segments) {
+        const folded = await historyAbsorb(client, machine, segments);
+        for (const item of folded) {
             // Only computed fields change. User cuts/labels must be applied by caller before commit.
             // eslint-disable-next-line no-await-in-loop
             await client.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed)
