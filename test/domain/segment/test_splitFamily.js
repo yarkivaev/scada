@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { checkSplit, familyCover, replaceSplit, splitRows } from '../../../src/domain/segment/splitFamily.js';
+import { checkSplit, familyCover, loadFamily, replaceSplit, splitRows } from '../../../src/domain/segment/splitFamily.js';
 
 function parent(start, end, duration) {
     return { name: 'off', start_time: start, end_time: end, duration };
@@ -153,5 +153,45 @@ describe('replaceSplit', function() {
             refused = err instanceof RangeError;
         }
         assert.deepStrictEqual({ refused, opened }, { refused: true, opened: false }, 'an empty split opened a transaction');
+    });
+
+    it('does not cast empty properties text as jsonb when deleting obsolete pieces', async function() {
+        const sql = [];
+        const client = {
+            query(text) {
+                if (/properties IS NOT NULL AND properties::jsonb/u.test(text)) {
+                    throw new Error('invalid input syntax for type json');
+                }
+                sql.push(text);
+                return Promise.resolve({ rowCount: 1 });
+            },
+            release() {
+                return undefined;
+            }
+        };
+        const pool = { connect() { return Promise.resolve(client); } };
+        const start = new Date('2026-11-22T13:31:58.231Z');
+        const end = new Date('2026-11-22T13:32:58.231Z');
+        const pieces = splitRows('ичт-2', checkSplit(parent(start, end, 60), [
+            piece(start, end, 'шлак')
+        ]));
+        await replaceSplit(pool, { machine: 'ичт-2', origin: start.getTime(), pieces });
+        assert.ok(sql.some(function (row) { return row.includes('DELETE FROM segments'); }), 'obsolete pieces were not deleted');
+    });
+});
+
+describe('loadFamily', function() {
+    it('loads a family when a sibling row stores empty properties text', async function() {
+        const start = new Date('2026-11-22T13:31:58.231Z');
+        const pool = {
+            query(sql) {
+                if (/properties IS NOT NULL AND properties::jsonb/u.test(sql)) {
+                    throw new Error('invalid input syntax for type json');
+                }
+                return { rows: [{ name: 'on', start_time: start, end_time: start, duration: 1, properties: '' }] };
+            }
+        };
+        const rows = await loadFamily(pool, 'ичт-2', start);
+        assert.equal(rows.length, 1, 'empty properties text aborted the family read');
     });
 });

@@ -147,7 +147,7 @@ async function removeObsolete(client, record) {
     await client.query(
         `DELETE FROM segments
          WHERE machine = $1 AND kind = 'phase'
-           AND (start_time = $2 OR (properties IS NOT NULL AND properties::jsonb ->> 'split_of' = $3))
+           AND (start_time = $2 OR (CASE WHEN left(btrim(COALESCE(properties, '')), 1) = '{' THEN properties::jsonb ->> 'split_of' END) = $3)
            AND NOT (start_time = ANY($4::timestamptz[]))`,
         [record.machine, origin, String(record.origin), starts]
     );
@@ -168,7 +168,7 @@ export async function loadFamily(pool, machine, start) {
         `SELECT name, start_time, end_time, duration, properties
          FROM segments
          WHERE machine = $1 AND kind = 'phase'
-           AND (start_time = $2 OR (properties IS NOT NULL AND properties::jsonb ->> 'split_of' = $3))
+           AND (start_time = $2 OR (CASE WHEN left(btrim(COALESCE(properties, '')), 1) = '{' THEN properties::jsonb ->> 'split_of' END) = $3)
          ORDER BY start_time`,
         [machine, start, String(start.getTime())]
     );
