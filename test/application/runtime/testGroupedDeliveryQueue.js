@@ -35,16 +35,17 @@ describe('grouped node delivery queue',()=>{
     it('keeps receipt reservations through confirmation and allows that receipt during graceful close',async()=>{
         const entered=gate();const confirmed=gate();const item=queue({maxOperations:1,factory(){return {async write(){entered.resolve();await confirmed.promise;}};}});
         await item.open();await item.accept({eventId:'a'},destinations);const draining=item.drain();await entered.promise;
-        try{await assert.rejects(item.accept({eventId:'b'},destinations),/capacity/u);}catch(error){confirmed.resolve();await draining;throw error;}
+        const second=item.accept({eventId:'b'},destinations);
         let closed=false;const closing=item.close().then(()=>{closed=true;});await pause(5);assert.equal(closed,false);
-        confirmed.resolve();assert.deepEqual(await draining,{delivered:1,failed:0});await closing;
-        const recovered=queue();await recovered.open();assert.equal(recovered.status().pending,0);
+        confirmed.resolve();assert.deepEqual(await draining,{delivered:1,failed:0});await second;await closing;
+        const recovered=queue();await recovered.open();assert.equal(recovered.status().pending,1);
     });
     it('checks count before snapshotting rejected callers and bounds retained pending bytes',async()=>{
         const item=queue({maxOperations:1});await item.open();const first=item.accept({eventId:'a'},destinations);let snapshots=0;
-        await assert.rejects(item.accept({eventId:'b',toJSON(){snapshots+=1;return {eventId:'b'};}},destinations),/capacity/u);assert.equal(snapshots,0);await first;await item.close();
+        const second=item.accept({eventId:'b',toJSON(){snapshots+=1;return {eventId:'b'};}},destinations);
+        assert.equal(snapshots,0);await first;await second;await item.close();
         const bytes=queue({maxPendingBytes:512});await bytes.open();const kept=bytes.accept({eventId:'small'},destinations);
-        await assert.rejects(bytes.accept({eventId:'large',value:'x'.repeat(1000)},destinations),/byte capacity/u);await kept;assert.equal(bytes.status().pending,2);
+        await assert.rejects(bytes.accept({eventId:'large',value:'x'.repeat(1000)},destinations),/byte capacity/u);await kept;assert.equal(bytes.status().pending,3);
     });
     it('rejects every grouped caller on SQLite failure without leaking ownership or a committed prefix',async()=>{
         const item=queue();await item.open();const db=new Database(path.join(directory,'delivery.sqlite'));
