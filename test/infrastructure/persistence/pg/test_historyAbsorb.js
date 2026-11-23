@@ -51,4 +51,9 @@ describe('historyAbsorb', function () {
         assert.match(body, /const folded = await historyAbsorb\(client, machine, segments\)/u,
             'history commit still inserted the raw later stream');
     });
+    it('drops covered unsplit duplicates after the furnace insert', function () {
+        const body = readFileSync(new URL('../../../../src/infrastructure/persistence/pg/history.js', import.meta.url), 'utf8');
+        assert.match(body, /await historyDedupe\(client, machine\)/u,
+            'history commit still left a later heating inside an earlier host');
+    });
 });
