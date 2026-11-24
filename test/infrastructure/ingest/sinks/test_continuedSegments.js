@@ -81,4 +81,30 @@ describe('continuedSegments', function() {
         }]);
         assert.strictEqual(store.written[0].start_time, priorStart, 'overlapping heating was stored as its own start');
     });
+
+    it('loads the previous row once for a same-machine batch', async function() {
+        let selects = 0;
+        const origin = 1_701_500_000_000 + Math.floor(Math.random() * 1e8);
+        const machine = `ičt-${Math.random()}`;
+        const pool = {
+            query() {
+                selects += 1;
+                return Promise.resolve({ rows: [] });
+            }
+        };
+        const store = sink();
+        await continuedSegments(store, pool, 30).write([
+            {
+                machine, kind: 'phase', name: 'on',
+                start_time: new Date(origin).toISOString(),
+                end_time: new Date(origin + 5_000).toISOString(), duration: 0
+            },
+            {
+                machine, kind: 'phase', name: 'on',
+                start_time: new Date(origin + 8_000).toISOString(),
+                end_time: new Date(origin + 12_000).toISOString(), duration: 0
+            }
+        ]);
+        assert.equal(selects, 1, 'a same-machine batch still queried latest for every record');
+    });
 });

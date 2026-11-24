@@ -126,6 +126,23 @@ describe('bounded segment batch scheduling', () => {
         await assert.rejects(pending, /stopped/u);release();await delay(5);
         assert.deepEqual(test.acked, []);assert.deepEqual(test.failures, []);
     });
+    it('accumulates one waiting packet on a busy lane instead of age-slicing it', async () => {
+        let release;
+        const test = fixture({ maxMessages: 8, maxWaitMs: 20, concurrency: 1 }, async () => {
+            if (!release) { await new Promise(resolve => { release = resolve; }); }
+        });
+        try {
+            const first = test.send(0);
+            await delay(40);
+            const second = test.send(1);
+            await delay(50);
+            const rest = [test.send(2), test.send(3)];
+            release();
+            await Promise.all([first, second, ...rest]);
+            assert.equal(test.writes.length, 2, 'busy lane still opened extra transactions');
+            assert.equal(test.writes[1].length, 3, 'age still sliced the waiting lane buffer');
+        } finally { release?.();await test.batch.stop(); }
+    });
     it('limits concurrent transactions even when more independent machines are ready', async () => {
         let active = 0;let peak = 0;const gates = [];
         const test = fixture({ maxMessages: 1, concurrency: 2 }, async () => {

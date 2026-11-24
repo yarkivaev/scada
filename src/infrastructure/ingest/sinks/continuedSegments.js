@@ -38,12 +38,17 @@ export default function continuedSegments(inner, pool, budgetSeconds) {
         async write(records, client) {
             const runner = client && typeof client.query === 'function' ? client : pool;
             const next = await records.reduce(async (prior, record) => {
-                const rows = await prior;
-                const previous = await latest(runner, record);
-                rows.push(apply(record, previous));
-                return rows;
-            }, Promise.resolve([]));
-            return inner.write(next, client);
+                const { rows, seen } = await prior;
+                const key = `${record.machine}\0${record.kind || 'phase'}`;
+                if (!seen.has(key)) {
+                    seen.set(key, await latest(runner, record));
+                }
+                const row = apply(record, seen.get(key));
+                seen.set(key, row);
+                rows.push(row);
+                return { rows, seen };
+            }, Promise.resolve({ rows: [], seen: new Map() }));
+            return inner.write(next.rows, client);
         }
     };
 }

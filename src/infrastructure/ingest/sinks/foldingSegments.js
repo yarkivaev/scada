@@ -1,10 +1,21 @@
-import historyAbsorb, { historyDedupe, span } from '../../persistence/pg/historyAbsorb.js';
+import historyFold from '../../../domain/segment/historyFold.js';
+import historyAbsorb from '../../persistence/pg/historyAbsorb.js';
+
+function uniqueStarts(records) {
+    const kept = new Map();
+    for (const row of records) {
+        const key = `${row.machine}\0${row.kind || 'phase'}\0${new Date(row.start_time).toISOString()}`;
+        const prev = kept.get(key);
+        if (!prev || Date.parse(row.end_time) >= Date.parse(prev.end_time)) {
+            kept.set(key, row);
+        }
+    }
+    return [...kept.values()];
+}
 
 async function foldMachine(runner, machine, batch) {
     await runner.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`history:${machine}`]);
-    const folded = await historyAbsorb(runner, machine, batch);
-    await historyDedupe(runner, machine, span(batch));
-    return folded;
+    return historyAbsorb(runner, machine, uniqueStarts(historyFold([], batch)));
 }
 
 function grouped(records) {
@@ -25,11 +36,18 @@ function foldAll(runner, groups) {
     }, Promise.resolve([]));
 }
 
+function stamped(records) {
+    const now = new Date().toISOString();
+    return records.map((row) => {
+        return { ...row, updated_at: row.updated_at ?? now };
+    });
+}
+
 async function writeOwned(pool, inner, records) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const next = await foldAll(client, grouped(records));
+        const next = stamped(uniqueStarts(await foldAll(client, grouped(records))));
         const result = await inner.write(next, client);
         await client.query('COMMIT');
         return result;
@@ -56,7 +74,7 @@ export default function foldingSegments(inner, pool) {
     return {
         async write(records, client) {
             if (client && typeof client.query === 'function') {
-                return inner.write(await foldAll(client, grouped(records)), client);
+                return inner.write(stamped(uniqueStarts(await foldAll(client, grouped(records)))), client);
             }
             return writeOwned(pool, inner, records);
         }
