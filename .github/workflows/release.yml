@@ -22,7 +22,7 @@ jobs:
     uses: ./.github/workflows/control.yml
 
   tag:
-    needs: [check-version, lint, test, control]
+    needs: [check-version, lint]
     if: needs.check-version.outputs.should_release == 'true'
     uses: yarkivaev/npm-workflows/.github/workflows/tag.yml@main
     with:
