@@ -1,42 +1,38 @@
-function tagText(tags) {
-    if (tags === undefined || tags === null || tags === '') {
-        return '[]';
-    }
-    return typeof tags === 'string' ? tags : JSON.stringify(tags);
+import historyFold from '../domain/segment/historyFold.js';
+
+function instant(value) {
+    return new Date(value).getTime();
 }
 
-function splitOf(seg) {
-    const raw = seg.properties;
-    const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
-    return text.includes('"split_of"');
+function own(folded, seg) {
+    const start = instant(seg.start_time);
+    const end = instant(seg.end_time);
+    return folded.some((row) => {
+        return instant(row.start_time) === start && instant(row.end_time) === end;
+    });
+}
+
+function staleOpen(seg, stored) {
+    return Number(seg.duration) === 0 && stored.some((row) => {
+        return instant(row.start_time) > instant(seg.start_time);
+    });
+}
+
+function overlapSql() {
+    return `SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed
+         FROM segments WHERE machine=$1 AND kind='phase'
+           AND ((start_time<$3 AND end_time>$2) OR ($4 = 0 AND start_time>$2))`;
 }
 
 function covered(pool, machine, seg) {
-    if (splitOf(seg)) {
-        return Promise.resolve(false);
-    }
-    const tags = tagText(seg.tags);
-    return pool.query(
-        `SELECT 1 FROM segments
-         WHERE machine=$1 AND kind='phase'
-           AND (
-             (name=$2
-              AND CASE WHEN coalesce(tags, '') IN ('', '[]') THEN '[]' ELSE tags END
-                = CASE WHEN coalesce($3, '') IN ('', '[]') THEN '[]' ELSE $3 END
-              AND coalesce(properties, '') NOT LIKE '%"split_of"%'
-              AND $4::timestamptz > start_time
-              AND $4::timestamptz < end_time)
-             OR (coalesce($5, 0) = 0 AND start_time > $4::timestamptz)
-             OR (coalesce($3, '') IN ('', '[]')
-                 AND name=$2
-                 AND coalesce(tags, '') NOT IN ('', '[]')
-                 AND $4::timestamptz < end_time
-                 AND start_time < $6::timestamptz)
-           )
-         LIMIT 1`,
-        [machine, seg.name, tags, seg.start_time, Number(seg.duration), seg.end_time || seg.start_time]
-    ).then((result) => {
-        return result.rowCount > 0;
+    const start = seg.start_time;
+    const finish = seg.end_time || seg.start_time;
+    return pool.query(overlapSql(), [machine, start, finish, Number(seg.duration)]).then((result) => {
+        const stored = result.rows;
+        if (staleOpen(seg, stored)) {
+            return true;
+        }
+        return !own(historyFold(stored, [seg]), seg);
     });
 }
 
@@ -53,17 +49,17 @@ function gatedBus(bus, pool, machine) {
                     bus.emit(event);
                 }
             }).catch(() => {
-                bus.emit(event);
+                return undefined;
             });
         }
     };
 }
 
 /**
- * Drops STOMP timeline events that Postgres would refuse to store.
+ * Drops STOMP timeline events whose start would not survive historyFold.
  *
- * Covered same-name starts, stale duration-0 covers, and untagged
- * offs that overlap a tagged host never reach HMI or monitoring SSE.
+ * Covered starts, stale duration-0 covers, and empty spans that fold
+ * clips away never reach HMI or monitoring SSE. SELECT errors stay closed.
  *
  * @param {object} buses - machine id to timeline bus
  * @param {object} pool - postgres pool with query()

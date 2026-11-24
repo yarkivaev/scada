@@ -99,12 +99,18 @@ async function persistOne(state, entry, packet) {
         refuse(state, entry, failure);
     }
 }
+function retryable(error) {
+    return error.code === 'OPERATION_TIMEOUT' || /timed out/u.test(error.message);
+}
 async function runPacket(state, packet) {
     try { await persist(state, packet.entries, packet); }
     catch (error) {
+        if (retryable(error) && !state.stopped) {
+            packet.entries.forEach((entry) => { refuse(state, entry, error); });
+            return;
+        }
         if (!error.permanent || state.stopped) { throw error; }
         notify(state.onBatch, { committed: false, messages: packet.messages, records: packet.entries.length, reason: 'rollback' });
-        // Confirmed permanent failure: isolate the bad command after the batch rollback.
         for (const entry of packet.entries) {
             // eslint-disable-next-line no-await-in-loop
             await persistOne(state, entry, packet);

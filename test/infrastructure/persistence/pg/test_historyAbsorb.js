@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { readFileSync } from 'node:fs';
-import historyAbsorb from '../../../../src/infrastructure/persistence/pg/historyAbsorb.js';
+import historyAbsorb, { historyDedupe } from '../../../../src/infrastructure/persistence/pg/historyAbsorb.js';
 
 function phase(name, start, end, tags) {
     return {
@@ -53,7 +53,31 @@ describe('historyAbsorb', function () {
     });
     it('drops covered unsplit duplicates after the furnace insert', function () {
         const body = readFileSync(new URL('../../../../src/infrastructure/persistence/pg/history.js', import.meta.url), 'utf8');
-        assert.match(body, /await historyDedupe\(client, machine\)/u,
+        assert.match(body, /await historyDedupe\(client, machine, span\(segments\)\)/u,
             'history commit still left a later heating inside an earlier host');
+    });
+    it('deletes a stored empty start that fold dropped', async function () {
+        const origin = 1_702_840_000_000 + Math.floor(Math.random() * 1e8);
+        const cover = phase('off', origin + 100, origin + 5_000, []);
+        const tagged = phase('off', origin, origin + 15_000, ['to_ladle'], { split_of: String(origin) });
+        const client = fakeClient([cover]);
+        await historyAbsorb(client, 'печь-α', [tagged]);
+        assert.deepEqual(client.state.deleted, [cover.start_time],
+            'a fully covered empty start stayed in storage');
+    });
+    it('does not scan unsplit phases outside the batch span', async function () {
+        const origin = 1_702_700_000_000 + Math.floor(Math.random() * 1e8);
+        const finish = origin + 15_791;
+        const calls = [];
+        const client = {
+            async query(sql, params) {
+                calls.push({ sql, params });
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        await historyDedupe(client, 'печь-α', { start: origin, end: finish });
+        assert.equal(calls.every((item) => {
+            return item.params[1].getTime() === origin && item.params[2].getTime() === finish;
+        }), true, 'dedupe still scanned unsplit phases outside the batch span');
     });
 });

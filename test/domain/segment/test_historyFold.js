@@ -25,8 +25,14 @@ describe('historyFold', function () {
         const finish = stamp(origin, 36_000);
         const stored = [phase('on', start, stamp(origin, 25_000), ['нагрев-α'])];
         const incoming = [phase('on', inner, finish, [])];
-        assert.equal(historyFold(stored, incoming).length, 1,
-            'a later stream opened a second heating over a tagged interval');
+        const folded = historyFold(stored, incoming);
+        const crossed = folded.some((left, i) => {
+            return folded.slice(i + 1).some((right) => {
+                return Date.parse(left.start_time) < Date.parse(right.end_time)
+                    && Date.parse(right.start_time) < Date.parse(left.end_time);
+            });
+        });
+        assert.equal(crossed, false, 'a later stream opened a second heating over a tagged interval');
     });
     it('keeps the operator tag while a later stream extends heating', function () {
         const origin = 1_701_600_000_000 + Math.floor(Math.random() * 1e8);
@@ -36,14 +42,16 @@ describe('historyFold', function () {
         assert.equal(historyFold(stored, incoming)[0].tags, JSON.stringify(['нагрев-β']),
             'a later stream replaced the operator heating tag');
     });
-    it('moves the tagged heating end with a later stream', function () {
+    it('keeps later empty heating coverage after a tagged interval', function () {
         const origin = 1_701_700_000_000 + Math.floor(Math.random() * 1e8);
         const start = stamp(origin, 0);
         const finish = stamp(origin, 40_000);
         const stored = [phase('on', start, stamp(origin, 20_000), ['нагрев-γ'])];
         const incoming = [phase('on', stamp(origin, 8_000), finish, [])];
-        assert.equal(Date.parse(historyFold(stored, incoming)[0].end_time), Date.parse(finish),
-            'a later stream left the tagged heating end behind');
+        const folded = historyFold(stored, incoming);
+        const end = Math.max(...folded.map((row) => { return Date.parse(row.end_time); }));
+        assert.equal(end, Date.parse(finish),
+            'a later stream left uncovered time after a tagged heating');
     });
     it('does not move an internal split cut', function () {
         const origin = 1_701_800_000_000 + Math.floor(Math.random() * 1e8);
@@ -87,13 +95,15 @@ describe('historyFold', function () {
         assert.equal(historyFold(stored, []).length, 1,
             'overlapping unsplit heatings stayed as two rows');
     });
-    it('drops an empty covering off when a tagged split arrives', function () {
+    it('clips an empty covering off around a tagged split', function () {
         const origin = 1_702_200_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', stamp(origin, 0), stamp(origin, 15_000), []);
         const pour = phase('off', stamp(origin, 700), stamp(origin, 15_000), ['to_ladle'], { split_of: String(origin) });
         const folded = historyFold([cover], [pour]);
-        assert.equal(folded.length === 1 && folded[0].tags, JSON.stringify(['to_ladle']),
-            'an empty covering off stayed beside a tagged ladle split');
+        const tagged = folded.find((row) => { return row.tags === JSON.stringify(['to_ladle']); });
+        const start = Math.min(...folded.map((row) => { return Date.parse(row.start_time); }));
+        assert.equal(Boolean(tagged) && start === origin, true,
+            'an empty covering off stayed over a tagged ladle split');
     });
     it('treats empty tags and an empty array as the same tag', function () {
         const origin = 1_702_300_000_000 + Math.floor(Math.random() * 1e8);
@@ -109,5 +119,54 @@ describe('historyFold', function () {
         const folded = historyFold([heat], [rest]);
         assert.equal(Date.parse(folded.find((row) => { return row.name === 'on'; }).end_time), origin + 10_000,
             'heating still overlapped the later off');
+    });
+    it('does not merge two unsplit offs that carry different tags', function () {
+        const origin = 1_702_800_000_000 + Math.floor(Math.random() * 1e8);
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-δ']);
+        const second = phase('off', stamp(origin, 4_000), stamp(origin, 12_000), ['шлак-δ']);
+        const folded = historyFold([first], [second]);
+        const tags = folded.map((row) => { return row.tags; }).sort();
+        assert.deepEqual(tags, [JSON.stringify(['в_ковш-δ']), JSON.stringify(['шлак-δ'])].sort(),
+            'different tagged offs collapsed onto one row');
+    });
+    it('does not leave overlapping offs with different nonempty tags', function () {
+        const origin = 1_702_810_000_000 + Math.floor(Math.random() * 1e8);
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-ε']);
+        const second = phase('off', stamp(origin, 4_000), stamp(origin, 12_000), ['шлак-ε']);
+        const folded = historyFold([first], [second]);
+        const crossed = folded.some((left, i) => {
+            return folded.slice(i + 1).some((right) => {
+                return Date.parse(left.start_time) < Date.parse(right.end_time)
+                    && Date.parse(right.start_time) < Date.parse(left.end_time);
+            });
+        });
+        assert.equal(crossed, false, 'different tagged offs still overlapped after fold');
+    });
+    it('keeps exclusive empty tails beside a nested tagged off', function () {
+        const origin = 1_702_820_000_000 + Math.floor(Math.random() * 1e8);
+        const cover = phase('off', stamp(origin, 0), stamp(origin, 15_000), []);
+        const tagged = phase('off', stamp(origin, 700), stamp(origin, 4_000), ['to_ladle']);
+        const folded = historyFold([cover], [tagged]);
+        const start = Math.min(...folded.map((row) => { return Date.parse(row.start_time); }));
+        const finish = Math.max(...folded.map((row) => { return Date.parse(row.end_time); }));
+        assert.equal(start === origin && finish === origin + 15_000, true,
+            'clipping a tagged off dropped exclusive empty tails');
+    });
+    it('does not drop a stored heating when a later empty off covers it', function () {
+        const origin = 1_702_880_000_000 + Math.floor(Math.random() * 1e8);
+        const heat = phase('on', stamp(origin, 1_000), stamp(origin, 5_000), ['heating']);
+        const cover = phase('off', stamp(origin, 0), stamp(origin, 15_000), []);
+        const folded = historyFold([heat], [cover]);
+        assert.equal(folded.some((row) => { return row.name === 'on'; }), true,
+            'a later empty off deleted a stored heating');
+    });
+    it('does not open a hole in off when heating overlaps it', function () {
+        const origin = 1_702_830_000_000 + Math.floor(Math.random() * 1e8);
+        const heat = phase('on', stamp(origin, 0), stamp(origin, 20_000), ['heating']);
+        const rest = phase('off', stamp(origin, 10_000), stamp(origin, 15_000), ['to_ladle']);
+        const folded = historyFold([heat], [rest]);
+        const off = folded.find((row) => { return row.name === 'off'; });
+        assert.equal(Date.parse(off.start_time) === origin + 10_000 && Date.parse(off.end_time) === origin + 15_000,
+            true, 'overlapping heating punched a hole in off');
     });
 });

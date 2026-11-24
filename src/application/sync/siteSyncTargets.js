@@ -1,4 +1,5 @@
 import { postgresSink } from '../../infrastructure/streams/index.js';
+import foldingSegments from '../../infrastructure/ingest/sinks/foldingSegments.js';
 import {
     alertRow,
     listedItems,
@@ -22,11 +23,11 @@ import {
  *   siteSyncTargets({ operations, postgres, pool, alerts, metrics, topic });
  */
 function segmentTarget(postgres, pool) {
-    const sink = postgresSink(postgres, 'segments', segmentColumns, {
+    const sink = foldingSegments(postgresSink(postgres, 'segments', segmentColumns, {
         pool,
         conflict: segmentConflict,
         update: segmentUpdateColumns
-    });
+    }), pool);
     return {
         async write(machine, body) {
             const rows = listedItems(body).map((item) => {

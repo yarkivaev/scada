@@ -1,5 +1,5 @@
 import nativeHistoryBounds, {nativeTailProtocol} from './historyNativeBounds.js';
-import historyAbsorb, {historyDedupe} from './historyAbsorb.js';
+import historyAbsorb, {historyDedupe, span} from './historyAbsorb.js';
 import historyFence from './historyFence.js';
 import retainMetricReceipts from '../../ingest/db/retainMetricReceipts.js';
 import historyContext from './historyContext.js';
@@ -111,7 +111,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
         }
         if(base?.replace){
             const next=await historyCorrection(client,machine,work.rows[0],segments,{base,context:latest,timeScale});
-            await historyDedupe(client, machine);
+            if (segments.length) { await historyDedupe(client, machine, span(segments)); }
             await advance(client,machine,workId,next);
             return {applied:true};
         }
@@ -134,7 +134,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
                 typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags ?? null),
                 typeof item.properties === 'string' ? item.properties : JSON.stringify(item.properties ?? null), item.resolved ?? true, item.consumed ?? true]);
         }
-        await historyDedupe(client, machine);
+        if (segments.length) { await historyDedupe(client, machine, span(segments)); }
         const converged=await saveCheckpoint(client,machine,base?.checkpoint,latest);
         await advance(client,machine,workId,converged ? {next:null} : latest?.context.page);
         return { applied: true };

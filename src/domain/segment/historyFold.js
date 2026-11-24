@@ -125,12 +125,18 @@ function dropEmptyCovers(rows, item) {
     if (emptyUnsplit(item)) {
         return rows;
     }
-    return rows.filter((row) => {
-        return row.name !== item.name || !overlaps(row, item) || !emptyUnsplit(row);
+    return rows.flatMap((row) => {
+        if (row.name !== item.name || !overlaps(row, item) || !emptyUnsplit(row)) {
+            return [row];
+        }
+        return subtract(row, item);
     });
 }
 
 function clipForeign(rows, item) {
+    if (emptyUnsplit(item)) {
+        return rows;
+    }
     return rows.flatMap((row) => {
         return row.name === item.name ? [row] : subtract(row, item);
     });
@@ -141,7 +147,7 @@ function hostOf(rows, item) {
         return row.name === item.name && overlaps(row, item);
     });
     if (same.some((row) => {
-        return covers(row, item);
+        return covers(row, item) && tagsOf(row) === tagsOf(item);
     })) {
         return { kind: 'cover' };
     }
@@ -151,8 +157,11 @@ function hostOf(rows, item) {
     if (split) {
         return { kind: 'split', host: tail(rows, split) };
     }
-    if (same.length) {
-        return { kind: 'merge', host: same.reduce((best, row) => {
+    const mergeable = same.filter((row) => {
+        return !splitKey(row) && tagsOf(row) === tagsOf(item);
+    });
+    if (mergeable.length) {
+        return { kind: 'merge', host: mergeable.reduce((best, row) => {
             return instant(row.start_time) < instant(best.start_time) ? row : best;
         }) };
     }
@@ -175,7 +184,7 @@ function place(rows, item) {
     }
     const clipped = clipForeign(pruned, item);
     const blockers = clipped.filter((row) => {
-        return row.name !== item.name;
+        return row.name !== item.name || tagsOf(row) !== tagsOf(item);
     });
     return clipped.concat(clip(copy(item), blockers));
 }

@@ -105,6 +105,17 @@ describe('bounded segment batch scheduling', () => {
             assert.deepEqual(test.failures, [failure]);assert.deepEqual(test.acked, []);
         } finally { await test.batch.stop(); }
     });
+    it('nacks a timed-out batch without fencing the sink', async () => {
+        const failure = Object.assign(new Error('Segment transaction timed out; outcome uncertain'),
+            { code: 'OPERATION_TIMEOUT' });
+        const test = fixture({ maxMessages: 1 }, async () => { throw failure; });
+        try {
+            await Promise.allSettled([test.send(0)]);
+            await delay(5);
+            assert.equal(test.failures.length === 0 && test.nacked[0]?.requeue === true, true,
+                'a timed-out batch still killed the sink instead of nacking for retry');
+        } finally { await test.batch.stop(); }
+    });
     it('bounds shutdown and prevents late acknowledgements after abort', async () => {
         let release;
         const test = fixture({ maxMessages: 1, stopTimeoutMs: 15 }, async () => {
