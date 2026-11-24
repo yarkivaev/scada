@@ -47,4 +47,19 @@ describe('segment transaction connection ownership', () => {
         assert.equal(failures.length === 0 && connects === 2, true,
             'a later batch stayed blocked after a timeout');
     });
+    it('hands a segment batch to acceptMany in one call', async function() {
+        const batches = [];
+        const client = new EventEmitter();
+        client.query = async () => { return { rows: [] }; };
+        client.release = () => {};
+        const writer = segmentTransaction({ connect() { return client; } }, {
+            acceptMany(records) { batches.push(records.length);return Promise.resolve(); },
+            accept() { throw new Error('per-record accept must not run'); }
+        }, { timeoutMs: 1000 });
+        await writer.write([
+            { type: 'segment', machine: `печь-${Math.random()}` },
+            { type: 'segment', machine: `ковш-${Math.random()}` }
+        ]);
+        assert.deepEqual(batches, [2], 'the transaction still folded each record separately');
+    });
 });

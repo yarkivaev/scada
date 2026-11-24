@@ -1,4 +1,47 @@
 import { replaceSplit } from './splitFamily.js';
+import historyFold from './historyFold.js';
+import segmentContinue from './segmentContinue.js';
+
+function uniqueStarts(records) {
+    const kept = new Map();
+    for (const row of records) {
+        const key = `${row.machine}\0${row.kind || 'phase'}\0${new Date(row.start_time).toISOString()}`;
+        const prev = kept.get(key);
+        if (!prev || Date.parse(row.end_time) >= Date.parse(prev.end_time)) {
+            kept.set(key, row);
+        }
+    }
+    return [...kept.values()];
+}
+
+function grouped(records) {
+    const groups = new Map();
+    for (const record of records) {
+        const batch = groups.get(record.machine) ?? [];
+        batch.push(record);
+        groups.set(record.machine, batch);
+    }
+    return groups;
+}
+
+function continued(records) {
+    const apply = segmentContinue(30);
+    const seen = new Map();
+    return records.map((record) => {
+        const key = `${record.machine}\0${record.kind || 'phase'}`;
+        const row = apply(record, seen.get(key));
+        seen.set(key, row);
+        return row;
+    });
+}
+
+function collapsed(records) {
+    const next = [];
+    for (const batch of grouped(continued(records)).values()) {
+        next.push(...uniqueStarts(historyFold([], batch)));
+    }
+    return next;
+}
 
 /**
  * Persists a pending heartbeat, optionally inside one pool transaction.
@@ -58,6 +101,26 @@ async function acceptFamily(pool, record, transaction) {
     await replaceSplit(pool, record, transaction);
 }
 
+/** Closes orphan opens for pending heartbeats before a batched upsert. */
+async function closePending(closer, records, transaction) {
+    for (const record of records) {
+        if (record.duration === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction || null, record.name);
+        }
+    }
+}
+
+/** Writes a consecutive run of phase records through one sink call. */
+async function writeOwned(segmentSink, closer, records, transaction) {
+    if (!records.length) {
+        return;
+    }
+    const folded = collapsed(records);
+    await closePending(closer, folded, transaction);
+    await segmentSink.write(folded, transaction);
+}
+
 export default function segmentDispatch(segmentSink, retag, splitSink, closer, pool) {
     return {
         async accept(record, transaction) {
@@ -81,6 +144,20 @@ export default function segmentDispatch(segmentSink, retag, splitSink, closer, p
                 return;
             }
             await (transaction ? pendingInClient(segmentSink, closer, record, transaction) : persistPending(segmentSink, closer, pool, record));
+        },
+        async acceptMany(records, transaction) {
+            const phases = [];
+            for (const record of records) {
+                if (record.type === 'segment') {
+                    phases.push(record);
+                } else {
+                    // eslint-disable-next-line no-await-in-loop
+                    await writeOwned(segmentSink, closer, phases.splice(0), transaction);
+                    // eslint-disable-next-line no-await-in-loop
+                    await this.accept(record, transaction);
+                }
+            }
+            await writeOwned(segmentSink, closer, phases, transaction);
         }
     };
 }

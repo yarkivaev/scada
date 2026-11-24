@@ -27,6 +27,10 @@ async function rollback(token) {
     }
 }
 async function apply(dispatch, records, token) {
+    if (typeof dispatch.acceptMany === 'function') {
+        await dispatch.acceptMany(records, token.runner);
+        return;
+    }
     for (const record of records) {
         // eslint-disable-next-line no-await-in-loop
         await dispatch.accept(record, token.runner);

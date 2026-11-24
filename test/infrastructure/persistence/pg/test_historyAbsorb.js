@@ -80,4 +80,50 @@ describe('historyAbsorb', function () {
             return item.params[1].getTime() === origin && item.params[2].getTime() === finish;
         }), true, 'dedupe still scanned unsplit phases outside the batch span');
     });
+    it('selects machine with overlapping stored phases', async function () {
+        const origin = 1_702_900_000_000 + Math.floor(Math.random() * 1e8);
+        const calls = [];
+        const client = {
+            async query(sql) {
+                calls.push(sql);
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        await historyAbsorb(client, `печь-${Math.random()}`, [phase('off', origin, origin + 4_000, [])]);
+        assert.match(calls[0], /SELECT[^;]*\bmachine\b/u,
+            'absorb still loaded stored phases without machine');
+    });
+    it('loads stored phases against incoming windows not the convex hull', async function () {
+        const origin = 1_703_000_000_000 + Math.floor(Math.random() * 1e8);
+        const calls = [];
+        const client = {
+            async query(sql, params) {
+                calls.push({ sql, params });
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        await historyAbsorb(client, `печь-${Math.random()}`, [
+            phase('off', origin, origin + 2_000, []),
+            phase('on', origin + 3_600_000, origin + 3_602_000, ['нагрев'])
+        ]);
+        const starts = calls[0].params[1];
+        assert.equal(Array.isArray(starts) && starts.length === 2, true,
+            'absorb still scanned the convex hull between disjoint incoming windows');
+    });
+    it('does not merge abutting incoming windows into one hull', async function () {
+        const origin = 1_703_100_000_000 + Math.floor(Math.random() * 1e8);
+        const calls = [];
+        const client = {
+            async query(sql, params) {
+                calls.push({ sql, params });
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        await historyAbsorb(client, `печь-${Math.random()}`, [
+            phase('off', origin, origin + 2_000, []),
+            phase('on', origin + 2_000, origin + 5_000, ['нагрев'])
+        ]);
+        assert.equal(calls[0].params[1].length, 2,
+            'abutting windows were still fused into a hull');
+    });
 });

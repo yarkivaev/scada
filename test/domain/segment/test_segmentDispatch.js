@@ -165,4 +165,81 @@ describe('segmentDispatch', function() {
             'missing segment command type did not throw'
         );
     });
+
+    it('closes orphans once for a repeated heartbeat start', async function() {
+        const closer = fakeCloser();
+        const route = segmentDispatch(fakeSink(), { accept() { return Promise.resolve(); } }, fakeSink(), closer);
+        const machine = `печь-${Math.random()}`;
+        const origin = 1_700_000_000_000 + Math.floor(Math.random() * 1e8);
+        const start = new Date(origin).toISOString();
+        await route.acceptMany([1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
+            return {
+                type: 'segment', machine, kind: 'phase', name: 'on',
+                start_time: start, end_time: new Date(origin + i * 800).toISOString(),
+                duration: 0, tags: '[]', properties: '{}'
+            };
+        }));
+        assert.equal(closer.calls.length, 1, 'heartbeat batch still closed orphans once per raw message');
+    });
+    it('writes one row for abutting heartbeats of the same name', async function() {
+        const segment = fakeSink();
+        const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser());
+        const machine = `печь-${Math.random()}`;
+        const origin = 1_700_000_000_000 + Math.floor(Math.random() * 1e8);
+        await route.acceptMany([1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
+            return {
+                type: 'segment', machine, kind: 'phase', name: 'on',
+                start_time: new Date(origin + (i - 1) * 800).toISOString(),
+                end_time: new Date(origin + i * 800).toISOString(),
+                duration: 0, tags: '[]', properties: '{}'
+            };
+        }));
+        assert.equal(segment.written.length, 1, 'abutting heartbeats still wrote a row per sample start');
+    });
+    it('writes one folded row for a repeated heartbeat start', async function() {
+        const segment = fakeSink();
+        const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser());
+        const machine = `ковш-${Math.random()}`;
+        const origin = 1_700_000_000_000 + Math.floor(Math.random() * 1e8);
+        const start = new Date(origin).toISOString();
+        await route.acceptMany([1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
+            return {
+                type: 'segment', machine, kind: 'phase', name: 'off',
+                start_time: start, end_time: new Date(origin + i * 900).toISOString(),
+                duration: 0, tags: '[]', properties: '{}'
+            };
+        }));
+        assert.equal(segment.written.length, 1, 'heartbeat batch still wrote every raw STOMP row');
+    });
+    it('writes a batch of segments in one sink call', async function() {
+        let writes = 0;
+        const segment = {
+            write(records) {
+                writes += 1;
+                return Promise.resolve(records);
+            }
+        };
+        const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser());
+        const machine = `печь-${Math.random()}`;
+        await route.acceptMany([
+            { type: 'segment', machine, start_time: '2024-01-01T00:00:00.000Z', duration: 60 },
+            { type: 'segment', machine, start_time: '2024-01-01T00:02:00.000Z', duration: 45 }
+        ]);
+        assert.equal(writes, 1, 'a batch of segments still folded one record at a time');
+    });
+
+    it('flushes buffered segments before a split in the same batch', async function() {
+        const order = [];
+        const segment = { write(records) { order.push(`seg:${records.length}`); return Promise.resolve(); } };
+        const split = { write(records) { order.push(`split:${records.length}`); return Promise.resolve(); } };
+        const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, split, fakeCloser());
+        const machine = `ковш-${Math.random()}`;
+        await route.acceptMany([
+            { type: 'segment', machine, start_time: '2024-01-01T00:00:00.000Z', duration: 12 },
+            { type: 'split', machine, start_time: '2024-01-01T00:01:00.000Z' },
+            { type: 'segment', machine, start_time: '2024-01-01T00:02:00.000Z', duration: 18 }
+        ]);
+        assert.deepEqual(order, ['seg:1', 'split:1', 'seg:1'],
+            'a split was folded into the surrounding segment batch');
+    });
 });

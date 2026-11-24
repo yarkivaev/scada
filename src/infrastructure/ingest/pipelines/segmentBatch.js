@@ -62,14 +62,25 @@ function ready(state, lane, packet, reason) {
     if (state.stopped || packet.ready) { return; }
     packet.ready = true;packet.reason = reason;clearTimeout(packet.timer);queueReady(state, lane);
 }
+function scheduleAge(state, lane, packet) {
+    packet.timer = setTimeout(() => {
+        if (state.stopped || packet.ready) { return; }
+        if (lane.running) { scheduleAge(state, lane, packet);return; }
+        ready(state, lane, packet, 'age');
+    }, state.policy.maxWaitMs);
+}
 function packetFor(state, lane, bytes) {
     let packet = lane.packets.at(-1);
-    if (packet && !packet.ready && packet.bytes + bytes > state.policy.maxBytes) { ready(state, lane, packet, 'bytes'); }
-    packet = lane.packets.at(-1);
-    if (!packet || packet.ready) {
+    if (packet && packet.bytes + bytes > state.policy.maxBytes) {
+        ready(state, lane, packet, 'bytes');
+        packet = null;
+    } else if (packet && packet.messages >= state.policy.maxMessages) {
+        ready(state, lane, packet, 'messages');
+        packet = null;
+    }
+    if (!packet) {
         packet = { entries: [], messages: 0, bytes: 0, completed: new Set(), ready: false, createdAt: Date.now() };
-        const pending = packet;
-        packet.timer = setTimeout(() => { ready(state, lane, pending, 'age'); }, state.policy.maxWaitMs);
+        scheduleAge(state, lane, packet);
         lane.packets.push(packet);
     }
     return packet;
@@ -123,7 +134,8 @@ function startPacket(state, lane) {
     const task = Promise.resolve().then(() => { return runPacket(state, packet); }).catch(error => { fail(state, error); }).finally(() => {
         state.active -= 1;lane.running = false;state.tasks.delete(task);state.inflight.delete(packet);
         if (lane.packets.length === 0) { state.lanes.delete(lane.machine); }
-        else { queueReady(state, lane); }
+        else if (lane.packets[0].ready) { queueReady(state, lane); }
+        else { ready(state, lane, lane.packets[0], 'age'); }
         state.pump();
     });
     state.tasks.add(task);
