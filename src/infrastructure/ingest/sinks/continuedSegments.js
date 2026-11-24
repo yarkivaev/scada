@@ -1,5 +1,25 @@
 import segmentContinue from '../../../domain/segment/segmentContinue.js';
 
+function pointed(record) {
+    if (record.duration !== 0) {
+        return record;
+    }
+    return { ...record, end_time: record.start_time };
+}
+
+function behind(record, prior) {
+    return Boolean(prior) && prior.name !== record.name
+        && Date.parse(record.start_time) < Date.parse(prior.start_time);
+}
+
+function placed(record, prior, apply) {
+    if (behind(record, prior)) {
+        const start = new Date(prior.end_time).toISOString();
+        return { ...record, start_time: start, end_time: start, duration: 0 };
+    }
+    return pointed(apply(record, prior));
+}
+
 /**
  * Loads the latest segment row visible to this write.
  *
@@ -43,7 +63,7 @@ export default function continuedSegments(inner, pool, budgetSeconds) {
                 if (!seen.has(key)) {
                     seen.set(key, await latest(runner, record));
                 }
-                const row = apply(record, seen.get(key));
+                const row = placed(record, seen.get(key), apply);
                 seen.set(key, row);
                 rows.push(row);
                 return { rows, seen };

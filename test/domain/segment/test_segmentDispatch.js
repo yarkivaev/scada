@@ -140,12 +140,29 @@ describe('segmentDispatch', function() {
             'pending heartbeat did not use a single transaction');
     });
 
-    it('does not close orphan rows before writing a completed segment', async function() {
+    it('closes orphan rows before writing a completed segment', async function() {
         const closer = fakeCloser();
         const segment = fakeSink();
         const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, fakeSink(), closer);
-        await route.accept({ type: 'segment', machine: `ičt-${Math.random()}`, start_time: '2024-01-01T00:00:00.000Z', duration: 45 });
-        assert.strictEqual(closer.calls.length, 0, 'completed segment write must not close orphan rows');
+        await route.accept({ type: 'segment', machine: `ičt-${Math.random()}`, start_time: '2024-01-01T00:00:00.000Z', duration: 45, name: 'on' });
+        assert.strictEqual(closer.calls.length, 1, 'completed segment write still left the previous open tail');
+    });
+
+    it('writes a heartbeat as a point at its start', async function() {
+        const segment = fakeSink();
+        const origin = 1_700_000_000_000 + Math.floor(Math.random() * 1e8);
+        const start = new Date(origin).toISOString();
+        const route = segmentDispatch(segment, { accept() { return Promise.resolve(); } }, fakeSink(), fakeCloser());
+        await route.accept({
+            type: 'segment',
+            machine: `печь-${Math.random()}`,
+            start_time: start,
+            end_time: new Date(origin + 8_000).toISOString(),
+            duration: 0,
+            name: 'off'
+        });
+        assert.equal(segment.written[0].end_time === start && segment.written[0].duration === 0, true,
+            'heartbeat still stored a growing interval instead of a point');
     });
 
     it('throws when segment command type is unknown', async function() {

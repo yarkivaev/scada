@@ -35,6 +35,11 @@ function overlaps(left, right) {
     return instant(left.start_time) < instant(right.end_time) && instant(right.start_time) < instant(left.end_time);
 }
 
+function liveJoin(left, right) {
+    return left.name === right.name && (left.duration === 0 || right.duration === 0)
+        && instant(left.start_time) <= instant(right.start_time);
+}
+
 function covers(outer, inner) {
     return instant(outer.start_time) <= instant(inner.start_time) && instant(outer.end_time) >= instant(inner.end_time);
 }
@@ -51,7 +56,7 @@ function stretch(host, item) {
     const end = Math.max(instant(host.end_time), instant(item.end_time));
     host.start_time = stamp(start, host);
     host.end_time = stamp(end, host);
-    if (host.duration !== 0) {
+    if (host.duration !== 0 || item.duration !== 0) {
         host.duration = (end - start) / 1000;
     }
 }
@@ -110,7 +115,7 @@ function collapse(rows) {
     return ordered.reduce((kept, row) => {
         const host = kept.find((prev) => {
             return prev.name === row.name && tagsOf(prev) === tagsOf(row)
-                && !splitKey(prev) && !splitKey(row) && overlaps(prev, row);
+                && !splitKey(prev) && !splitKey(row) && (overlaps(prev, row) || liveJoin(prev, row));
         });
         if (host) {
             stretch(host, row);
@@ -135,7 +140,12 @@ function dropEmptyCovers(rows, item) {
 
 function clipForeign(rows, item) {
     if (emptyUnsplit(item)) {
-        return rows;
+        return rows.flatMap((row) => {
+            if (row.name === item.name || !emptyUnsplit(row)) {
+                return [row];
+            }
+            return subtract(row, item);
+        });
     }
     return rows.flatMap((row) => {
         return row.name === item.name ? [row] : subtract(row, item);
@@ -144,12 +154,13 @@ function clipForeign(rows, item) {
 
 function hostOf(rows, item) {
     const same = rows.filter((row) => {
-        return row.name === item.name && overlaps(row, item);
+        return row.name === item.name && (overlaps(row, item) || liveJoin(row, item));
     });
-    if (same.some((row) => {
+    const covered = same.find((row) => {
         return covers(row, item) && tagsOf(row) === tagsOf(item);
-    })) {
-        return { kind: 'cover' };
+    });
+    if (covered) {
+        return { kind: 'cover', host: covered };
     }
     const split = same.find((row) => {
         return splitKey(row);
@@ -168,11 +179,20 @@ function hostOf(rows, item) {
     return { kind: 'new' };
 }
 
+function carve(rows, host) {
+    const blockers = rows.filter((row) => {
+        return row !== host && (row.name !== host.name || tagsOf(row) !== tagsOf(host));
+    });
+    return rows.filter((row) => {
+        return row !== host;
+    }).concat(clip(copy(host), blockers));
+}
+
 function place(rows, item) {
     const pruned = dropEmptyCovers(rows, item);
     const found = hostOf(pruned, item);
     if (found.kind === 'cover') {
-        return pruned;
+        return carve(pruned, found.host);
     }
     if (found.kind === 'split') {
         extendTail(found.host, item);
@@ -180,7 +200,7 @@ function place(rows, item) {
     }
     if (found.kind === 'merge') {
         stretch(found.host, item);
-        return pruned;
+        return carve(pruned, found.host);
     }
     const clipped = clipForeign(pruned, item);
     const blockers = clipped.filter((row) => {

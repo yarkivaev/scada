@@ -152,6 +152,44 @@ describe('historyFold', function () {
         assert.equal(start === origin && finish === origin + 15_000, true,
             'clipping a tagged off dropped exclusive empty tails');
     });
+    it('closes a live host when a completed continuation arrives', function () {
+        const origin = 1_702_895_000_000 + Math.floor(Math.random() * 1e8);
+        const start = stamp(origin, 0);
+        const live = { ...phase('on', start, start, []), duration: 0, end_time: start };
+        const closed = phase('on', start, stamp(origin, 20_000), []);
+        const folded = historyFold([live], [closed]);
+        assert.equal(folded[0].duration > 0, true, 'a completed continuation left the host live');
+    });
+    it('does not let a covered heartbeat reopen an off across a stored on', function () {
+        const origin = 1_702_895_000_000 + Math.floor(Math.random() * 1e8);
+        const cover = phase('off', stamp(origin, 0), stamp(origin, 20_000), []);
+        const heat = phase('on', stamp(origin, 5_000), stamp(origin, 8_000), []);
+        const pulse = phase('off', stamp(origin, 0), stamp(origin, 0), []);
+        pulse.duration = 0;
+        const folded = historyFold([cover, heat], [pulse]);
+        const crossed = folded.some((left, i) => {
+            return folded.slice(i + 1).some((right) => {
+                return left.name !== right.name
+                    && Date.parse(left.start_time) < Date.parse(right.end_time)
+                    && Date.parse(right.start_time) < Date.parse(left.end_time);
+            });
+        });
+        assert.equal(crossed, false, 'a covered heartbeat still stretched off across a stored on');
+    });
+    it('clips an empty covering off around a later empty on', function () {
+        const origin = 1_702_890_000_000 + Math.floor(Math.random() * 1e8);
+        const cover = phase('off', stamp(origin, 0), stamp(origin, 20_000), []);
+        const heat = phase('on', stamp(origin, 5_000), stamp(origin, 8_000), []);
+        const folded = historyFold([cover], [heat]);
+        const crossed = folded.some((left, i) => {
+            return folded.slice(i + 1).some((right) => {
+                return Date.parse(left.start_time) < Date.parse(right.end_time)
+                    && Date.parse(right.start_time) < Date.parse(left.end_time);
+            });
+        });
+        assert.equal(folded.some((row) => { return row.name === 'on'; }) && crossed === false, true,
+            'an empty covering off still swallowed a later empty on');
+    });
     it('does not drop a stored heating when a later empty off covers it', function () {
         const origin = 1_702_880_000_000 + Math.floor(Math.random() * 1e8);
         const heat = phase('on', stamp(origin, 1_000), stamp(origin, 5_000), ['heating']);

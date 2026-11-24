@@ -126,4 +126,17 @@ describe('historyAbsorb', function () {
         assert.equal(calls[0].params[1].length, 2,
             'abutting windows were still fused into a hull');
     });
+    it('loads a duration-zero covering tail even when the latest predecessor has closed', async function() {
+        const origin = 1_703_200_000_000 + Math.floor(Math.random() * 1e8);
+        const calls = [];
+        const client = {
+            async query(sql) {
+                calls.push(sql);
+                return { rows: [], rowCount: 0 };
+            }
+        };
+        await historyAbsorb(client, `печь-${Math.random()}`, [phase('on', origin + 3_600_000, origin + 3_602_000, ['нагрев'])]);
+        assert.match(calls[0], /duration\s*=\s*0/u,
+            'absorb still missed the live duration-zero tail behind a closed predecessor');
+    });
 });

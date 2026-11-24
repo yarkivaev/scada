@@ -252,13 +252,13 @@ describe('supervisor sink durable recovery integration', function() {
             publish({ ...row(machine, start + 3605000, 'on', 0), end: start + 3606000 });
             publish({ ...row(machine, start + 3605000, 'on', 0), end: start + 3607000 });
             await until(async () => {
-                const rows = (await fixture.pool.query('SELECT end_time FROM segments WHERE machine=$1 ORDER BY start_time DESC LIMIT 1', [machine])).rows;
-                return rows[0]?.end_time.getTime() === start + 3607000;
+                const rows = (await fixture.pool.query('SELECT duration FROM segments WHERE machine=$1 ORDER BY start_time DESC LIMIT 1', [machine])).rows;
+                return Number(rows[0]?.duration) === 0;
             });
-            const result = await fixture.pool.query('SELECT duration,end_time FROM segments WHERE machine=$1 ORDER BY start_time', [machine]);
-            assert.deepEqual(result.rows.map(value => {return {
-                duration: Number(value.duration), end: value.end_time.getTime()
-            }}), [{ duration: 0, end: start + 3607000 }]);
+            const result = await fixture.pool.query('SELECT duration,end_time,start_time FROM segments WHERE machine=$1 ORDER BY start_time', [machine]);
+            assert.equal(result.rows.length === 1 && Number(result.rows[0].duration) === 0
+                && result.rows[0].end_time.getTime() === result.rows[0].start_time.getTime(), true,
+                'continued pending heartbeats still grew a live interval');
         });
         it('commits segment, retag and split-family commands in their shared transaction', async () => {
             const start = 1700100000000;const machine = 'transaction-commands';
