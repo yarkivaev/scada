@@ -15,11 +15,27 @@ function phase(name, start, end, tags, properties) {
 }
 
 function store(rows) {
-    const state = { rows: rows.map((row) => { return { ...row }; }), written: [] };
+    let chain = Promise.resolve();
+    const locks = [];
+    const state = { rows: rows.map((row) => { return { ...row }; }), written: [], sqls: [] };
     const overlap = /start_time<\$3/u;
     return {
         state,
         async query(sql, params) {
+            state.sqls.push(sql);
+            if (/pg_advisory_xact_lock/u.test(sql)) {
+                const previous = chain;
+                chain = new Promise((resolve) => { locks.push(resolve); });
+                await previous;
+                return { rows: [], rowCount: 0 };
+            }
+            if (/COMMIT|ROLLBACK/u.test(sql)) {
+                locks.shift()?.();
+                return { rows: [], rowCount: 0 };
+            }
+            if (/BEGIN/u.test(sql)) {
+                return { rows: [], rowCount: 0 };
+            }
             if (/SELECT/u.test(sql) && overlap.test(sql)) {
                 return { rows: state.rows };
             }
@@ -31,6 +47,12 @@ function store(rows) {
                 return { rowCount: gone.size };
             }
             return { rows: [], rowCount: 0 };
+        },
+        async connect() {
+            return this;
+        },
+        release() {
+            return undefined;
         },
         write(records) {
             state.written.push(...records);
@@ -54,14 +76,18 @@ function overlaps(left, right) {
 }
 
 describe('foldingSegments', function () {
-    it('does not keep an empty covering off beside a tagged ladle split', async function () {
+    it('does not keep an empty covering off over a tagged ladle split', async function () {
         const origin = 1_702_500_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', origin, origin + 15_000, []);
         const pour = phase('off', origin + 700, origin + 15_000, ['to_ladle'], { split_of: String(origin) });
         const db = store([cover]);
         await foldingSegments(db, db).write([pour]);
-        assert.equal(db.state.rows.length === 1 && db.state.rows[0].tags, JSON.stringify(['to_ladle']),
-            'an empty covering off stayed in storage beside a tagged ladle split');
+        const tagged = db.state.rows.find((row) => { return row.tags === JSON.stringify(['to_ladle']); });
+        const crossed = db.state.rows.some((left, i) => {
+            return db.state.rows.slice(i + 1).some((right) => { return overlaps(left, right); });
+        });
+        assert.equal(Boolean(tagged) && crossed === false, true,
+            'an empty covering off stayed over a tagged ladle split');
     });
     it('does not leave overlapping offs after an empty stream then a ladle split', async function () {
         const origin = 1_702_600_000_000 + Math.floor(Math.random() * 1e8);
@@ -76,5 +102,35 @@ describe('foldingSegments', function () {
             return rows.slice(i + 1).some((right) => { return overlaps(left, right); });
         });
         assert.equal(crossed, false, 'empty off and tagged ladle split still overlapped after both writes');
+    });
+    it('keeps exclusive empty tails after a nested tagged write', async function () {
+        const origin = 1_702_850_000_000 + Math.floor(Math.random() * 1e8);
+        const cover = phase('off', origin, origin + 15_000, []);
+        const tagged = phase('off', origin + 700, origin + 4_000, ['to_ladle']);
+        const db = store([cover]);
+        await foldingSegments(db, db).write([tagged]);
+        const start = Math.min(...db.state.rows.map((row) => { return Date.parse(row.start_time); }));
+        const finish = Math.max(...db.state.rows.map((row) => { return Date.parse(row.end_time); }));
+        assert.equal(start === origin && finish === origin + 15_000, true,
+            'a nested tagged write dropped exclusive empty tails');
+    });
+    it('locks history for a machine before folding', async function () {
+        const origin = 1_702_860_000_000 + Math.floor(Math.random() * 1e8);
+        const db = store([]);
+        await foldingSegments(db, db).write([phase('off', origin, origin + 1_000, ['простой-α'])]);
+        assert.match(db.state.sqls.join('\n'), /pg_advisory_xact_lock/u,
+            'foldingSegments still wrote without a history lock');
+    });
+    it('does not leave overlap after concurrent writes of different tagged offs', async function () {
+        const origin = 1_702_870_000_000 + Math.floor(Math.random() * 1e8);
+        const first = phase('off', origin, origin + 10_000, ['в_ковш-ζ']);
+        const second = phase('off', origin + 4_000, origin + 12_000, ['шлак-ζ']);
+        const db = store([]);
+        const sink = foldingSegments(db, db);
+        await Promise.all([sink.write([first]), sink.write([second])]);
+        const crossed = db.state.rows.some((left, i) => {
+            return db.state.rows.slice(i + 1).some((right) => { return overlaps(left, right); });
+        });
+        assert.equal(crossed, false, 'concurrent tagged offs still overlapped after both writes');
     });
 });

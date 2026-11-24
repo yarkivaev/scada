@@ -1,9 +1,44 @@
-import historyAbsorb, { historyDedupe } from '../../persistence/pg/historyAbsorb.js';
+import historyAbsorb, { historyDedupe, span } from '../../persistence/pg/historyAbsorb.js';
 
 async function foldMachine(runner, machine, batch) {
+    await runner.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`history:${machine}`]);
     const folded = await historyAbsorb(runner, machine, batch);
-    await historyDedupe(runner, machine);
+    await historyDedupe(runner, machine, span(batch));
     return folded;
+}
+
+function grouped(records) {
+    const groups = new Map();
+    for (const record of records) {
+        const batch = groups.get(record.machine) ?? [];
+        batch.push(record);
+        groups.set(record.machine, batch);
+    }
+    return groups;
+}
+
+function foldAll(runner, groups) {
+    return [...groups].reduce(async (prior, [machine, batch]) => {
+        const acc = await prior;
+        acc.push(...await foldMachine(runner, machine, batch));
+        return acc;
+    }, Promise.resolve([]));
+}
+
+async function writeOwned(pool, inner, records) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const next = await foldAll(client, grouped(records));
+        const result = await inner.write(next, client);
+        await client.query('COMMIT');
+        return result;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
 }
 
 /**
@@ -20,19 +55,10 @@ async function foldMachine(runner, machine, batch) {
 export default function foldingSegments(inner, pool) {
     return {
         async write(records, client) {
-            const runner = client && typeof client.query === 'function' ? client : pool;
-            const groups = new Map();
-            for (const record of records) {
-                const batch = groups.get(record.machine) ?? [];
-                batch.push(record);
-                groups.set(record.machine, batch);
+            if (client && typeof client.query === 'function') {
+                return inner.write(await foldAll(client, grouped(records)), client);
             }
-            const next = await [...groups].reduce(async (prior, [machine, batch]) => {
-                const acc = await prior;
-                acc.push(...await foldMachine(runner, machine, batch));
-                return acc;
-            }, Promise.resolve([]));
-            return inner.write(next, client);
+            return writeOwned(pool, inner, records);
         }
     };
 }

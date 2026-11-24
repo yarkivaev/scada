@@ -63,9 +63,9 @@ export default function segmentTransaction(pool, dispatch, { timeoutMs = 10000, 
             const token = { client: null, released: false, cancelled: false, calls: 0 };
             token.runner = { query(...args) { token.calls += 1;return token.client.query(...args); } };
             state.active.add(token);
-            return deadline(execute(pool, dispatch, records, state, token), timeoutMs, 'Segment transaction', error => {
+            return deadline(execute(pool, dispatch, records, state, token), timeoutMs, 'Segment transaction', () => {
                 token.cancelled = true;
-                try { release(token, true); } finally { state.fail(error); }
+                release(token, true);
             });
         },
         abort(error = new Error('Segment transaction stopped')) {

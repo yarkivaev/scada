@@ -1,6 +1,6 @@
 import historyFold from '../../../domain/segment/historyFold.js';
 
-function span(segments) {
+export function span(segments) {
     return segments.reduce((range, item) => {
         return {
             start: Math.min(range.start, new Date(item.start_time).getTime()),
@@ -39,7 +39,8 @@ export default async function historyAbsorb(client, machine, segments) {
 }
 
 /** Drops later unsplit same-tag starts that landed inside an earlier host. */
-export async function historyDedupe(client, machine) {
+export async function historyDedupe(client, machine, range) {
+    const bounds = [machine, new Date(range.start), new Date(range.end)];
     await client.query(
         `UPDATE segments AS host
          SET end_time = extra.end_time,
@@ -55,8 +56,9 @@ export async function historyDedupe(client, machine) {
            AND coalesce(extra.properties, '') NOT LIKE '%"split_of"%'
            AND extra.start_time > host.start_time
            AND extra.start_time < host.end_time
-           AND extra.end_time > host.end_time`,
-        [machine]
+           AND extra.end_time > host.end_time
+           AND extra.start_time < $3 AND extra.end_time > $2`,
+        bounds
     );
     await client.query(
         `DELETE FROM segments AS extra
@@ -68,7 +70,8 @@ export async function historyDedupe(client, machine) {
            AND coalesce(extra.properties, '') NOT LIKE '%"split_of"%'
            AND coalesce(host.properties, '') NOT LIKE '%"split_of"%'
            AND extra.start_time > host.start_time
-           AND extra.start_time < host.end_time`,
-        [machine]
+           AND extra.start_time < host.end_time
+           AND extra.start_time < $3 AND extra.end_time > $2`,
+        bounds
     );
 }
