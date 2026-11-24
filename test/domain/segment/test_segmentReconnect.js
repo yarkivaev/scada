@@ -11,8 +11,12 @@ function upsertSink() {
         write(records) {
             for (const record of records) {
                 const key = `${record.machine}|${record.start_time}`;
-                const prior = rows.get(key) || {};
-                rows.set(key, { ...prior, ...record });
+                const prior = rows.get(key);
+                const stale = prior && prior.duration > 0 && record.duration === 0
+                    && !(Date.parse(record.end_time) > Date.parse(prior.end_time));
+                if (!stale) {
+                    rows.set(key, { ...prior, ...record });
+                }
             }
             return Promise.resolve();
         }
@@ -53,8 +57,8 @@ describe('segmentDispatch reconnect after silence', function() {
         await dispatch.accept(openSegment(machine, start, mid));
         await dispatch.accept(openSegment(machine, start, later));
         const row = sink.rows.get(`${machine}|${start}`);
-        assert.strictEqual(row.duration, 0, 'short break closed the open segment');
-        assert.strictEqual(row.end_time, later, 'short break did not keep the latest heartbeat end');
+        assert.equal(row.duration === 0 && row.end_time === start, true,
+            'short break still grew the live tail instead of keeping one point');
     });
 
     it('extends a silence-closed segment when the completed event arrives after a long break', async function() {
@@ -75,7 +79,7 @@ describe('segmentDispatch reconnect after silence', function() {
         assert.strictEqual(row.duration, 120, 'long-break completed event did not restore duration');
     });
 
-    it('reopens a silence-closed segment when only a pending heartbeat is left after reconnect', async function() {
+    it('does not reopen a silence-closed segment with a pointed heartbeat', async function() {
         const sink = upsertSink();
         const dispatch = route(sink);
         const machine = `ičt-${Math.random().toString(36).slice(2)}`;
@@ -86,9 +90,8 @@ describe('segmentDispatch reconnect after silence', function() {
         silenceClose(sink, machine, start);
         await dispatch.accept(openSegment(machine, start, pending));
         const row = sink.rows.get(`${machine}|${start}`);
-        assert.strictEqual(row.duration, 0, 'empty-queue reconnect did not reopen the segment');
-        assert.strictEqual(row.end_time, pending, 'empty-queue reconnect did not advance end_time');
-        assert.strictEqual(sink.rows.size, 1, 'empty-queue reconnect invented a new start_time');
+        assert.deepEqual({ duration: Number(row.duration), rows: sink.rows.size }, { duration: 1, rows: 1 },
+            'a pointed heartbeat reopened a silence-closed span');
     });
 
     it('drains a long backlog after silence close into the final continuous timeline', async function() {

@@ -53,6 +53,12 @@ export default async function historyAbsorb(client, machine, segments) {
            JOIN unnest($2::timestamptz[], $3::timestamptz[]) AS piece(start_time, end_time)
              ON s.start_time > piece.start_time AND s.start_time < piece.end_time
            WHERE s.machine=$1 AND s.kind='phase'
+           UNION ALL
+           SELECT s.machine,s.kind,s.name,s.start_time,s.end_time,s.duration,s.options,s.tags,s.properties,s.resolved,s.consumed
+           FROM segments AS s
+           JOIN unnest($2::timestamptz[], $3::timestamptz[]) AS piece(start_time, end_time)
+             ON s.start_time <= piece.start_time
+           WHERE s.machine=$1 AND s.kind='phase' AND s.duration = 0
          ) hit
          ORDER BY start_time`,
         [machine, starts, ends]

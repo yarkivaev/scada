@@ -11,6 +11,7 @@ import segmentCodec from '../codecs/segmentCodec.js';
 import processingErrorLog from '../processingErrorLog.js';
 import silentOpenWatch from '../silentOpenWatch.js';
 import abutSegments from '../sinks/abutSegments.js';
+import foldCastingPhases from '../sinks/foldCastingPhases.js';
 import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import closeSilentOpen from '../sinks/closeSilentOpen.js';
 import continuedSegments from '../sinks/continuedSegments.js';
@@ -22,7 +23,7 @@ export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_tim
 export const segmentConflict = ['machine', 'kind', 'start_time'];
 export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved', 'updated_at'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'properties', 'resolved'];
-export const segmentUpdateWhere = '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\'))';
+export const segmentUpdateWhere = '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\')) AND NOT EXISTS (SELECT 1 FROM segments AS later WHERE later.machine = segments.machine AND later.kind = segments.kind AND later.start_time > segments.start_time)';
 export const segmentsIngestDestination = '/queue/scada.segments.ingest';
 
 export { default as segmentDispatch } from '../../../domain/segment/dispatch.js';
@@ -50,6 +51,20 @@ function pipelineSettings(config) {
         throw new TypeError('repairHistoryOnStart must be boolean');
     }
     return settings;
+}
+
+async function repairHistory(pool, budget) {
+    try {
+        await abutSegments(pool, budget);
+    } catch (error) {
+        processingErrorLog('abut_segments', error, { budgetSeconds: budget });
+    }
+}
+
+function repairCasting(pool) {
+    foldCastingPhases(pool).catch((error) => {
+        processingErrorLog('fold_casting_phases', error, {});
+    });
 }
 
 /**
@@ -99,14 +114,13 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         destination,
         async start() {
             if (settings.repairHistoryOnStart !== false) {
-                try {
-                    await abutSegments(pool, budget);
-                } catch (error) {
-                    processingErrorLog('abut_segments', error, { budgetSeconds: budget });
-                }
+                await repairHistory(pool, budget);
             }
             await source.start();
             await silence.start();
+            if (settings.repairHistoryOnStart !== false) {
+                repairCasting(pool);
+            }
         },
         stop() {
             return stopSegmentPipeline(source, coalesce, silence, pool, settings.stopTimeoutMs ?? 5000);

@@ -82,6 +82,48 @@ describe('continuedSegments', function() {
         assert.strictEqual(store.written[0].start_time, priorStart, 'overlapping heating was stored as its own start');
     });
 
+    it('does not keep an ancient off start after a later on', async function() {
+        const origin = 1_701_600_000_000 + Math.floor(Math.random() * 1e8);
+        const ancient = new Date(origin).toISOString();
+        const store = sink();
+        const wrapped = continuedSegments(store, priorPool({
+            name: 'on',
+            start_time: new Date(origin + 86_400_000).toISOString(),
+            end_time: new Date(origin + 86_410_000).toISOString()
+        }), 30);
+        await wrapped.write([{
+            machine: `cm${Math.floor(Math.random() * 90 + 10)}`,
+            kind: 'phase',
+            name: 'off',
+            start_time: ancient,
+            end_time: new Date(origin + 86_500_000).toISOString(),
+            duration: 0
+        }]);
+        assert.notEqual(store.written[0].start_time, ancient,
+            'an off heartbeat still stretched the covering start from before the later on');
+    });
+
+    it('stores a continued heartbeat as a point at the kept start', async function() {
+        const origin = 1_701_700_000_000 + Math.floor(Math.random() * 1e8);
+        const priorStart = new Date(origin).toISOString();
+        const store = sink();
+        const wrapped = continuedSegments(store, priorPool({
+            name: 'on',
+            start_time: priorStart,
+            end_time: new Date(origin + 10_000).toISOString()
+        }), 30);
+        await wrapped.write([{
+            machine: `ičt-${Math.random()}`,
+            kind: 'phase',
+            name: 'on',
+            start_time: new Date(origin + 15_000).toISOString(),
+            end_time: new Date(origin + 20_000).toISOString(),
+            duration: 0
+        }]);
+        assert.equal(store.written[0].end_time === priorStart && store.written[0].duration === 0, true,
+            'continued heartbeat still grew end_time past the live point');
+    });
+
     it('loads the previous row once for a same-machine batch', async function() {
         let selects = 0;
         const origin = 1_701_500_000_000 + Math.floor(Math.random() * 1e8);

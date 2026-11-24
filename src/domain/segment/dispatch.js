@@ -2,6 +2,13 @@ import { replaceSplit } from './splitFamily.js';
 import historyFold from './historyFold.js';
 import segmentContinue from './segmentContinue.js';
 
+function pointed(record) {
+    if (record.duration !== 0) {
+        return record;
+    }
+    return { ...record, end_time: record.start_time };
+}
+
 function uniqueStarts(records) {
     const kept = new Map();
     for (const row of records) {
@@ -38,7 +45,7 @@ function continued(records) {
 function collapsed(records) {
     const next = [];
     for (const batch of grouped(continued(records)).values()) {
-        next.push(...uniqueStarts(historyFold([], batch)));
+        next.push(...uniqueStarts(historyFold([], batch)).map(pointed));
     }
     return next;
 }
@@ -53,21 +60,23 @@ function collapsed(records) {
  * @returns {Promise<void>}
  */
 async function pendingInClient(segmentSink, closer, record, transaction) {
-    await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction, record.name);
-    await segmentSink.write([record], transaction);
+    const live = pointed(record);
+    await closer.close(live.machine, live.start_time, live.kind || 'phase', transaction, live.name);
+    await segmentSink.write([live], transaction);
 }
 async function persistPending(segmentSink, closer, pool, record) {
-    const kind = record.kind || 'phase';
+    const live = pointed(record);
+    const kind = live.kind || 'phase';
     if (!pool || typeof pool.connect !== 'function') {
-        await closer.close(record.machine, record.start_time, kind, null, record.name);
-        await segmentSink.write([record]);
+        await closer.close(live.machine, live.start_time, kind, null, live.name);
+        await segmentSink.write([live]);
         return;
     }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        await closer.close(record.machine, record.start_time, kind, client, record.name);
-        await segmentSink.write([record], client);
+        await closer.close(live.machine, live.start_time, kind, client, live.name);
+        await segmentSink.write([live], client);
         await client.query('COMMIT');
     } catch (error) {
         await client.query('ROLLBACK').catch((ignored) => { return ignored; });
@@ -101,14 +110,17 @@ async function acceptFamily(pool, record, transaction) {
     await replaceSplit(pool, record, transaction);
 }
 
-/** Closes orphan opens for pending heartbeats before a batched upsert. */
+/** Closes orphan opens before a batched upsert. */
 async function closePending(closer, records, transaction) {
     for (const record of records) {
-        if (record.duration === 0) {
-            // eslint-disable-next-line no-await-in-loop
-            await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction || null, record.name);
-        }
+        // eslint-disable-next-line no-await-in-loop
+        await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction || null, record.name);
     }
+}
+
+async function writeCompleted(segmentSink, closer, record, transaction) {
+    await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction || null, record.name);
+    await segmentSink.write([record], transaction);
 }
 
 /** Writes a consecutive run of phase records through one sink call. */
@@ -140,7 +152,7 @@ export default function segmentDispatch(segmentSink, retag, splitSink, closer, p
                 throw new Error(`Segment command type ${record.type} is not defined`);
             }
             if (record.duration !== 0) {
-                await segmentSink.write([record], transaction);
+                await writeCompleted(segmentSink, closer, record, transaction);
                 return;
             }
             await (transaction ? pendingInClient(segmentSink, closer, record, transaction) : persistPending(segmentSink, closer, pool, record));

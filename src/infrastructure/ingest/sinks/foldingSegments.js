@@ -44,6 +44,10 @@ function stamped(records) {
 }
 
 async function writeOwned(pool, inner, records) {
+    if (typeof pool.connect !== 'function') {
+        const next = stamped(uniqueStarts(await foldAll(pool, grouped(records))));
+        return inner.write(next, pool);
+    }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');

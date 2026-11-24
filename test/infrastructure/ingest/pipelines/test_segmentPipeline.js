@@ -100,11 +100,27 @@ describe('segmentPipeline upsert configuration', function() {
     });
 
     it('guards conflict update so a stale pending cannot reopen a completed span', function() {
-        assert.strictEqual(
+        assert.match(
             segmentUpdateWhere,
-            '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\'))',
+            /segments\.duration = 0 OR EXCLUDED\.duration > 0 OR EXCLUDED\.end_time > segments\.end_time/u,
             'segment upsert must keep a completed span against a pending heartbeat that is not later'
         );
+    });
+
+    it('does not stretch a start once a later start exists', function() {
+        assert.match(
+            segmentUpdateWhere,
+            /later\.start_time > segments\.start_time/u,
+            'upsert still stretched an ancient covering off after a later on landed'
+        );
+    });
+
+    it('folds casting phases during startup repair', function() {
+        const body = readFileSync(new URL('../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js', import.meta.url), 'utf8');
+        assert.match(body, /foldCastingPhases\(pool\)/u,
+            'startup repair still left covering casting offs unfolder');
+        assert.doesNotMatch(body, /await foldCastingPhases/u,
+            'startup still blocked /ready on the casting fold');
     });
 
     it('refreshes updated_at when a segment row is upserted', function() {

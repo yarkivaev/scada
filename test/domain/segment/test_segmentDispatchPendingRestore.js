@@ -43,7 +43,7 @@ describe('segmentDispatch pending restore', function() {
         assert.strictEqual(row.duration, span, 'pending heartbeat reopened a completed segment');
     });
 
-    it('advances pending end_time on heartbeat without inventing a new start', async function() {
+    it('keeps a heartbeat as one live point without inventing a new start', async function() {
         const sink = upsertSink();
         const closer = { close() { return Promise.resolve(); } };
         const route = segmentDispatch(sink, { accept() { return Promise.resolve(); } }, upsertSink(), closer);
@@ -56,11 +56,8 @@ describe('segmentDispatch pending restore', function() {
         await route.accept({
             type: 'segment', machine, name: 'on', start_time: start, end_time: mid, duration: 0
         });
-        assert.strictEqual(sink.rows.size, 1, 'heartbeat invented a second segment row');
-        assert.strictEqual(
-            sink.rows.get(`${machine}|${start}`).end_time,
-            mid,
-            'heartbeat did not advance pending end_time'
-        );
+        const row = sink.rows.get(`${machine}|${start}`);
+        assert.equal(sink.rows.size === 1 && row.end_time === start && row.duration === 0, true,
+            'heartbeat still grew a pending interval instead of staying a point');
     });
 });
