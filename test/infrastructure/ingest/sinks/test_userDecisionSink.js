@@ -121,6 +121,51 @@ describe('userDecisionSink segment state', function() {
     });
 });
 
+describe('userDecisionSink domain refusal', function() {
+    it('acks a closed off whose split tail stays open', async function() {
+        const start = new Date(Date.UTC(2026, 10, 24, 11, 26, 20, 452));
+        const closed = new Date(Date.UTC(2026, 10, 24, 11, 35, 0, 0));
+        const tail = new Date(Date.UTC(2026, 10, 24, 11, 30, 31, 235));
+        const queries = [];
+        const pool = {
+            queries,
+            query(sql, params) {
+                queries.push({ sql, params });
+                if (String(sql).includes('FROM segments')) {
+                    return Promise.resolve({
+                        rows: [{
+                            name: 'off',
+                            start_time: start.toISOString(),
+                            end_time: closed.toISOString(),
+                            duration: (closed.getTime() - start.getTime()) / 1000,
+                            properties: null
+                        }]
+                    });
+                }
+                return Promise.resolve({ rows: [] });
+            }
+        };
+        await userDecisionSink(pool).accept({
+            machine: 'печь-2',
+            startTime: start.toISOString(),
+            username: 'Геннадий Иванов',
+            operatorId: 38,
+            decidedAt: tail.toISOString(),
+            payload: JSON.stringify({
+                machine: 'печь-2',
+                start: start.getTime() / 1000,
+                user: 'Геннадий Иванов',
+                tags: [],
+                splits: [
+                    { start: start.getTime() / 1000, end: tail.getTime() / 1000, tag: 'to_ladle', open: true }
+                ]
+            })
+        });
+        const insert = queries.find((query) => { return String(query.sql).includes('INSERT INTO user_decisions'); });
+        assert.ok(insert, 'a refused split still nacked the user_decisions message');
+    });
+});
+
 describe('userDecisionSink propagates query failure', function() {
     it('rejects when insert fails', async function() {
         const pool = {
