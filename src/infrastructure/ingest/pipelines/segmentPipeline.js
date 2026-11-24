@@ -14,6 +14,7 @@ import abutSegments from '../sinks/abutSegments.js';
 import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import closeSilentOpen from '../sinks/closeSilentOpen.js';
 import continuedSegments from '../sinks/continuedSegments.js';
+import foldingSegments from '../sinks/foldingSegments.js';
 import retagSink from '../sinks/retagSink.js';
 
 export const segmentColumns = ['machine', 'kind', 'name', 'start_time', 'end_time', 'duration',
@@ -36,10 +37,10 @@ export { default as segmentDispatch } from '../../../domain/segment/dispatch.js'
 function segmentSinks(postgres, pool) {
     const shared = { pool, conflict: segmentConflict, updateWhere: segmentUpdateWhere };
     return {
-        segmentSink: postgresSink(postgres, 'segments', segmentColumns,
-            { ...shared, update: segmentUpdateColumns }),
-        splitSink: postgresSink(postgres, 'segments', segmentColumns,
-            { ...shared, update: splitUpdateColumns })
+        segmentSink: foldingSegments(postgresSink(postgres, 'segments', segmentColumns,
+            { ...shared, update: segmentUpdateColumns }), pool),
+        splitSink: foldingSegments(postgresSink(postgres, 'segments', segmentColumns,
+            { ...shared, update: splitUpdateColumns }), pool)
     };
 }
 
