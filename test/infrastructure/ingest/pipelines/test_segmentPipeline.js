@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { readFileSync } from 'node:fs';
 import segmentPipeline, {
     segmentConflict,
     segmentUpdateColumns,
@@ -179,6 +180,12 @@ describe('segmentPipeline monotonic upsert', function() {
             'completed close did not overwrite the orphan one-second stub'
         );
     });
+});
+
+it('folds overlapping phases before the postgres segment write', function() {
+    const body = readFileSync(new URL('../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js', import.meta.url), 'utf8');
+    assert.match(body, /foldingSegments\(postgresSink/u,
+        'segment pipeline still wrote raw STOMP phases without folding');
 });
 
 it('rejects malformed startup history policy before connecting',()=>{

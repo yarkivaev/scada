@@ -7,7 +7,11 @@ function copy(row) {
 }
 
 function tagsOf(row) {
-    return typeof row.tags === 'string' ? row.tags : JSON.stringify(row.tags ?? null);
+    const raw = typeof row.tags === 'string' ? row.tags : JSON.stringify(row.tags ?? null);
+    if (raw === '' || raw === 'null' || raw === '[]') {
+        return '[]';
+    }
+    return raw;
 }
 
 function parsed(row) {
@@ -21,6 +25,10 @@ function parsed(row) {
 function splitKey(row) {
     const value = parsed(row).split_of;
     return value ? String(value) : '';
+}
+
+function emptyUnsplit(row) {
+    return tagsOf(row) === '[]' && !splitKey(row);
 }
 
 function overlaps(left, right) {
@@ -113,6 +121,21 @@ function collapse(rows) {
     }, []);
 }
 
+function dropEmptyCovers(rows, item) {
+    if (emptyUnsplit(item)) {
+        return rows;
+    }
+    return rows.filter((row) => {
+        return row.name !== item.name || !overlaps(row, item) || !emptyUnsplit(row);
+    });
+}
+
+function clipForeign(rows, item) {
+    return rows.flatMap((row) => {
+        return row.name === item.name ? [row] : subtract(row, item);
+    });
+}
+
 function hostOf(rows, item) {
     const same = rows.filter((row) => {
         return row.name === item.name && overlaps(row, item);
@@ -137,22 +160,24 @@ function hostOf(rows, item) {
 }
 
 function place(rows, item) {
-    const found = hostOf(rows, item);
+    const pruned = dropEmptyCovers(rows, item);
+    const found = hostOf(pruned, item);
     if (found.kind === 'cover') {
-        return rows;
+        return pruned;
     }
     if (found.kind === 'split') {
         extendTail(found.host, item);
-        return rows;
+        return pruned;
     }
     if (found.kind === 'merge') {
         stretch(found.host, item);
-        return rows;
+        return pruned;
     }
-    const blockers = rows.filter((row) => {
+    const clipped = clipForeign(pruned, item);
+    const blockers = clipped.filter((row) => {
         return row.name !== item.name;
     });
-    return rows.concat(clip(copy(item), blockers));
+    return clipped.concat(clip(copy(item), blockers));
 }
 
 /**

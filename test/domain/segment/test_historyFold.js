@@ -87,4 +87,27 @@ describe('historyFold', function () {
         assert.equal(historyFold(stored, []).length, 1,
             'overlapping unsplit heatings stayed as two rows');
     });
+    it('drops an empty covering off when a tagged split arrives', function () {
+        const origin = 1_702_200_000_000 + Math.floor(Math.random() * 1e8);
+        const cover = phase('off', stamp(origin, 0), stamp(origin, 15_000), []);
+        const pour = phase('off', stamp(origin, 700), stamp(origin, 15_000), ['to_ladle'], { split_of: String(origin) });
+        const folded = historyFold([cover], [pour]);
+        assert.equal(folded.length === 1 && folded[0].tags, JSON.stringify(['to_ladle']),
+            'an empty covering off stayed beside a tagged ladle split');
+    });
+    it('treats empty tags and an empty array as the same tag', function () {
+        const origin = 1_702_300_000_000 + Math.floor(Math.random() * 1e8);
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), []);
+        const second = { ...phase('off', stamp(origin, 4_000), stamp(origin, 12_000), []), tags: '[]' };
+        assert.equal(historyFold([first], [second]).length, 1,
+            'empty and [] offs stayed as two overlapping rows');
+    });
+    it('clips a heating that overlaps a later off', function () {
+        const origin = 1_702_400_000_000 + Math.floor(Math.random() * 1e8);
+        const heat = phase('on', stamp(origin, 0), stamp(origin, 20_000), ['heating']);
+        const rest = phase('off', stamp(origin, 10_000), stamp(origin, 15_000), ['to_ladle']);
+        const folded = historyFold([heat], [rest]);
+        assert.equal(Date.parse(folded.find((row) => { return row.name === 'on'; }).end_time), origin + 10_000,
+            'heating still overlapped the later off');
+    });
 });
