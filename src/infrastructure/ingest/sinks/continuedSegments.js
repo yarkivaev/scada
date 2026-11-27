@@ -8,7 +8,7 @@ function pointed(record) {
 }
 
 function behind(record, prior) {
-    return Boolean(prior) && prior.name !== record.name
+    return record.duration === 0 && Boolean(prior) && prior.name !== record.name
         && Date.parse(record.start_time) < Date.parse(prior.start_time);
 }
 
@@ -29,7 +29,7 @@ function placed(record, prior, apply) {
  */
 async function latest(runner, record) {
     const result = await runner.query(
-        `SELECT name, start_time, end_time
+        `SELECT name, start_time, end_time, duration
          FROM segments
          WHERE machine = $1 AND kind = $2
          ORDER BY start_time DESC
@@ -37,6 +37,23 @@ async function latest(runner, record) {
         [record.machine, record.kind || 'phase']
     );
     return result.rows[0];
+}
+
+async function reopenContinuation(client, record, prior, next) {
+    // The original start proves this heartbeat follows the closed row. A replay
+    // at the old start alone cannot reopen it after conversion to a pending point.
+    if (client && record.duration === 0 && prior?.duration > 0 &&
+        Date.parse(record.start_time) > Date.parse(prior.end_time) &&
+        Date.parse(next.start_time) === Date.parse(prior.start_time)) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`history:${record.machine}`]);
+        await client.query(
+            `UPDATE segments SET duration=0,end_time=start_time,updated_at=clock_timestamp()
+             WHERE machine=$1 AND kind=$2 AND start_time=$3 AND end_time=$4 AND name=$5 AND duration>0
+               AND NOT EXISTS (SELECT 1 FROM segments later
+                 WHERE later.machine=$1 AND later.kind=$2 AND later.start_time>$3)`,
+            [record.machine, record.kind || 'phase', prior.start_time, prior.end_time, prior.name]
+        );
+    }
 }
 
 /**
@@ -63,7 +80,9 @@ export default function continuedSegments(inner, pool, budgetSeconds) {
                 if (!seen.has(key)) {
                     seen.set(key, await latest(runner, record));
                 }
-                const row = placed(record, seen.get(key), apply);
+                const previous = seen.get(key);
+                const row = placed(record, previous, apply);
+                await reopenContinuation(client, record, previous, row);
                 seen.set(key, row);
                 rows.push(row);
                 return { rows, seen };

@@ -87,10 +87,15 @@ describe('supervisor sink durable recovery integration', function() {
         fixture.managementUrl = `http://${fixture.rabbit.getHost()}:${fixture.rabbit.getMappedPort(15672)}`;
         Object.assign(fixture, { connection: await amqp.connect(fixture.amqpUrl) });
         Object.assign(fixture, { channel: await fixture.connection.createChannel() });
-        for (const exchange of ['scada.segments', 'scada.user_decisions', 'scada.alerts']) {
+        for (const exchange of ['scada.segments', 'scada.user_decisions', 'scada.alerts', 'scada.segments.fixture.dead']) {
             await fixture.channel.assertExchange(exchange, 'topic', { durable: true });
         }
+        await fixture.channel.assertQueue('scada.segments.fixture.dead', { durable: true });
+        await fixture.channel.bindQueue('scada.segments.fixture.dead', 'scada.segments.fixture.dead', '#');
         await fixture.channel.assertQueue('scada.segments.ingest', { durable: true });
+        const policy = await fixture.rabbit.exec(['rabbitmqctl', 'set_policy', 'fixture-dead',
+            '^scada\\.segments\\.ingest$', '{"dead-letter-exchange":"scada.segments.fixture.dead"}', '--apply-to', 'queues']);
+        assert.equal(policy.exitCode, 0);
         await fixture.channel.bindQueue('scada.segments.ingest', 'scada.segments', '#');
         Object.assign(fixture, { port: await freePort() });processFor(fixture);
         await until(() => {return healthy(fixture.port)}, 60000);
@@ -306,8 +311,9 @@ describe('supervisor sink durable recovery integration', function() {
             assert.equal(result.rows.length, 1);assert.equal(result.rows[0].tags, '["operator"]');assert.equal(result.rows[0].duration, 501);
         });
 
-        it('batches plain pending repeats while preserving every command', async () => {
+        it('coalesces equivalent pending snapshots and commits their final close', async () => {
             const start = 1700250000000;const machine = 'transaction-plain-snapshots';
+            const deadBefore = (await fixture.channel.checkQueue('scada.segments.fixture.dead')).messageCount;
             for (let index = 0; index < 1000; index += 1) {
                 publish({ ...row(machine, start, 'on', 0), end: start + (index + 1) * 1000 });
             }
@@ -318,7 +324,11 @@ describe('supervisor sink durable recovery integration', function() {
             });await until(empty);
             const result = await fixture.pool.query('SELECT count(*)::int writes,count(DISTINCT tx)::int commits FROM test_segment_commits WHERE machine=$1', [machine]);
             process.stdout.write(`        plain snapshots: ${JSON.stringify({ messages: 1001, ...result.rows[0] })}\n`);
-            assert.equal(result.rows[0].writes, 1001);
+            const { rows: phases } = await fixture.pool.query(
+                'SELECT name,start_time,end_time,duration FROM segments WHERE machine=$1', [machine]);
+            assert.deepEqual(phases, [{ name: 'on', start_time: new Date(start), end_time: new Date(start + 1001000), duration: 1001 }]);
+            assert.equal((await fixture.channel.checkQueue('scada.segments.fixture.dead')).messageCount, deadBefore);
+            assert.ok(result.rows[0].writes > 0 && result.rows[0].writes < 125, JSON.stringify(result.rows[0]));
             assert.ok(result.rows[0].commits < 125, JSON.stringify(result.rows[0]));
         });
         it('isolates a poison row after rollback while acknowledging the valid neighbours', async () => {

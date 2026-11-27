@@ -119,7 +119,9 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
             SELECT machine,kind,start_time,name,end_time,duration,tags,properties,resolved FROM segments
             WHERE machine=$1 AND start_time<=$3 AND end_time>=$2
             ON CONFLICT(machine,kind,start_time,name) DO UPDATE SET end_time=greatest(history_annotations.end_time,EXCLUDED.end_time),duration=EXCLUDED.duration,tags=EXCLUDED.tags,properties=EXCLUDED.properties,resolved=EXCLUDED.resolved`, [machine,new Date((latest?.context.page.from ?? base.from)/timeScale),new Date((latest?.context.page.until ?? base.until)/timeScale)]);
-        const folded = await historyAbsorb(client, machine, segments);
+        // A CAS-validated native page supplies its own phase boundaries and exterior.
+        const nativePage = base?.nativeTailMode === nativeTailProtocol;
+        const folded = nativePage ? segments : await historyAbsorb(client, machine, segments);
         for (const item of folded) {
             // Only computed fields change. User cuts/labels must be applied by caller before commit.
             // eslint-disable-next-line no-await-in-loop
@@ -134,7 +136,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
                 typeof item.tags === 'string' ? item.tags : JSON.stringify(item.tags ?? null),
                 typeof item.properties === 'string' ? item.properties : JSON.stringify(item.properties ?? null), item.resolved ?? true, item.consumed ?? true]);
         }
-        if (segments.length) { await historyDedupe(client, machine, span(segments)); }
+        if (!nativePage && segments.length) { await historyDedupe(client, machine, span(segments)); }
         const converged=await saveCheckpoint(client,machine,base?.checkpoint,latest);
         await advance(client,machine,workId,converged ? {next:null} : latest?.context.page);
         return { applied: true };
