@@ -831,6 +831,27 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(snapshot.items.some((point)=>{return point.time===open;}),false,'closed page included the open bucket');
     });
 
+    it('commits folded phases instead of inserting the raw later start', async () => {
+        const machine = 'folded-legacy-phase';
+        const store = historyPg(pool);
+        await store.configure(machine,[{topic:'folded-legacy/phase',channel:'power'}],30000);
+        const now = Number((await pool.query('SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms')).rows[0].ms);
+        const closed = Math.floor(now/30000)*30000-60000;
+        const start = new Date(closed-10000);
+        const inner = new Date(closed-8000);
+        const end = new Date(closed-4000);
+        const tag = JSON.stringify(['heating']);
+        await pool.query(`INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags)
+            VALUES ($1,'phase','on',$2,$3,6,$4)`,[machine,start,end,tag]);
+        await store.accept(machine,[{eventId:`folded-legacy-${closed}`,channel:'power',time:closed,value:2}]);
+        const work = (await store.work(machine)).items[0];
+        const snapshot = await store.context(machine,work.from,work.until,0);
+        await store.commit(machine,work.id,[{kind:'phase',name:'on',start_time:inner,end_time:end,duration:4,tags:'[]'}],
+            {...snapshot.context,revision:snapshot.revision,workToken:work.token});
+        const { rows } = await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine]);
+        assert.deepEqual(rows,[{start_time:start,end_time:end,tags:tag}]);
+    });
+
     it('removes an identical interior start covered by the committed segment', async () => {
         const machine='слияние-внутри';
         const store=historyPg(pool);

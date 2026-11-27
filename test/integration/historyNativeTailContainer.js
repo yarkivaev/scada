@@ -32,7 +32,8 @@ describe('Native bounded history exterior',function(){
     after(async () => { await pool?.end(); await container?.stop(); });
 
     async function fixture(label,pageUntil=10000,next=null){
-        const time=Date.now()-60000;const machine=`native-${label}`;
+        const now=Number((await pool.query('SELECT floor(extract(epoch FROM clock_timestamp())*1000) AS ms')).rows[0].ms);
+        const time=Math.floor(now/30000)*30000-60000;const machine=`native-${label}`;
         const source=()=>{return {async registered(){},async seed(){return null;},async boundary(){return time+pageUntil;},
             async page(_machine,left,end){return {from:left,until:time+pageUntil,next:next===null?null:time+next,end};},
             async read(_machine,left,right){return {items:[4000,8000,10000].map(offset=>{return {eventId:`e${offset}`,channel:'state',time:time+offset,value:offset===10000?1:0};}).filter(row=>{return row.time>=left&&row.time<=right;}),continuity:[{from:left,until:right}]};}
