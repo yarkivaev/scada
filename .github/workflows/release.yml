@@ -23,6 +23,20 @@ jobs:
 
   supervisor:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: scada_test
+          POSTGRES_PASSWORD: scada_test
+          POSTGRES_DB: scada_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U scada_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: supervisor-engine
@@ -34,7 +48,12 @@ jobs:
           java-version: '21'
           cache: sbt
       - uses: sbt/setup-sbt@v1
+      - run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U scada_test < ../db/migrations/E0018__stream_worker_checkpoint.sql
       - run: sbt test assembly
+        env:
+          PGUSER: scada_test
+          PGPASSWORD: scada_test
+          SCADA_STREAM_WORKER_TEST_JDBC: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports['5432'] }}/scada_test
 
   tag:
     needs: [check-version, lint, test, control, supervisor]

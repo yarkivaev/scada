@@ -12,6 +12,8 @@
 
 The [Scala Supervisor engine](../../supervisor-engine/README.md) turns machine readings into timeline segments. It evaluates configured rules, applies operator decisions, restores checkpoints and publishes segments. Plants supply the rules and can plug in a specialized live processor or historical classifier.
 
+SCADA also provides a pure processor contract, a stream worker with durable checkpoints and a separate replay planner. The replay planner can compute sections of the same timeline in parallel when their starting states are known. See [Stream processing modules](../../supervisor-engine/README.md#stream-processing-modules).
+
 ## State sink
 
 `supervisor-sink` is the state sink executable and Helm workload. It consumes STOMP messages for timeline segments, user decisions and alerts and persists them in PostgreSQL. It also serves the internal state HTTP API.
