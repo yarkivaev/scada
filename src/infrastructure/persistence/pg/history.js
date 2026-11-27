@@ -1,3 +1,4 @@
+import { historyWriteFence } from './segmentWriteFence.js';
 import nativeHistoryBounds, {nativeTailProtocol} from './historyNativeBounds.js';
 import historyAbsorb, {historyDedupe, span} from './historyAbsorb.js';
 import historyFence from './historyFence.js';
@@ -74,7 +75,7 @@ async function unchanged(client, machine, base, {observationSource,timeScale}) {
     await client.query('LOCK TABLE segments IN SHARE ROW EXCLUSIVE MODE');
     const latest = await context(client, machine, base.from, base.until, { padding: base.paddingMs, cutoff: -Infinity,cursor:base.cursor ?? null,end:base.end ?? null,classifierKey:base.classifierKey,workId:base.workId,workToken:base.workToken,timeScale,observations:observationSource?.(client) });
     if (latest.revision !== base.revision) {
-        const error = new Error('History context changed');
+        const error = Object.assign(new Error('History context changed'), {writeCode:'REVISION_CONFLICT'});
         error.statusCode = 409;
         throw error;
     }
@@ -95,7 +96,7 @@ async function advance(client,machine,workId,page) {
 function commit(pool, machine, workId, segments, {base, observationSource,timeScale}) {
     if (!Array.isArray(segments) || segments.length > 1000) { throw new TypeError('Bounded segments required'); }
     // eslint-disable-next-line max-statements -- Claim, correction, checkpoint and advancement share one atomic boundary.
-    return transaction(pool, machine, async (client) => {
+    return transaction(pool, machine, client => {return historyWriteFence(client,machine,{base,workId,segments},async () => {
         const work = await client.query(`SELECT id,token,from_ms,until_ms,cursor_ms,end_ms${base?.replace?',generation':''} FROM history_work WHERE id=$1 AND machine=$2 FOR UPDATE`, [workId, machine]);
         if (!work.rowCount) { return { applied: false }; }
         checkClaim(work.rows[0],base);
@@ -140,7 +141,7 @@ function commit(pool, machine, workId, segments, {base, observationSource,timeSc
         const converged=await saveCheckpoint(client,machine,base?.checkpoint,latest);
         await advance(client,machine,workId,converged ? {next:null} : latest?.context.page);
         return { applied: true };
-    });
+    })});
 }
 /** Local telemetry history and durable classification work; no cross-edge database dependency. */
 export default function historyPg(pool, { retentionDays = 30, now = Date.now, observations: observationSource,timeScale=1,timestamp } = {}) {

@@ -11,13 +11,13 @@ import scada.supervisor.infra.config.{AliasMapping, RabbitMqConfig}
  * dotted routing keys. First-wins identity is the published eventId.
  *
  * {{{
- * ClassifyQueue(config, "scada.classify.machine-2", aliases).subscribe
+ * ClassifyQueue(config, "scada.classify.machine-2", aliases).subscribeDurable
  * }}}
  */
 final class ClassifyQueue(open: Resource[IO, StompLink], queue: String, aliases: List[AliasMapping]):
   def this(config: RabbitMqConfig, queue: String, aliases: List[AliasMapping]) =
     this(StompConnection.open(config.address.host, config.address.port, config.vhost, config.credentials.login, config.credentials.passcode).map(connection => connection: StompLink), queue, aliases)
-  def subscribe: Stream[IO, Observation] = StompQueue(open, queue, decode).subscribe
+  def subscribeDurable: Stream[IO, (Observation, IO[Unit])] = StompQueue(open, queue, decode).subscribeDurable
   private[stomp] def decode(frame: StompFrame): Option[Observation] =
     for
       route <- routed(frame.headers)

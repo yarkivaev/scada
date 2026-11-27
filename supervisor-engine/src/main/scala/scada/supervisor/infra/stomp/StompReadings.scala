@@ -11,7 +11,6 @@ final class StompReadings(open: Resource[IO,StompLink], queue: String, aliases: 
   def this(config: RabbitMqConfig, queue: String, aliases: List[AliasMapping]) =
     this(StompConnection.open(config.address.host,config.address.port,config.vhost,config.credentials.login,config.credentials.passcode)
       .map(connection => connection: StompLink),queue,aliases)
-  def subscribe: Stream[IO,Reading] = StompQueue(open,queue,decode).subscribe
   def subscribeDurable: Stream[IO,(Reading,IO[Unit])] = StompQueue(open,queue,decode).subscribeDurable
   private[stomp] def decode(frame: StompFrame): Option[Reading] =
     for

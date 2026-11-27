@@ -4,7 +4,7 @@ import segmentTransactionConfig from './segmentTransactionConfig.js';
 import segmentBatchStats from './segmentBatchStats.js';
 import historyTelemetry from '../infrastructure/ingest/telemetry/historyTelemetry.js';
 import segmentPipeline, {
-    segmentsIngestDestination
+    segmentRecipient, segmentsIngestDestination
 } from '../infrastructure/ingest/pipelines/segmentPipeline.js';
 import decisionPipeline from '../infrastructure/ingest/pipelines/decisionPipeline.js';
 import alertPipeline from '../infrastructure/ingest/pipelines/alertPipeline.js';
@@ -72,6 +72,7 @@ export function readDeploymentConfig(env) {
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
         pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
+            acceptReplicaSegments: env.SINK_DB_PROFILE === 'central' || env.SEGMENT_REPLICA_WRITES === 'true',
             phaseAnchors: phaseAnchors(env.CONTIGUOUS_PHASE_ANCHORS),
             repairHistoryOnStart: historyRepair(env.SEGMENT_REPAIR_HISTORY_ON_START),
             transactions: segmentTransactionConfig(env, dbPoolMax),
@@ -96,8 +97,8 @@ export function readDeploymentConfig(env) {
     };
 }
 
-function startPipelines(cfg, pool, health) {
-    const pipelines = [segmentPipeline(cfg.stomp, cfg.postgres, pool, cfg.pipeline),
+function startPipelines(cfg, pool, health, recipient) {
+    const pipelines = [segmentPipeline(cfg.stomp, cfg.postgres, pool, cfg.pipeline, recipient),
         decisionPipeline(cfg.stomp, pool, cfg.pipeline), alertPipeline(cfg.stomp, pool, cfg.pipeline)];
     health.track(pipelines);
     return Promise.all(pipelines.map((pipeline) => { return pipeline.start(); }));
@@ -135,7 +136,16 @@ export default function supervisorSink(env = process.env, options = {}) {
     const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres, max: cfg.dbPoolMax }));
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
     const data = stateDataFromPool(pool, { metricsEnabled, historyRetentionDays: Number(env.HISTORY_RETENTION_DAYS ?? 30) });
-    const dataAccess = options.stateData ? options.stateData(data, pool) : data;
+    let recipient;
+    function segments() {
+        recipient ??= segmentRecipient(cfg.postgres,pool,cfg.pipeline);
+        return recipient;
+    }
+    const state = options.stateData ? options.stateData(data, pool) : data;
+    const dataAccess = metricsEnabled ? {...state,liveSegments:{
+        revision(machine) { return segments().live.revision(machine); },
+        apply(input) { return segments().live.apply(input); }
+    }} : state;
     const localTelemetry = historyTelemetry(env, pool);
     return {
         health: () => {return health.status()},
@@ -153,7 +163,7 @@ export default function supervisorSink(env = process.env, options = {}) {
             await prepareDatabase(cfg, pool);
             await localTelemetry?.start();
             if (cfg.pipelines) {
-                await startPipelines(cfg, pool, health);
+                await startPipelines(cfg, pool, health, segments());
             }
             health.started();
             if (httpServer) {

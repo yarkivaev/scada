@@ -9,6 +9,7 @@ import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import scada.supervisor.core.*
 import scada.supervisor.core.Segments as CoreSegments
+import scada.supervisor.runtime.{HistoryHttpError, TimelineWriter}
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.*
 
@@ -40,7 +41,12 @@ final class StompSegments(
 
   private given Logger[IO] = Slf4jLogger.getLogger[IO]
 
-  def upsert(machine: MachineId, segment: TaggedSegment): IO[Unit] =
+  override def atRevision[A](machine: MachineId)(action: IO[A]): IO[A] =
+    connection match
+      case sink: TimelineWriter => sink.atRevision(machine.raw)(action)
+      case _ => action
+
+  def upsert(machine: MachineId, segment: TaggedSegment): IO[Unit] = atRevision(machine):
     underlying.upsert(machine, segment) *>
       underlying.list(machine).flatMap: rows =>
         SplitFollow.affected(segment, rows) match
@@ -50,7 +56,7 @@ final class StompSegments(
               case None      => announce(machine, segment)
               case Some(seg) => announce(machine, seg)
 
-  override def upsertTransition(machine: MachineId, rows: List[TaggedSegment])(using Monad[IO]): IO[Unit] =
+  override def upsertTransition(machine: MachineId, rows: List[TaggedSegment])(using Monad[IO]): IO[Unit] = atRevision(machine):
     if !policy.atomicTransition || rows.size < 2 then super.upsertTransition(machine, rows)
     else
       val body = Json.obj("type" -> "phase-transition".asJson, "machine" -> machine.raw.asJson,
@@ -63,7 +69,7 @@ final class StompSegments(
   def list(machine: MachineId): IO[List[TaggedSegment]] =
     underlying.list(machine)
 
-  def replace(machine: MachineId, from: Timestamp, to: Timestamp, segments: List[TaggedSegment]): IO[Unit] =
+  def replace(machine: MachineId, from: Timestamp, to: Timestamp, segments: List[TaggedSegment]): IO[Unit] = atRevision(machine):
     underlying.replace(machine, from, to, segments) *>
       (if segments.isEmpty then IO.unit
        else publishRaw(SplitFamily.json(machine, from, segments)))
@@ -74,7 +80,7 @@ final class StompSegments(
       tags: List[String],
       options: List[String],
       properties: Map[String, String]
-  ): IO[Unit] =
+  ): IO[Unit] = atRevision(machine):
     underlying.resolve(machine, original, tags, options, properties) *>
       underlying.find(machine, original.start).flatMap:
         case None      => IO.unit
@@ -106,10 +112,11 @@ final class StompSegments(
     retrying(connection.send(sent),3,100.millis)
 
   private def retrying[A](io: IO[A], attempts: Int, delay: FiniteDuration): IO[A] =
-    io.handleErrorWith: err =>
-      if attempts <= 1 then
-        Logger[IO].error(err)(s"STOMP publish failed after all retries on $destination; crashing") *>
-          IO.raiseError(err)
-      else
-        Logger[IO].warn(err)(s"STOMP publish retry in ${delay.toMillis}ms on $destination") *>
+    io.handleErrorWith:
+      case error: HistoryHttpError if error.status >= 400 && error.status < 500 => IO.raiseError(error)
+      case error if attempts <= 1 =>
+        Logger[IO].error(error)(s"timeline publish failed after all retries on $destination") *>
+          IO.raiseError(error)
+      case error =>
+        Logger[IO].warn(error)(s"timeline publish retry in ${delay.toMillis}ms on $destination") *>
           IO.sleep(delay) *> retrying(io, attempts - 1, delay * 2)

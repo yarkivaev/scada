@@ -9,6 +9,9 @@ import java.time.Duration
 import scada.supervisor.infra.config.CheckpointApiConfig
 import scala.concurrent.duration.*
 
+final case class HistoryHttpError(path: String, status: Int, code: Option[String])
+  extends RuntimeException(s"history API ${path.takeWhile(_ != '?')} status $status${code.fold("")(value => s" ($value)")}")
+
 /** Shared authenticated local history transport; failed requests never retire server work. */
 final class HistoryClient(config: CheckpointApiConfig):
   private val client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(config.timeoutSeconds.toLong)).build()
@@ -18,6 +21,10 @@ final class HistoryClient(config: CheckpointApiConfig):
     config.token.foreach(token=>builder.header("Authorization",s"Bearer $token"))
     val request=if method=="GET" then builder.GET().build() else builder.POST(HttpRequest.BodyPublishers.ofString(body.noSpaces)).build()
     IO.blocking(client.send(request,HttpResponse.BodyHandlers.ofString())).flatMap: response =>
-      if response.statusCode()/100!=2 then IO.raiseError(RuntimeException(s"history API $path status ${response.statusCode()}"))
-      else IO.fromEither(parse(response.body()).left.map(error=>RuntimeException(error.message)))
+      val decoded = parse(response.body())
+      if response.statusCode()/100!=2 then
+        val code = decoded.toOption.flatMap(json =>
+          json.hcursor.downField("error").get[String]("code").toOption.orElse(json.hcursor.get[String]("code").toOption))
+        IO.raiseError(HistoryHttpError(path, response.statusCode(), code))
+      else IO.fromEither(decoded.left.map(error=>RuntimeException(error.message)))
   def retry[A](action: IO[A]): IO[A] = action.handleErrorWith(_=>IO.sleep(2.seconds) *> retry(action))

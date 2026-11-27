@@ -11,16 +11,21 @@ function endpoint(method, suffix, token, action) {
             if (typeof input.machine !== 'string' || !input.machine) { throw new TypeError('machine required'); }
         } catch (error) { errorResponse('BAD_REQUEST', error.message, 400).send(res); return; }
         try { jsonResponse(await action(input)).send(res); } catch (error) {
-            if (error.statusCode === 409) { errorResponse('CONFLICT', error.message, 409).send(res); return; }
+            if (error.statusCode === 409) { errorResponse(error.writeCode ?? 'CONFLICT', error.message, 409).send(res); return; }
             if (error instanceof TypeError) { errorResponse('BAD_REQUEST', error.message, 400).send(res); return; }
             throw error;
         }
     });
 }
 /** Uses the existing checkpoint API authentication and persistence lifecycle. */
-export default function historyRoutes(token, history) {
-    if (!history) { return []; }
+export default function historyRoutes(token, history, liveSegments) {
+    const live = liveSegments ? [
+        endpoint('GET', 'live-revision', token, input => {return liveSegments.revision(input.machine)}),
+        endpoint('POST', 'live-apply', token, input => {return liveSegments.apply(input)})
+    ] : [];
+    if (!history) { return live; }
     return [
+        ...live,
         endpoint('POST', 'config', token, (input) => { return history.configure(input.machine, input.topics, input.bucketMs, input.classifierKey); }),
         endpoint('POST', 'purge', token, () => { return history.purge(); }),
         endpoint('POST', 'observations', token, (input) => { return history.accept(input.machine, input.observations); }),

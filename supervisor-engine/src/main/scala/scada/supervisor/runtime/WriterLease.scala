@@ -135,10 +135,18 @@ object WriterLease:
 
   /** Last generation issued for this machine, or zero when the lock has never been held. */
   private def counter(connection: Connection, machine: String): Long =
-    val created = connection.prepareStatement("CREATE TABLE IF NOT EXISTS classifier_generation (machine text PRIMARY KEY, generation bigint NOT NULL)")
-    try
-      val _ = created.execute()
-    finally created.close()
+    try currentGeneration(connection, machine)
+    catch
+      case error: java.sql.SQLException if error.getSQLState == "42P01" =>
+        val created = connection.prepareStatement(
+          "CREATE TABLE IF NOT EXISTS classifier_generation (machine text PRIMARY KEY, generation bigint NOT NULL, holder_pid integer)"
+        )
+        try
+          val _ = created.execute()
+        finally created.close()
+        currentGeneration(connection, machine)
+
+  private def currentGeneration(connection: Connection, machine: String): Long =
     val query = connection.prepareStatement("SELECT generation FROM classifier_generation WHERE machine = ?")
     try
       query.setString(1, machine)
@@ -150,7 +158,18 @@ object WriterLease:
 
   /** Stores the generation this session just issued so the next hold is greater. */
   private def remember(connection: Connection, machine: String, generation: Long): Unit =
-    val query = connection.prepareStatement("INSERT INTO classifier_generation (machine, generation) VALUES (?, ?) ON CONFLICT (machine) DO UPDATE SET generation = EXCLUDED.generation")
+    val stamped =
+      "INSERT INTO classifier_generation (machine, generation, holder_pid) VALUES (?, ?, pg_backend_pid()) " +
+      "ON CONFLICT (machine) DO UPDATE SET generation = EXCLUDED.generation, holder_pid = EXCLUDED.holder_pid"
+    try writeGeneration(connection, machine, generation, stamped)
+    catch
+      case error: java.sql.SQLException if error.getSQLState == "42703" =>
+        val legacy = "INSERT INTO classifier_generation (machine, generation) VALUES (?, ?) " +
+          "ON CONFLICT (machine) DO UPDATE SET generation = EXCLUDED.generation"
+        writeGeneration(connection, machine, generation, legacy)
+
+  private def writeGeneration(connection: Connection, machine: String, generation: Long, sql: String): Unit =
+    val query = connection.prepareStatement(sql)
     try
       query.setString(1, machine)
       query.setLong(2, generation)

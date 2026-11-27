@@ -30,7 +30,8 @@ function heartbeatKey(parsed) {
  * @returns {boolean}
  */
 function isHeartbeat(parsed) {
-    return parsed.type === 'segment' && parsed.duration === 0 && parsed.properties?.phase_revision === undefined;
+    return parsed.type === 'segment' && parsed.duration === 0 && parsed.properties?.phase_revision === undefined &&
+        !Object.hasOwn(parsed,'fence') && !Object.hasOwn(parsed,'committedOutputId');
 }
 
 /**
