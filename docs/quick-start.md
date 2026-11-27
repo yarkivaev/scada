@@ -70,7 +70,7 @@ The second returns an item with key `temperature`, value `42`, unit `°C`, and t
 - To run your own plant entrypoint, see [Run the site API](reference/cli.md#run-the-site-api).
 - To connect persistent measurements, follow [Connect ClickHouse sensors](reference/javascript-api.md#connect-clickhouse-sensors).
 - To run a site with storage and broker services, follow [Helm installation](install/helm.md).
-- To collect device readings and classify them into timeline segments, see [Collector runtime](collect/runtime.md) and [Supervisor engine](../supervisor-engine/README.md).
+- To collect device readings and classify them into timeline segments, see [Collector runtime](collect/runtime.md) and [Stream processing](../stream-processing/README.md).
 
 Use Ctrl+C to stop the local API.
 

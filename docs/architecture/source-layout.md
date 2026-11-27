@@ -13,7 +13,7 @@ scada/
     application/      composition roots (plantApi, supervisorSink, siteServer)
     infrastructure/   adapters (http, persistence, messaging, ingest, client)
     bin/              process entry points
-  supervisor-engine/  Scala classification, replay and publication
+  stream-processing/  Scala classification, replay and publication
   test/               mirrors src/ (domain/, infrastructure/, helpers/)
   db/migrations/      PostgreSQL schema (profile-specific prefixes)
   index.js            public API facade

@@ -14,7 +14,7 @@ Use the following procedures to replace a reader or adopt resources already pres
 
 ## Upgrade a classifier profile
 
-Publish the shared engine version from a checked SCADA main commit before building a plant image that pins it. Verify the plant profile, segment messages and historical recovery against the new engine. Follow the plant release procedure to roll the classifier and preserve its durable state. See [Supervisor engine](../../supervisor-engine/README.md).
+Publish the shared engine version from a checked SCADA main commit before building a plant image that pins it. Verify the plant profile, segment messages and historical recovery against the new engine. Follow the plant release procedure to roll the classifier and preserve its durable state. See [Stream processing](../../stream-processing/README.md).
 
 ## Replace collectors
 

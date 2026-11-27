@@ -8,23 +8,23 @@
 - An **agent** runs device or stream tasks through `scada-collector` and delivers observations to the configured destinations.
 - An optional **controller** runs through `scada-controller` and places tasks on eligible agents using etcd.
 
-## Supervisor engine
+## Stream processing
 
-The [Scala Supervisor engine](../../supervisor-engine/README.md) turns machine readings into timeline segments. Stream Worker evaluates configured rules and restores progress. Replay computes historical results against a fixed set of inputs. Plants supply the rules and can plug in a specialized live processor or historical classifier.
+The [Scala stream processing](../../stream-processing/README.md) turns machine readings into timeline segments. Stream Worker evaluates configured rules and restores progress. Replay computes historical results against a fixed set of inputs. Plants supply the rules and can plug in a specialized live processor or historical classifier.
 
-A replay can compute sections of the same timeline in parallel when their starting states are known. See [Stream processing modules](../../supervisor-engine/README.md#stream-processing-modules).
+A replay can compute sections of the same timeline in parallel when their starting states are known. See [Stream processing modules](../../stream-processing/README.md#stream-processing-modules).
 
 ## State sink
 
 `supervisor-sink` is the state sink executable and Helm workload. It commits timeline output through an authenticated HTTP API and consumes replica messages, user decisions and alerts through STOMP. It persists them in PostgreSQL. It also serves the internal state HTTP API.
 
-The usual Helm deployment runs the plant API in site-server and the three STOMP consumers in supervisor-sink. Collector assignments belong to the optional controller. The Scala Supervisor produces classified segments. Other plant services can publish decisions and alerts through the same broker.
+The usual Helm deployment runs the plant API in site-server and the three STOMP consumers in supervisor-sink. Collector assignments belong to the optional controller. The Scala Stream Worker produces classified segments. Other plant services can publish decisions and alerts through the same broker.
 
 ## Single edge site
 
-In this example, the collector publishes readings to RabbitMQ. Supervisor reads the telemetry and publishes segments over STOMP. The site server writes raw metrics, the state sink writes operational state, and plant clients query the local API.
+In this example, the collector publishes readings to RabbitMQ. Stream Worker reads the telemetry and publishes segments over STOMP. The site server writes raw metrics, the state sink writes operational state, and plant clients query the local API.
 
-![A collector sends readings through RabbitMQ to Supervisor. The state sink saves classified segments in PostgreSQL.](diagrams/single-edge-site.svg)
+![A collector sends readings through RabbitMQ to Stream Worker. The state sink saves classified segments in PostgreSQL.](diagrams/single-edge-site.svg)
 
 ## Edge sites with a central archive
 
@@ -42,11 +42,11 @@ Controller replicas reconcile assignments through an etcd quorum. Each agent rea
 
 If etcd loses quorum, new placement pauses and running agents can continue using their saved assignments. Pin tasks that require a physical device to the node where that device is attached. See [Edge assignment controller](../collect/edge-controller.md).
 
-## Replicated Supervisor and historical workers
+## Replicated stream processing and historical workers
 
-![Supervisor candidates share a writer lease and use durable correction work.](diagrams/replicated-supervisor.svg)
+![Stream Worker candidates share a writer lease and use durable correction work.](diagrams/replicated-stream-processing.svg)
 
-A deployment can keep Supervisor candidates on different edge nodes. With a shared PostgreSQL lease, a candidate must acquire the per-machine lock to write. Historical correction resumes from durable work and rejects a stale claim or changed context. See [High availability](high-availability.md) for replica placement, handoff and failure guarantees.
+A deployment can keep Stream Worker candidates on different edge nodes. With a shared PostgreSQL lease, a candidate must acquire the per-machine lock to write. Historical correction resumes from durable work and rejects a stale claim or changed context. See [High availability](high-availability.md) for replica placement, handoff and failure guarantees.
 
 ## Further reading
 

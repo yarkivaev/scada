@@ -4,7 +4,7 @@
 
 Opaque operation kinds and generic ports (`latestForMachine`, list/upsert/stream) are fine. See `README.md` § Package boundary and `CLAUDE.md`.
 
-The shared collector runtime lives under `src/`. The Scala Supervisor lives in `supervisor-engine/`; plant profiles supply their own classifier and configuration.
+The shared collector runtime lives under `src/`. The Scala stream processor lives in `stream-processing/`; plant profiles supply their own classifier and configuration.
 
 ## Testing and release policy
 
@@ -19,4 +19,4 @@ The shared collector runtime lives under `src/`. The Scala Supervisor lives in `
 
 Use `npx mocha --exit test/path/to/test.js` to select files or `npm test -- --grep "pattern"` to select cases. Run integration tests for changed persistence/messaging adapters and their contracts. Use `npm test` for broad changes; run `npm run lint` when JavaScript or lint configuration changes.
 
-The Scala release check runs `cd supervisor-engine && sbt test assembly` with JDK 21.
+The Scala release check runs `cd stream-processing && sbt test assembly` with JDK 21.

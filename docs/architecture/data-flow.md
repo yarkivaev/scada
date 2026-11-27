@@ -7,7 +7,7 @@
 | Component | Runs where | Responsibility |
 | --- | --- | --- |
 | Site server (`siteServer`) | Plant application process | Serves plant routes and can run the edge HTTP interface and optional MQTT ingest. |
-| [Supervisor engine](../../supervisor-engine/README.md) | Scala workload with a plant profile | Reads telemetry, produces segments and restores classifier history. |
+| [Stream processing](../../stream-processing/README.md) | Scala workload with a plant profile | Reads telemetry, produces segments and restores classifier history. |
 | [State sink](README.md#state-sink) (`supervisor-sink`) | Site process or dedicated workload | Consumes STOMP deliveries and persists segments, decisions and alerts in PostgreSQL. |
 | Agent (`scada-collector`) | Host or container with access to the source | Runs assigned device or stream tasks and delivers their output to configured destinations. |
 | Controller (`scada-controller`) | Edge control deployment | Uses etcd to place collector tasks. Collectors read assignments and report progress. |
@@ -30,16 +30,16 @@ Deploy etcd and the controller when task placement should move between eligible 
 
 ### Replicated processing
 
-With prepared Supervisor candidates on different edge nodes, a shared writer lease coordinates ownership per machine. A worker can resume historical correction from the durable cursor and checkpoint. See [High availability](high-availability.md#replicated-supervisor-and-history-workers).
+With prepared Stream Worker candidates on different edge nodes, a shared writer lease coordinates ownership per machine. A worker can resume historical correction from the durable cursor and checkpoint. See [High availability](high-availability.md#replicated-stream-processing-and-history-workers).
 
 ## Classification and replay
 
 1. A collector reads a device or stream and publishes readings to the configured broker or sink.
-2. Supervisor maps readings to machine parameters and emits timeline segments. Configuration selects the live source and the historical processing path.
+2. The stream processor maps readings to machine parameters and emits timeline segments. Configuration selects the live source and the historical processing path.
 3. The state sink consumes STOMP events and writes PostgreSQL. Recovery uses the configured checkpoint API, durable history work or classifier cursors as appropriate for the selected mode.
 4. The site API serves measurements and state to consumers. Central archives can independently ingest selected raw readings into ClickHouse.
 
-[Supervisor engine and history modes](../../supervisor-engine/README.md).
+[Stream processing and history modes](../../stream-processing/README.md).
 
 ## Read path
 

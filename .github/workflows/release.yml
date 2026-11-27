@@ -21,7 +21,7 @@ jobs:
   control:
     uses: ./.github/workflows/control.yml
 
-  supervisor:
+  stream-processing:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -39,7 +39,7 @@ jobs:
           --health-retries 10
     defaults:
       run:
-        working-directory: supervisor-engine
+        working-directory: stream-processing
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -49,6 +49,7 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U scada_test < ../db/migrations/E0018__stream_worker_checkpoint.sql
+      - run: ./resolve-worker.sh
       - run: sbt test assembly
         env:
           PGUSER: scada_test
@@ -56,7 +57,7 @@ jobs:
           SCADA_STREAM_WORKER_TEST_JDBC: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports['5432'] }}/scada_test
 
   tag:
-    needs: [check-version, lint, test, control, supervisor]
+    needs: [check-version, lint, test, control, stream-processing]
     if: needs.check-version.outputs.should_release == 'true'
     uses: yarkivaev/npm-workflows/.github/workflows/tag.yml@main
     with:

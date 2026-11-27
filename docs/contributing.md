@@ -45,9 +45,9 @@ use only loopback ports or container-private addresses, and remove the test
 containers at exit. The k3s test uses only the kubeconfig it generates from its
 own container.
 
-## Scala Supervisor checks
+## Scala stream processing checks
 
-Run `sbt test assembly` from `supervisor-engine/` with JDK 21. The release workflow runs these checks on `main` before tagging and publishing. Verify profile-specific behavior in each consuming plant repository.
+From `stream-processing/` with JDK 21, run `./resolve-worker.sh` followed by `sbt test assembly`. The release workflow runs these checks on `main` before tagging and publishing. Verify profile-specific behavior in each consuming plant repository.
 
 ## Design conventions
 
@@ -58,7 +58,7 @@ Run `sbt test assembly` from `supervisor-engine/` with JDK 21. The release workf
 
 ## CI and releases
 
-The [release workflow](../.github/workflows/release.yml) runs the version check, lint, Node.js tests, control integration and Scala Supervisor tests and assembly on `main`. Tagging and npm publication require the relevant checks to pass. Downstream deployment repositories build plant container images.
+The [release workflow](../.github/workflows/release.yml) runs the version check, lint, Node.js tests, control integration and Scala stream processing tests and assembly on `main`. Tagging and npm publication require the relevant checks to pass. Downstream deployment repositories build plant container images.
 
 ## Measurements
 

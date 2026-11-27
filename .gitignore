@@ -4,4 +4,6 @@ coverage/
 .github/workflows/.claude/
 
 # Scala Supervisor build outputs
-supervisor-engine/**/target/
+stream-processing/**/target/
+stream-processing/dependencies/
+stream-processing/.stream-worker.*
