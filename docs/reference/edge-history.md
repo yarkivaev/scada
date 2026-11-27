@@ -36,6 +36,12 @@ E0015 freezes the admission clock and persists a per-backend retained raw-histor
 
 ## Bounded native history commits
 
+At a class change, live rule-based classification can close the preceding phase
+at the next phase's first sample. Native historical replay closes the preceding
+phase at its last contributing sample. Both use the new phase's first sample as
+its start. Historical sample coverage therefore preserves its bounds and avoids
+assigning the transition sample to both phases.
+
 Native history receivers advertise `nativeTailProtocol: preserve-known-suffix-v1`
 on configuration. Workers must negotiate this before starting. A computed
 terminal anchor must not clip an existing segment whose known end lies beyond
