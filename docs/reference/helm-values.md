@@ -139,7 +139,7 @@ sites:
     machines: [unit-2]
 ```
 
-`archive` has no ownership. Its fan-in is both machines from `cell-a`. Metrics go to ClickHouse:
+`archive` has no ownership. It receives each machine from its source cell. Metrics go to ClickHouse:
 
 ```yaml
 image: example.invalid/plant:1
@@ -148,7 +148,9 @@ clickhouse:
   enabled: true
 sites:
   - baseUrl: http://192.0.2.10:30300/api/v1
-    machines: [unit-1, unit-2]
+    machines: [unit-1]
+  - baseUrl: http://192.0.2.11:30300/api/v1
+    machines: [unit-2]
 ```
 
 External state store and an external bus, profile `cell-external`:

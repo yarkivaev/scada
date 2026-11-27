@@ -40,6 +40,12 @@ Controller replicas reconcile assignments through an etcd quorum. Each agent rea
 
 If etcd loses quorum, new placement pauses and running agents can continue using their saved assignments. Pin tasks that require a physical device to the node where that device is attached. See [Edge assignment controller](../collect/edge-controller.md).
 
+## Replicated Supervisor and historical workers
+
+![Supervisor candidates share a writer lease and use durable correction work.](diagrams/replicated-supervisor.svg)
+
+A deployment can keep Supervisor candidates on different edge nodes. With a shared PostgreSQL lease, a candidate must acquire the per-machine lock to write. Historical correction resumes from durable work and rejects a stale claim or changed context. See [High availability](high-availability.md) for replica placement, handoff and failure guarantees.
+
 ## Further reading
 
 - [Data flow](data-flow.md)

@@ -6,6 +6,8 @@ The edge controller places collector tasks on eligible nodes. Collectors save as
 
 Independent edge clusters run the etcd members and controller replicas declared by the deployment DSL; every collector embeds an assignment agent. Losing the control majority prevents new placement but never expires saved work. Serial tasks require a pinned node. Controller changes use etcd transactions comparing the leader value and lease.
 
+See [High availability](../architecture/high-availability.md) for collector copies, quorum loss and the separate Supervisor writer path.
+
 ## Configure controller and agents
 
 Run `scada-controller` using the controller variables. Run `scada-collector` on each eligible node using the agent variables.
@@ -28,7 +30,28 @@ Without control endpoints, the collector uses manifest mode. The agent validates
 `@yarkivaev/scada/control` exports `clientFromEnv`, `controlStore`, `publishCatalog`, `schedule`, `controller` and `assignmentAgent`. Publish with `publishCatalog(controlStore(clientFromEnv(env), env.CONTROL_PREFIX), catalog, expectedRevision?)`. Catalog shape:
 
 ```json
-{"version":"1","nodes":[{"id":"edge-a","capacity":100}],"tasks":[{"taskId":"plant/channel","copies":2,"cost":1,"eligibleNodes":["edge-a"],"spec":{"adapter":"example"}}]}
+{
+  "version": "1",
+  "nodes": [
+    { "id": "edge-a", "capacity": 100 },
+    { "id": "edge-b", "capacity": 100 }
+  ],
+  "tasks": [{
+    "taskId": "plant/power",
+    "copies": 2,
+    "cost": 1,
+    "eligibleNodes": ["edge-a", "edge-b"],
+    "spec": {
+      "adapter": "modbus",
+      "url": { "$secret": "MQTT_URL" },
+      "config": {
+        "addresses": ["tcp://192.0.2.10:502"],
+        "interval": 5,
+        "plans": [[{ "point": "holding:4000:cdab", "topic": "plant/line/power" }]]
+      }
+    }
+  }]
+}
 ```
 
 `pinnedNode` forces one physical host. Network tasks default to two copies and capacity cost one. Placement preserves current owners; coverage of each source precedes second copies. Source reading progress is separate from process heartbeat. Extra copies are removed only after enough remaining copies confirm recent reads. An unreachable owner retains its saved work.
@@ -47,7 +70,7 @@ To verify edge control locally, run `npm test`, `npm run lint`, and `node test/i
 
 ## Bound the delivery spool
 
-The disk spool has two admission bounds. Configure `COLLECTOR_SPOOL_MAX_BYTES` and `COLLECTOR_SPOOL_MAX_RECORDS` (positive safe integer, default 100000). Existing records are never evicted to admit new observations. Partial recipient confirmation does not release a record slot; full confirmation does. Startup reads directory entries incrementally and refuses to open an existing spool exceeding the configured record bound, preserving every file; raise the bound to recover and drain that backlog. Status exposes `recordLimit` alongside pending count and byte usage.
+The disk spool has two admission bounds. Configure `COLLECTOR_SPOOL_MAX_BYTES` and `COLLECTOR_SPOOL_MAX_RECORDS` (positive safe integer, default 100000). Existing records are never evicted to admit new observations. Partial recipient confirmation does not release a record slot; full confirmation does. Recovery validates the SQLite spool and imports any legacy records incrementally. If the retained backlog exceeds the configured record bound, raise the bound to recover and drain it. See [durable delivery](durable-delivery.md#size-the-spool) for disk and recovery budgets. Status exposes `recordLimit` alongside pending count and byte usage.
 
 ## Read evidence and clocks
 

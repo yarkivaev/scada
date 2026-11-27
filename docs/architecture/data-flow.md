@@ -28,6 +28,10 @@ Keep plant state at the edge. Forward selected telemetry to central ingestion an
 
 Deploy etcd and the controller when task placement should move between eligible nodes. Pin work that requires a physical device to its host. If etcd loses quorum, new placement pauses and existing collectors can continue their saved assignments. See [Edge assignment controller](../collect/edge-controller.md).
 
+### Replicated processing
+
+With prepared Supervisor candidates on different edge nodes, a shared writer lease coordinates ownership per machine. A worker can resume historical correction from the durable cursor and checkpoint. See [High availability](high-availability.md#replicated-supervisor-and-history-workers).
+
 ## Classification and replay
 
 1. A collector reads a device or stream and publishes readings to the configured broker or sink.

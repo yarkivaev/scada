@@ -4,7 +4,7 @@
 
 Use export ports to move data to a downstream destination. Use site sync to pull data from an allowlisted site into local persistence.
 
-Generic read/stream/write contract for outbound jobs. Read side uses existing `plantApi` / `@yarkivaev/scada/client` only (no direct DB). Destination adapters and plant maps live in plant packages, not here. Do not put export into `edgeApi`.
+The read side uses `plantApi` through `@yarkivaev/scada/client`. Supply the API base URL, date range, and destination adapter. Supply an EventSource implementation for live subscriptions in environments without a built-in one.
 
 ```javascript
 import { exportQuery, exportStream, exportSink, exportJob } from '@yarkivaev/scada';
@@ -12,7 +12,7 @@ import { scadaClient } from '@yarkivaev/scada/client';
 
 const client = scadaClient(baseUrl, fetch, EventSource);
 const query = exportQuery(client);
-const stream = exportStream(client);
+const stream = exportStream(client); // Pass to exportJob for live subscriptions.
 const sink = exportSink({
   write(records) { return destination.write(records); },
   send(artifact) { return destination.send(artifact); }

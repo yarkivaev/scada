@@ -17,7 +17,7 @@ Use Node.js 22 or later and ES modules. Create a plant object and supply the sen
 
 ## Kubernetes deployment
 
-Install Helm on the machine that applies the release. Prepare a Kubernetes context and namespace and a plant application image. The SCADA chart runs that image on the site and supervisor workloads. Provision persistent volumes for enabled datastores, or configure external services.
+Install Helm on the machine that applies the release. Prepare a Kubernetes context and namespace and a plant application image. The SCADA chart runs that image for the site, state sink and legacy collector workloads. Configure the Scala Supervisor as a named process with its own image and command, or deploy it separately. Provision persistent volumes for enabled datastores, or configure external services.
 
 | Component | Required for |
 | --- | --- |

@@ -14,7 +14,7 @@
 - **Keep plant state local.** An edge site can store its metrics and state in PostgreSQL. A central site can archive selected metrics from multiple edge sites in ClickHouse.
 - **Manage placement separately.** Agents can run from local manifests. An optional `scada-controller` assigns work through etcd, and agents can continue running saved assignments during a control-plane outage.
 
-See the [deployment diagrams](docs/architecture/README.md) for multi-site archives and managed agents.
+For high availability, run collector copies on eligible nodes, prepare a standby Supervisor and persist historical work so another worker can resume it. See [High availability](docs/architecture/high-availability.md) for the guarantees and their prerequisites.
 
 ## Package boundary
 

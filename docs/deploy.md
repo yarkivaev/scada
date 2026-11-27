@@ -4,7 +4,7 @@
 
 Describe the plant namespace, server responsibilities and telemetry routes in a system document. Project one release per Kubernetes cluster.
 
-The **system document** names every machine, server, and app. A plant package stores that file and does not project it itself. `readDocument(text, load)` parses the YAML subset: maps, lists, and scalars. `include` lists other yaml files the reader loads through `load`. Those files merge in: maps and namespace trees combine, listed servers replace, profiles deep-merge, and a `null` app drops that app.
+The **system document** names every machine, server, and app. A plant package supplies that file and calls the SCADA projection for each target cluster. `readDocument(text, load)` parses the YAML subset: maps, lists, and scalars. `include` lists other yaml files the reader loads through `load`. Those files merge in: maps and namespace trees combine, listed servers replace, profiles deep-merge, and a `null` app drops that app.
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
@@ -16,7 +16,7 @@ A server has four parts. Each part is optional.
 
 | Part | What it answers |
 |---|---|
-| `ownership` | state of an object this server edits. The same object on several servers is one fault-tolerant set. This is not telemetry |
+| `ownership` | Object paths whose state this server owns. Listing a path here informs release projection and flow validation. Configure state replication and write coordination for your deployment. |
 | `fan_in` | one flow into this server. It has no state |
 | `fan_out` | one flow out of this server |
 | `api` | services other servers may call. `plant` is the plant HTTP API. `bus` is the message bus those servers open. A bus url carries no password. A panel that only the local HMI uses is not an api |
@@ -99,7 +99,7 @@ mappings:
 
 `modbus-to-mqtt` publishes each holding point as MQTT JSON `{ts, value}` on that document path. The number in `holding:<pdu>` is the PDU address, the same scale as `?at=`. `:abcd` and `:cdab` select a float32 word order. A bare `holding:<pdu>` is one uint16. The poll window is `?at=` and `count` on the address, or the span of the holding points when those are omitted. One process shares one window. `coil:` stays a document point and is not read by this collector. Chart `collectors[].mapping` must already be these holding points. A plant driver may rewrite local nicknames before it writes values.
 
-`namespace` is the name tree. A name has an `id`. Nested names are `nodes`. A node that has children is a group. A flow may name the group instead of each leaf. The leaf is the parameter. The object may be an ancestor of that leaf. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+`namespace` is the name tree. A name has an `id`. Nested names are `nodes`. A node that has children is a group. A flow may name the group instead of each leaf. The leaf is the parameter. The object may be an ancestor of that leaf. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path can appear on more than one server. The deployment supplies the state replication and write coordination. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
 
 ```yaml
 templates:
@@ -130,6 +130,8 @@ servers:
     fan_out:
       - to: cell-a
         name: mill/hall/unit-2/electrical
+      - to: archive
+        name: mill/hall/unit-2/electrical
     api:
       - id: plant
         url: http://192.0.2.11:30300/api/v1
@@ -150,11 +152,11 @@ servers:
     fan_out:
       - to: archive
         name: mill/hall/unit-1/electrical
-      - to: archive
-        name: mill/hall/unit-2/electrical
     api:
       - id: plant
         url: http://192.0.2.10:30300/api/v1
+      - id: bus
+        url: amqp://192.0.2.10:5672
     objects:
       - mill/hall/unit-1
     profile:
@@ -163,18 +165,22 @@ servers:
         cluster: cell-a
     service: { nodePort: 30300 }
   - id: archive
+    api:
+      - id: bus
+        url: amqp://192.0.2.12:5672
     fan_in:
       - from: cell-a
         api: plant
         name: mill/hall/unit-1/electrical
-      - from: cell-a
+      - from: cell-b
         api: plant
         name: mill/hall/unit-2/electrical
     profile:
       id: archive
       variables:
         cluster: archive
-profiles:                        # shared by many servers
+# Profiles can be shared by multiple servers.
+profiles:
   cell:
     variables:
       cluster: null
@@ -183,6 +189,9 @@ profiles:                        # shared by many servers
       state_store: { enabled: true }
       message_bus: { enabled: true }
       telemetry_store: { enabled: false }
+    apps:
+      scada:
+        image: example.invalid/plant:1
   archive:
     variables:
       cluster: null
@@ -210,7 +219,7 @@ profiles:                        # shared by many servers
 
 `objects` holds the namespace nodes whose state this server keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
-`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in`, `fan_out`, and `objects` accept `*` and `{a,b}` in a name, a server id, or an object path. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment, and brace groups in one path expand together. A fixed `from` applies to every expanded name. A pattern selects paths and servers that already exist. It does not pair every matching server with every matching name. `from: cell-*` with `name: mill/hall/*/electrical` takes, from each matching server, the outgoing names that match the name. An object pattern expands to the namespace paths it fits. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
+`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`, allowing the projection to validate flow from those owners. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in`, `fan_out`, and `objects` accept `*` and `{a,b}` in a name, a server id, or an object path. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment, and brace groups in one path expand together. A fixed `from` applies to every expanded name. A pattern selects paths and servers that already exist. It does not pair every matching server with every matching name. `from: cell-*` with `name: mill/hall/*/electrical` takes, from each matching server, the outgoing names that match the name. An object pattern expands to the namespace paths it fits. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
 
 Profile:
 

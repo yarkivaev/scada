@@ -17,7 +17,7 @@ A plant typically runs a site at the edge, close to its equipment. Collectors re
 | Run collectors on separate nodes | [Collector runtime](collect/runtime.md) |
 | Classify readings and replay history | [Supervisor engine](../supervisor-engine/README.md) |
 | Find the command and its inputs | [CLI tools](reference/cli.md) |
-| Understand what happens during a broker or controller outage | [Architecture](architecture/data-flow.md) |
+| Design for controller, collector and Supervisor failures | [High availability](architecture/high-availability.md) |
 
 ## [Quick-start guide](quick-start.md)
 
@@ -37,6 +37,7 @@ Choose between integrating the npm package and deploying a plant application wit
 Understand the runtime components, data flow and boundaries between SCADA and plant packages.
 
 - [Data flow](architecture/data-flow.md)
+- [High availability](architecture/high-availability.md)
 - [Package boundary](architecture/package-boundary.md)
 - [Source layout](architecture/source-layout.md)
 - [Supervisor engine](../supervisor-engine/README.md)

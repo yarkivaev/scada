@@ -52,17 +52,27 @@ Implementations: `clickhouseSensor` (central; live `stream()` batches many topic
 
 ## Connect ClickHouse sensors
 
-Provide two plant-specific callbacks. `buildSensors` wires the sensor ports and `shopFactory` returns the shop that contains the machines.
+Use an existing ClickHouse database with the SCADA metrics schema and an account that can read it. `buildSensors` maps each device to its topics and `shopFactory` returns the shop that contains the machines. Mount the resulting API as in the [quick start](../quick-start.md).
 
 ```javascript
-import { plantApi, metricsPlant, clickhouseConnection } from '@yarkivaev/scada';
+import {
+  clickhouseConnection, clickhouseSensor, initialized, machine, metricsPlant, plantApi, shop
+} from '@yarkivaev/scada';
 
 const p = await metricsPlant(
   [{ device: 'device-1', machine: 'm1' }],
   {
-    connection: () => clickhouseConnection(process.env.CLICKHOUSE_HOST),
-    buildSensors: (conn, entry) => ({ /* sensor factories */ }),
-    shopFactory: (entries, ctx) => { /* return shop */ }
+    connection: () => clickhouseConnection(process.env.CLICKHOUSE_HOST ?? 'localhost', {
+      username: process.env.CLICKHOUSE_USER ?? 'default',
+      password: process.env.CLICKHOUSE_PASSWORD
+    }),
+    buildSensors: (connection, entry) => ({
+      temperature: clickhouseSensor(connection, `${entry.device}/temperature`, 'Temperature', '°C')
+    }),
+    shopFactory: (entries) => {
+      const machines = Object.fromEntries(entries.map(({ name, sensors }) => [name, machine(name, { sensors })]));
+      return shop('workshop', initialized(machines, Object.values));
+    }
   }
 );
 

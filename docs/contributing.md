@@ -36,7 +36,7 @@ Run `sbt test assembly` from `supervisor-engine/` with JDK 21. The release workf
 
 ## CI and releases
 
-The [release workflow](../.github/workflows/release.yml) runs the version check, lint, tests and control integration on `main`. Tagging and npm publication require the relevant checks to pass. Downstream deployment repositories build plant container images.
+The [release workflow](../.github/workflows/release.yml) runs the version check, lint, Node.js tests, control integration and Scala Supervisor tests and assembly on `main`. Tagging and npm publication require the relevant checks to pass. Downstream deployment repositories build plant container images.
 
 ## Measurements
 

@@ -2,7 +2,7 @@
 
 # Configuration options
 
-The site, collector and controller each read their own settings. Choose the configuration surface that matches how you start the process.
+The site, collector, controller and Supervisor each read their own settings. Choose the configuration surface that matches how you start the process.
 
 | Process | Runtime configuration | Deployment configuration |
 | --- | --- | --- |

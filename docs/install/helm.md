@@ -39,7 +39,7 @@ helm install scada ./charts/scada --kube-context plant-context --namespace plant
 
 ## Verify the workloads
 
-Inspect the deployed pods and check that the expected site, state sink and any configured classifier workloads become ready. If either stays unready, follow [Troubleshooting](../operations/troubleshooting.md).
+Inspect the deployed pods and check that the expected site, state sink and any configured classifier workloads become ready. If a workload stays unready, follow [Troubleshooting](../operations/troubleshooting.md).
 
 ```sh
 kubectl --context plant-context --namespace plant get deployments,pods
