@@ -126,4 +126,25 @@ describe('contiguous PostgreSQL phase storage', function () {
         await dispatch().accept({ type: 'phase-transition', machine: track, pieces: [closed, open] });
         assert.deepEqual((await visible()).slice(-2), expected([closed, open]));
     });
+
+    it('keeps the newest pending revision before and after its anchor becomes visible', async () => {
+        await pool.query('TRUNCATE segments, contiguous_phase_inbox');
+        const next = origin + 5000;
+        const pending = { ...phase('off', next - origin, next - origin),
+            properties: JSON.stringify({ phase_revision: '12' }) };
+        const stale = { ...pending, properties: JSON.stringify({ phase_revision: '11' }) };
+        const heartbeat = { ...stale, end_time: iso(next + 2000) };
+        await dispatch().accept(heartbeat);
+        await dispatch().accept(pending);
+        await dispatch().accept(heartbeat);
+        await dispatch().accept(phase('on', 0, next - origin));
+        const read = async () => {
+            const { rows } = await pool.query('SELECT properties FROM segments WHERE start_time=$1', [iso(next)]);
+            return JSON.parse(rows[0].properties);
+        };
+        assert.deepEqual(await read(), { phase_revision: '12' });
+        await dispatch().accept(stale);
+        await dispatch().accept({ ...pending, properties: 'legacy text' });
+        assert.deepEqual(await read(), { phase_revision: '12' });
+    });
 });

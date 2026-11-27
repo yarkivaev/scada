@@ -30,7 +30,7 @@ function heartbeatKey(parsed) {
  * @returns {boolean}
  */
 function isHeartbeat(parsed) {
-    return parsed.type === 'segment' && parsed.duration === 0;
+    return parsed.type === 'segment' && parsed.duration === 0 && parsed.properties?.phase_revision === undefined;
 }
 
 /**

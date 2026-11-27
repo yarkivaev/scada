@@ -40,6 +40,19 @@ function heartbeat(machine, start, end) {
 }
 
 describe('segmentCoalesce', function() {
+    it('delivers ordered revisions to the sink even when a stale update arrives last', async function() {
+        const revisions = [];
+        const coalesce = segmentCoalesce({
+            async accept(raw) { revisions.push(JSON.parse(raw.payload).properties.phase_revision); }
+        }, { size: 2, interval: 60 });
+        for (const revision of ['12', '11']) {
+            const payload = JSON.parse(heartbeat('cm8', 10, 10));
+            payload.properties = { phase_revision: revision };
+            // eslint-disable-next-line no-await-in-loop
+            await coalesce.accept({ destination: '/queue/scada.segments.ingest', payload: JSON.stringify(payload), settle: settle() });
+        }
+        assert.deepStrictEqual(revisions, ['12', '11']);
+    });
     it('writes only the latest heartbeat for one open segment key', async function() {
         const accepted = [];
         const codec = {
