@@ -21,8 +21,23 @@ jobs:
   control:
     uses: ./.github/workflows/control.yml
 
+  supervisor:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supervisor-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - run: sbt test assembly
+
   tag:
-    needs: [check-version, lint, test, control]
+    needs: [check-version, lint, test, control, supervisor]
     if: needs.check-version.outputs.should_release == 'true'
     uses: yarkivaev/npm-workflows/.github/workflows/tag.yml@main
     with:
