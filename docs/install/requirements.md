@@ -28,7 +28,7 @@ Install Helm on the machine that applies the release. Prepare a Kubernetes conte
 
 ## Supervisor hosts
 
-Use JDK 21 to build and run the classifier JAR. Give the workload access to its telemetry source, broker destinations and configured checkpoint API. Plant images can bundle the JAR with a profile. See [Supervisor engine](../../supervisor-engine/README.md).
+Use JDK 21 to build and run the classifier JAR. Give the workload access to its telemetry source, broker destinations and configured checkpoint API. Plant images can bundle the JAR with a profile. See [Stream processing](../../stream-processing/README.md).
 
 ## Collector hosts
 

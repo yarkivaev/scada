@@ -11,7 +11,7 @@ Use Node.js 22 or later for the npm package and JDK 21 for the Scala classifier.
 | `scada-controller` | Places collector tasks through etcd. |
 | `supervisor-sink` | Consumes STOMP events, writes PostgreSQL state and serves the internal state API. |
 | `modbus-to-mqtt` | Polls Modbus and publishes the configured `STREAM` and `MAPPING` paths. |
-| `java -jar scada-supervisor-engine.jar` | Classifies readings, restores history and publishes segments. |
+| `java -jar scada-stream-processing.jar` | Classifies readings, restores history and publishes segments. |
 | Plant Node.js entrypoint | Composes `siteServer` with the plant model, sensors and routes. |
 
 ## Manage SCADA from a workstation
@@ -152,7 +152,7 @@ The plant package supplies its site entrypoint. To launch the local example, fol
 
 ## Run classification and persistence
 
-Build and check the classifier with the [Supervisor engine guide](../../supervisor-engine/README.md). For the state sink and standalone Modbus publisher, see [environment variables](environment.md) and [Modbus mappings](../deploy.md#mappings).
+Build and check the classifier with the [Stream processing guide](../../stream-processing/README.md). For the state sink and standalone Modbus publisher, see [environment variables](environment.md) and [Modbus mappings](../deploy.md#mappings).
 
 ---
 

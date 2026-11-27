@@ -2,7 +2,7 @@
 
 # Timeline persistence
 
-The [Supervisor engine](../../supervisor-engine/README.md) classifies telemetry and publishes timeline segments. Supervisor-sink persists those STOMP messages. The following contracts describe split edits, batching and rejected deliveries.
+The [Stream processing](../../stream-processing/README.md) classifies telemetry and publishes timeline segments. The state sink commits those results before RabbitMQ relays them. The following contracts describe split edits, batching and rejected deliveries.
 
 ## Split family
 

@@ -8,7 +8,7 @@ The site, collector, controller and Supervisor each read their own settings. Cho
 | --- | --- | --- |
 | Site and supervisor-sink | [Environment variables](../reference/environment.md) and the plant application's JavaScript configuration | [Helm values](../reference/helm-values.md) |
 | Collector | [Local manifest](../collect/runtime.md#run-from-a-manifest) or [controller assignment](../collect/edge-controller.md#configure-controller-and-agents) | Named processes and device mappings in the [system document](../deploy.md) |
-| Supervisor classifier | [HOCON and runtime options](../../supervisor-engine/README.md#build-and-run) | A named process or a plant-managed workload |
+| Stream processor | [HOCON and runtime options](../../stream-processing/README.md#build-and-run) | A named process or a plant-managed workload |
 | Edge controller | [etcd endpoints and credentials](../collect/edge-controller.md#configure-controller-and-agents) | Controller and etcd configuration in the plant's deployment |
 
 ## Choose where collector assignments come from

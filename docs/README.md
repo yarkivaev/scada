@@ -4,9 +4,9 @@
 
 ## What is SCADA?
 
-SCADA provides the services a plant application needs to collect device readings, keep operational history and serve current state to clients. The plant application supplies the equipment model, device mappings and rules. SCADA supplies the collector runtime, Scala Supervisor engine, state sink and APIs.
+SCADA provides the services a plant application needs to collect device readings, keep operational history and serve current state to clients. The plant application supplies the equipment model, device mappings and rules. SCADA supplies the collector runtime, Scala stream processing, state sink and APIs.
 
-Use `scada-collector` to run collection tasks. Use the [Supervisor engine](../supervisor-engine/README.md) to process readings into segments and [Helm](install/helm.md) to deploy the configured workloads.
+Use `scada-collector` to run collection tasks. Use the [Stream processing](../stream-processing/README.md) to process readings into segments and [Helm](install/helm.md) to deploy the configured workloads.
 
 A plant typically runs a site at the edge, close to its equipment. Collectors read devices and send their data to the site or a central destination. A central site can serve metric history across multiple plants. An optional edge controller assigns collector tasks to nodes.
 
@@ -15,7 +15,7 @@ A plant typically runs a site at the edge, close to its equipment. Collectors re
 | Try a local plant API with one simulated machine | [Quick-start guide](quick-start.md) |
 | Deploy a plant image and configure its services | [Helm installation](install/helm.md) |
 | Run collectors on separate nodes | [Collector runtime](collect/runtime.md) |
-| Classify readings and replay history | [Supervisor engine](../supervisor-engine/README.md) |
+| Classify readings and replay history | [Stream processing](../stream-processing/README.md) |
 | Manage SCADA from a workstation | [SCADA management CLI](reference/cli.md#manage-scada-from-a-workstation) |
 | Design for controller, collector and Supervisor failures | [High availability](architecture/high-availability.md) |
 
@@ -40,7 +40,7 @@ Understand the runtime components, data flow and boundaries between SCADA and pl
 - [High availability](architecture/high-availability.md)
 - [Package boundary](architecture/package-boundary.md)
 - [Source layout](architecture/source-layout.md)
-- [Supervisor engine](../supervisor-engine/README.md)
+- [Stream processing](../stream-processing/README.md)
 
 ## [Data collection](collect/README.md)
 

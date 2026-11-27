@@ -12,7 +12,7 @@ SCADA treats operation `kind` values as opaque strings and exposes generic ports
 | Empty/injectable alert `translations` | Localized rule messages |
 | Opaque operation `kind` strings | Site kinds (`bath`, `chem`, …) and fold/prefix logic |
 | Collector runtime, device protocol adapters, task lifecycle and portable delivery | Source mappings and adapters for plant-owned systems |
-| Scala Supervisor engine, segment contract and history protocols | Plant classifier profiles, rules, catalogs and the application image |
+| Scala stream processing, segment contract and history protocols | Plant classifier profiles, rules, catalogs and the application image |
 | `plantApi`, `siteServer`, `supervisorSink` | Site bins, routes, `bathSensor`, reports |
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
 | ClickHouse + PG adapters | Plant wiring (`sokolPlant` / `edgePlant`) |

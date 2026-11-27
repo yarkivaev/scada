@@ -1,20 +1,20 @@
 # SCADA
 
-`@yarkivaev/scada` provides the collector runtime, Scala Supervisor engine, state sink and plant API for industrial monitoring.
+`@yarkivaev/scada` provides the collector runtime, Scala stream processing, state sink and plant API for industrial monitoring.
 
 - [Quick-start guide](docs/quick-start.md) — install the package and run a local API.
 - [Documentation](docs/README.md) — installation, architecture, collection, operations and reference.
 
 ## Architecture
 
-![A collector publishes readings to RabbitMQ. Supervisor classifies the readings into segments, the state sink writes to PostgreSQL, and the site exposes the plant API.](docs/architecture/diagrams/single-edge-site.svg)
+![A collector publishes readings to RabbitMQ. Stream processing classifies the readings into segments, the state sink writes to PostgreSQL, and the site exposes the plant API.](docs/architecture/diagrams/single-edge-site.svg)
 
 - **Collect near the equipment.** `scada-collector` runs device and stream adapters and delivers readings to their configured destinations.
-- **Process readings with plant rules.** [Supervisor](supervisor-engine/README.md) turns telemetry into timeline segments. The [state sink](docs/architecture/README.md#state-sink) persists segments, decisions and alerts, and the site API serves them to clients.
+- **Process readings with plant rules.** [Stream processing](stream-processing/README.md) turns telemetry into timeline segments. The [state sink](docs/architecture/README.md#state-sink) persists segments, decisions and alerts, and the site API serves them to clients.
 - **Keep plant state local.** An edge site can store its metrics and state in PostgreSQL. A central site can archive selected metrics from multiple edge sites in ClickHouse.
 - **Manage placement separately.** Agents can run from local manifests. An optional `scada-controller` assigns work through etcd, and agents can continue running saved assignments during a control-plane outage.
 
-For high availability, run collector copies on eligible nodes, prepare a standby Supervisor and persist historical work so another worker can resume it. See [High availability](docs/architecture/high-availability.md) for the guarantees and their prerequisites.
+For high availability, run collector copies on eligible nodes, prepare a standby stream processor and persist historical work so another worker can resume it. See [High availability](docs/architecture/high-availability.md) for the guarantees and their prerequisites.
 
 ## Package boundary
 
