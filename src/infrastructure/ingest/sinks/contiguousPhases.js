@@ -15,14 +15,24 @@ export function phaseAnchors(raw) {
     }));
 }
 
+function revision(properties) {
+    // Older property strings need not be valid JSON. The wire revision is a decimal string.
+    return `COALESCE(substring((${properties}) from '"phase_revision"[[:space:]]*:[[:space:]]*"([0-9]{1,16})"')::bigint,0)`;
+}
+
+function advancesPending(incoming, stored, nondecreasingEnd) {
+    return `(${revision(incoming)} > ${revision(stored)}
+        OR (${revision(incoming)} = ${revision(stored)} AND ${nondecreasingEnd}))`;
+}
+
 const stage = `
     INSERT INTO contiguous_phase_inbox (machine, start_time, phase)
     VALUES ($1,$2,$3)
     ON CONFLICT (machine, start_time) DO UPDATE SET phase=EXCLUDED.phase
     WHERE (contiguous_phase_inbox.phase->>'duration')::numeric = 0
       AND ((EXCLUDED.phase->>'duration')::numeric > 0
-           OR (EXCLUDED.phase->>'end_time')::timestamptz >=
-              (contiguous_phase_inbox.phase->>'end_time')::timestamptz)`;
+           OR ${advancesPending("EXCLUDED.phase->>'properties'", "contiguous_phase_inbox.phase->>'properties'",
+        "(EXCLUDED.phase->>'end_time')::timestamptz >= (contiguous_phase_inbox.phase->>'end_time')::timestamptz")})`;
 
 const visible = `
     INSERT INTO segments (machine,kind,name,start_time,end_time,duration,options,tags,properties,resolved,updated_at)
@@ -33,7 +43,7 @@ const visible = `
     WHERE segments.duration=0
       AND (EXCLUDED.duration>0 OR
            ((segments.name=EXCLUDED.name OR segments.start_time=segments.end_time)
-             AND segments.end_time<=EXCLUDED.end_time))`;
+             AND ${advancesPending('EXCLUDED.properties', 'segments.properties', 'segments.end_time<=EXCLUDED.end_time')}))`;
 
 function invalid(message) {
     return Object.assign(new RangeError(message), { permanent: true });

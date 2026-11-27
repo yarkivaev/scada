@@ -96,7 +96,7 @@ export default function timelineRoute(basePath, plant, operatorOptions, decorate
                     return kind.length > 0;
                 });
             }
-            const rows = await decorate(params.machineId, await result.machine.timeline.list(options));
+            const rows = await decorate(params.machineId, await result.machine.timeline.list(options), options);
             jsonResponse({ items: segmentItems(currentPhase ? currentPhase(params.machineId, rows) : rows) }).send(res);
         }),
         route('PATCH', `${basePath}/machines/:machineId/segments`, async (req, res, params) => {
