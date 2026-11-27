@@ -41,6 +41,8 @@ scada/
   index.js            public API facade
 ```
 
+The [Scala Supervisor engine](supervisor-engine/README.md) lives in `supervisor-engine/`. Shared collection and classification run in this repository. Plant profiles supply source mappings, classifier rules and specialized processing.
+
 ## Three layers
 
 | Layer | Contents |

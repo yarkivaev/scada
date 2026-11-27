@@ -1,7 +1,10 @@
-# SCADA stream adapters
+[Documentation](../../../docs/README.md) / [Data collection](../../../docs/collect/README.md)
 
-Protocol and storage adapters are exported by `@yarkivaev/scada/streams`.
-Generic batching, circuit and periodic sources are imported from `@yarkivaev/source-to-sink`.
+# Stream adapters
+
+SCADA exports protocol and storage adapters through `@yarkivaev/scada/streams`.
+
+Generic batching, circuit breakers and periodic sources come from `@yarkivaev/source-to-sink`.
 
 ## Components
 
@@ -63,8 +66,7 @@ in-flight acceptance before restart.
 For testing or another port implementation, pass `openPort(device)`, returning a
 port or promise for a port. The port supports EventEmitter `data`, `error` and
 `close` events plus `close(callback)`. The default opens `serialport` lazily.
-Serial input is a push stream; the source does not impose a collector backlog
-limit or pause the device.
+The source pauses the stream during acceptance and bounds the pending chunks and bytes. See [bounded operations and shutdown](#bounded-operations-and-shutdown).
 
 ### Periodic collection
 
@@ -289,3 +291,8 @@ uncertain resource/outcome, and quarantine it rather than immediately reuse it.
 ## License
 
 MIT
+
+
+---
+
+← [Durable delivery](../../../docs/collect/durable-delivery.md) · [Operations](../../../docs/operations/README.md) →

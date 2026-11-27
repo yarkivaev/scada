@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1048 410" width="1048" height="410" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, sans-serif">
+  <title id="title">Managed agents with a replicated control plane</title>
+  <desc id="desc">Controller replicas reconcile through etcd. Agents read assignments and report progress through the etcd quorum, and publish telemetry directly to the site broker.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0l8 4-8 4z" fill="#33313b" />
+    </marker>
+    <marker id="arrow-start" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0l8 4-8 4z" fill="#33313b" />
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="1046" height="408" rx="18" fill="#ffffff" stroke="#e5e2e7" />
+  <rect x="28" y="28" width="489" height="335" rx="16" fill="#fff4d2" stroke="#e5d8b2" />
+  <text x="50" y="59" font-size="19" font-weight="700" fill="#33313b" text-anchor="start">Edge control plane</text>
+  <rect x="602" y="28" width="416" height="335" rx="16" fill="#fff4d2" stroke="#e5d8b2" />
+  <text x="624" y="59" font-size="19" font-weight="700" fill="#33313b" text-anchor="start">Edge collection</text>
+  <path d="M224 116H257Q268 116 268 127V189" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M224 190H268" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M224 264H257Q268 264 268 253V190" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M268 190H336" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#arrow-start)" marker-end="url(#arrow)" />
+  <path d="M485 190H537Q549 190 549 178V139Q549 127 561 127H630" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" marker-start="url(#arrow-start)" marker-end="url(#arrow)" />
+  <path d="M485 190H537Q549 190 549 202V243Q549 255 561 255H630" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" marker-start="url(#arrow-start)" marker-end="url(#arrow)" />
+  <path d="M786 127H805Q816 127 816 138V171Q816 182 827 182H857" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M786 255H805Q816 255 816 244V212Q816 201 827 201H857" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <rect x="53" y="85" width="171" height="62" rx="10" fill="#ffe8a4" stroke="#eacb78" />
+  <g transform="translate(66 103.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="13" cy="6" r="4" />
+    <circle cx="5" cy="21" r="3" />
+    <circle cx="21" cy="21" r="3" />
+    <path d="M13 10v4M5 18v-4h16v4" />
+  </g>
+  <text x="101" y="114.0" font-size="16" font-weight="700" fill="#33313b" text-anchor="start">Controller</text>
+  <text x="101" y="133.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">Replica 1</text>
+  <rect x="53" y="159" width="171" height="62" rx="10" fill="#ffe8a4" stroke="#eacb78" />
+  <g transform="translate(66 177.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="13" cy="6" r="4" />
+    <circle cx="5" cy="21" r="3" />
+    <circle cx="21" cy="21" r="3" />
+    <path d="M13 10v4M5 18v-4h16v4" />
+  </g>
+  <text x="101" y="188.0" font-size="16" font-weight="700" fill="#33313b" text-anchor="start">Controller</text>
+  <text x="101" y="207.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">Replica 2</text>
+  <rect x="53" y="233" width="171" height="62" rx="10" fill="#ffe8a4" stroke="#eacb78" />
+  <g transform="translate(66 251.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="13" cy="6" r="4" />
+    <circle cx="5" cy="21" r="3" />
+    <circle cx="21" cy="21" r="3" />
+    <path d="M13 10v4M5 18v-4h16v4" />
+  </g>
+  <text x="101" y="262.0" font-size="16" font-weight="700" fill="#33313b" text-anchor="start">Controller</text>
+  <text x="101" y="281.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">Replica 3</text>
+  <rect x="336" y="153" width="149" height="74" rx="10" fill="#ffffff" stroke="#e5d8b2" />
+  <g transform="translate(349 177.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="13" cy="6" rx="10" ry="4" />
+    <path d="M3 6v14c0 5.3 20 5.3 20 0V6M3 13c0 5.3 20 5.3 20 0" />
+  </g>
+  <text x="381" y="188.0" font-size="15" font-weight="700" fill="#33313b" text-anchor="start">etcd quorum</text>
+  <text x="381" y="207.0" font-size="12" font-weight="500" fill="#5e5865" text-anchor="start">Placement state</text>
+  <rect x="630" y="92" width="156" height="70" rx="10" fill="#ffe8a4" stroke="#eacb78" />
+  <g transform="translate(643 114.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="5" width="16" height="16" rx="3" />
+    <rect x="10" y="10" width="6" height="6" rx="1" />
+    <path d="M10 2v3m6-3v3M10 21v3m6-3v3M2 10h3m-3 6h3m16-6h3m-3 6h3" />
+  </g>
+  <text x="675" y="125.0" font-size="15" font-weight="700" fill="#33313b" text-anchor="start">Agent node A</text>
+  <text x="675" y="144.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">scada-collector</text>
+  <rect x="630" y="220" width="156" height="70" rx="10" fill="#ffe8a4" stroke="#eacb78" />
+  <g transform="translate(643 242.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="5" width="16" height="16" rx="3" />
+    <rect x="10" y="10" width="6" height="6" rx="1" />
+    <path d="M10 2v3m6-3v3M10 21v3m6-3v3M2 10h3m-3 6h3m16-6h3m-3 6h3" />
+  </g>
+  <text x="675" y="253.0" font-size="15" font-weight="700" fill="#33313b" text-anchor="start">Agent node B</text>
+  <text x="675" y="272.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">scada-collector</text>
+  <rect x="857" y="153" width="137" height="76" rx="10" fill="#ffffff" stroke="#e5d8b2" />
+  <g transform="translate(870 178.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="9" width="7" height="8" rx="1" />
+    <rect x="17" y="2" width="7" height="7" rx="1" />
+    <rect x="17" y="17" width="7" height="7" rx="1" />
+    <path d="M9 13h4m4-8h-4v16h4" />
+  </g>
+  <text x="903" y="189.0" font-size="15" font-weight="700" fill="#33313b" text-anchor="start">Site broker</text>
+  <text x="905" y="208.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">Telemetry</text>
+  <circle cx="268" cy="190" r="5" fill="#33313b" stroke="#ffc61c" stroke-width="3.5" />
+  <circle cx="485" cy="190" r="5" fill="#33313b" stroke="#ffc61c" stroke-width="3.5" />
+  <circle cx="786" cy="127" r="5" fill="#33313b" stroke="#ffc61c" stroke-width="3.5" />
+  <circle cx="786" cy="255" r="5" fill="#33313b" stroke="#ffc61c" stroke-width="3.5" />
+  <path d="M35 385H70" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" />
+  <text x="82" y="389" font-size="13" font-weight="650" fill="#5e5865" text-anchor="start">Assignments and progress</text>
+  <path d="M272 385H307" fill="none" stroke="#33313b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <text x="319" y="389" font-size="13" font-weight="650" fill="#5e5865" text-anchor="start">Telemetry</text>
+</svg>
