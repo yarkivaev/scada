@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.6.40",
+  "version": "2.6.41",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -64,6 +64,8 @@
     "index.js",
     "charts/",
     "db/",
+    "supervisor-engine/src/main/scala/",
+    "supervisor-engine/vendor/",
     "src/"
   ]
 }

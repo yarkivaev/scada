@@ -296,6 +296,8 @@ import stateDataFake from '@yarkivaev/scada/stateDataFake';
 
 ## Package boundary
 
+The [Scala Supervisor engine](supervisor-engine/README.md) turns readings into timeline segments. Plant packages supply their own configuration and processing rules.
+
 **Hard rule:** this package is factory-agnostic. It must not contain Sokol melting/bath domain, chem-analysis UI, HMI copy (e.g. Болото), `weight_after` fold semantics, or plant-specific sensors/routes. Those belong in `sokol-scada` (or another plant package).
 
 Opaque operation `kind` strings and generic ports (`latestForMachine`, list/upsert/stream) are allowed; never treat a kind as a first-class domain type here.
