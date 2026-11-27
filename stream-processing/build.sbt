@@ -1,6 +1,6 @@
 name := "scada-stream-processing"
 organization := "io.yarkivaev"
-version := "2.9.0"
+version := "2.9.1"
 ThisBuild / scalaVersion := "3.5.2"
 
 Compile / unmanagedSourceDirectories += baseDirectory.value / "vendor" / "temporal-streams" / "src" / "main" / "scala"
