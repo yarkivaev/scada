@@ -1,8 +1,22 @@
+import topologyStatus from './topologyStatus.js';
+
+function presentation(execute, topology, describe, network) {
+    return (command) => {
+        if (command.action === 'load') {
+            return network.load(command.context);
+        }
+        if (command.action === 'status' && topology) {
+            return topologyStatus(topology, describe, command.context, network.traffic);
+        }
+        return execute(command);
+    };
+}
+
 /**
  * Runtime port: components(), logs(id, tail), plan(), apply().
  * The application only knows context names and normalized results.
  */
-export default function management(targets) {
+export default function management(targets, topology, network) {
     const applying = new Set();
 
     function targetOf(name, forwarded) {
@@ -42,7 +56,7 @@ export default function management(targets) {
                 return { name, runtime: target.runtime };
             }) };
         }
-        if (action === 'components') {
+        if (action === 'components' || action === 'status') {
             const names = context ? [context] : Array.from(targets.keys());
             return { contexts: await Promise.all(names.map((name) => { return describe(name, forwarded); })) };
         }
@@ -53,5 +67,5 @@ export default function management(targets) {
         return action === 'plan' ? target.adapter.plan() : apply(target);
     }
 
-    return { execute };
+    return { execute: presentation(execute, topology, describe, network) };
 }

@@ -1,10 +1,10 @@
-/** Kubernetes inspection and reconciliation for one configured release. */
+/** Kubernetes inspection and reconciliation for one configured target. */
 import { fileURLToPath } from 'node:url';
 import command from './command.js';
 
 const chart = fileURLToPath(new URL('../../../charts/scada', import.meta.url));
 const worker = fileURLToPath(new URL('./serverSideRelease.js', import.meta.url));
-const workloads = 'deployments,statefulsets,daemonsets,jobs';
+const workloadKinds = 'deployments,statefulsets,daemonsets,jobs';
 
 function jobState(status) {
     function active(type) {
@@ -39,24 +39,48 @@ function workloadState({ kind, metadata, spec = {}, status = {} }) {
     return complete ? 'ready' : 'pending';
 }
 
-export default function kubernetes({ kubeContext, namespace, release, values, releasePlan }) {
-    function kubectl(action, args) {
-        return command('kubectl', [action, `--context=${kubeContext}`, `--namespace=${namespace}`, ...args]);
+function workloadId(item) {
+    return `${item.kind.toLowerCase()}/${item.metadata.name}`;
+}
+
+function workloadInspection(kubectl, release, expected) {
+    async function observed() {
+        if (expected) {
+            const output = await kubectl('get', [...expected, '--ignore-not-found', '-o', 'json']);
+            if (!output.trim()) {
+                return [];
+            }
+            const response = JSON.parse(output);
+            return response.kind === 'List' ? response.items : [response];
+        }
+        const selector = `app.kubernetes.io/name=scada,app.kubernetes.io/instance=${release}`;
+        const { items } = JSON.parse(await kubectl('get', [workloadKinds, '--selector', selector, '-o', 'json']));
+        return items;
     }
 
     async function components() {
-        const selector = `app.kubernetes.io/name=scada,app.kubernetes.io/instance=${release}`;
-        const { items } = JSON.parse(await kubectl('get', [workloads, '--selector', selector, '-o', 'json']));
-        return items.map((item) => {
-            return { id: `${item.kind.toLowerCase()}/${item.metadata.name}`, state: workloadState(item) };
+        const states = new Map((await observed()).map((item) => {
+            return [workloadId(item), workloadState(item)];
+        }));
+        return (expected ?? Array.from(states.keys())).map((id) => {
+            return { id, state: states.get(id) ?? 'failed' };
         });
     }
 
     async function logs(component, tail) {
-        if (!(await components()).some(({ id }) => { return id === component; })) {
+        if ((expected && !expected.includes(component)) ||
+            !(await observed()).some((item) => { return workloadId(item) === component; })) {
             throw new Error('unknown component');
         }
         return kubectl('logs', [component, `--tail=${tail}`, '--all-containers=true']);
+    }
+
+    return { components, logs };
+}
+
+export default function kubernetes({ kubeContext, namespace, release, values, releasePlan, workloads }) {
+    function kubectl(action, args) {
+        return command('kubectl', [action, `--context=${kubeContext}`, `--namespace=${namespace}`, ...args]);
     }
 
     async function helm(options, timeout) {
@@ -83,7 +107,7 @@ export default function kubernetes({ kubeContext, namespace, release, values, re
     }
 
     return {
-        components, logs,
+        ...workloadInspection(kubectl, release, workloads),
         plan() { return reconcile('check', ['--dry-run=server', '--hide-secret'], 30000); },
         apply() { return reconcile('apply', ['--atomic'], 660000); }
     };
