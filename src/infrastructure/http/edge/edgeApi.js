@@ -29,7 +29,7 @@ export function createEdgeApi(dataAccess, options) {
     return routes([
         ...(opt.health ? ingestHealthRoutes(opt.health) : []),
         ...admin,
-        ...historyRoutes(token, dataAccess.history),
+        ...historyRoutes(token, dataAccess.history, dataAccess.liveSegments),
         ...checkpointRoutes(token, checkpoints),
         ...metricRoutes
     ], { requestTimeoutMs: opt.requestTimeoutMs });

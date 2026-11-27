@@ -1,5 +1,6 @@
 package scada.supervisor.runtime
 
+import cats.effect.unsafe.implicits.global
 import io.yarkivaev.temporal.Observation
 import scada.supervisor.core.*
 class LocalHistorySpec extends munit.FunSuite:
@@ -18,6 +19,21 @@ class LocalHistorySpec extends munit.FunSuite:
   test("finite replay closes a phase at its last sample on a class change") {
     val points = Vector(Observation("a","power",0,0),Observation("b","power",1000,0),Observation("c","power",2000,10),Observation("d","power",3000,10))
     assertEquals(LocalHistory.classify(machine,points),Vector(HistorySegment("off",0,1000),HistorySegment("heat",2000,3000)))
+  }
+
+  test("bounded replay preserves seed parameters, observed bounds and exact positions") {
+    val start = 9007199254700001L
+    val seed = HistorySeed(start, Map("power" -> 0.0, "current" -> 5.0),
+      Some(HistorySegment("off", start - 1000, start)))
+    val points = Vector(Observation("heat","power",start + 32001,10), Observation("off","power",start + 1,0))
+    val continuity = Vector(HistoryRange(start, start + 32001))
+    val result = LocalHistory.replay(machine, points, "revision", "work", Some(seed), continuity).unsafeRunSync()
+    assertEquals(result.segments, Vector(
+      HistorySegment("off", start - 1000, start + 1),
+      HistorySegment("heat", start + 32001, start + 32001)
+    ))
+    assertEquals(result.state, Some(HistoryState(start + 32001, Map(
+      "power" -> (start + 32001, 10.0), "current" -> (start, 5.0)), result.segments.lastOption)))
   }
 
   test("overlay splits old annotated off around heat and inherits expanded pieces") {

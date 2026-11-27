@@ -6,6 +6,7 @@ import io.circe.Json
 import io.circe.parser.parse
 import java.time.Instant
 import scada.supervisor.core.*
+import scada.supervisor.infra.config.AppConfig
 import scada.supervisor.infra.stomp.{SegmentMessage, StompFrame, StompSender}
 
 /**
@@ -49,11 +50,42 @@ object HistoryBus:
 
   /** Sends every committed row and stamps the writer epoch when one is supplied. */
   def publish(sender: StompSender, destination: String, machine: MachineId, epoch: Option[Long])(rows: Vector[Json]): IO[Unit] =
-    rows.traverse_(row => sender.send(StompFrame.send(
-      destination,
-      "",
-      epoch.fold(message(machine, row))(n => stamped(machine, row, n)).noSpaces
-    )))
+    rows.traverse_ { row =>
+      val body = epoch.fold(message(machine, row))(n => stamped(machine, row, n))
+      val committed = body.deepMerge(Json.obj("committedOutputId" -> Json.fromString(TimelineWriter.identity(None, body))))
+      sender.send(StompFrame.send(destination, "", committed.noSpaces))
+    }
+
+  /** Sends a committed page. A configured lease uses the holder generation and a non-holder sends nothing. */
+  private[runtime] def announce(sender: Option[StompSender], config: AppConfig, machine: MachineId, grant: Option[LeaseGrant] = None): Vector[io.circe.Json] => IO[Unit] =
+    WriterLease.publication(config.leaseUrl, grant, config.writerEpoch) match
+      case None => (_: Vector[io.circe.Json]) => IO.unit
+      case Some(epoch) =>
+        (sender, config.connectivity.rabbitmq.destinations.segments) match
+          case (Some(conn), Some(dest)) => HistoryBus.publish(conn, dest, machine, epoch)
+          case _ => (_: Vector[io.circe.Json]) => IO.unit
+
+  /**
+   * Publishes committed history only after a real segment end is covered.
+   * A leader may publish when nothing has been replicated. A standby does not.
+   * A configured lease stamps its generation and a process that does not hold it does not publish.
+   * The same gate covers every configured machine.
+   *
+   * {{{
+   * HistoryBus.lead(sender, config, MachineId("machine-1"), 5L, Some(4L), Some(LeaseGrant(true, 7)))(rows)
+   * }}}
+   */
+  private[runtime] def lead(
+      sender: Option[StompSender],
+      config: AppConfig,
+      machine: MachineId,
+      observationMs: Long,
+      segmentEndMs: Option[Long],
+      grant: Option[LeaseGrant] = None
+  ): Vector[io.circe.Json] => IO[Unit] =
+    val leader = ObservationLead.leading(config.writerRole, config.leaseUrl)
+    if config.leaseHeld && ObservationLead.ready(observationMs, segmentEndMs, leader) then announce(sender, config, machine, grant)
+    else (_: Vector[io.circe.Json]) => IO.unit
 
   private def required(cursor: io.circe.HCursor, key: String): String =
     cursor.get[String](key).fold(error => throw IllegalArgumentException(s"History segment missing $key: ${error.getMessage}"), identity)

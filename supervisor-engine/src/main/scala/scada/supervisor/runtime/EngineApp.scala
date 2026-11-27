@@ -1,4 +1,8 @@
 package scada.supervisor.runtime
 
-/** Standalone entry point for the built-in rules-based classifier. */
-object EngineApp extends SupervisorRuntime(RuntimeProfile.default)
+import cats.effect.{ExitCode, IO, IOApp}
+
+/** Standalone entry point for the built-in rules-based worker. */
+object EngineApp extends IOApp:
+  private val application = ProcessingApplication(RuntimeProfile.default)
+  def run(args: List[String]): IO[ExitCode] = application.run(args)

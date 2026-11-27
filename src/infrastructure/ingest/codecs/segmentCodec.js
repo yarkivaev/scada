@@ -1,4 +1,5 @@
 import segmentNormalize from '../../../domain/segment/normalize.js';
+import { writeFence } from '../../persistence/pg/segmentWriteFence.js';
 import processingErrorLog from '../processingErrorLog.js';
 
 /**
@@ -43,13 +44,34 @@ function transitionRecord(parsed) {
     return { type: 'phase-transition', machine: parsed.machine, pieces };
 }
 
+function persistedRecord(parsed) {
+    if (parsed.type === 'split-family') { return familyRecord(parsed); }
+    if (parsed.type === 'phase-transition') { return transitionRecord(parsed); }
+    return segmentNormalize(parsed);
+}
+
+export function decodeSegmentBody(parsed) {
+    const {fence,committedOutputId,...body} = parsed;
+    delete body.epoch;
+    const record = persistedRecord(body);
+    if (Object.hasOwn(parsed,'fence')) {
+        writeFence(fence);
+        if (typeof fence.revision !== 'string' || !/^[0-9]+$/u.test(fence.revision)) {
+            throw new TypeError('Expected segment revision required');
+        }
+        return {...record,fence,body};
+    }
+    if (Object.hasOwn(parsed,'committedOutputId')) {
+        writeFence({outputId:committedOutputId});
+        return {...record,committedOutputId,body};
+    }
+    return record;
+}
+
 /** Decode once before admission so invalid envelopes never enter a transaction batch. */
 export function decodeSegment(raw) {
     try {
-        const parsed = JSON.parse(raw.payload);
-        if (parsed.type === 'split-family') { return familyRecord(parsed); }
-        if (parsed.type === 'phase-transition') { return transitionRecord(parsed); }
-        return segmentNormalize(parsed);
+        return decodeSegmentBody(JSON.parse(raw.payload));
     } catch (error) {
         error.permanent = true;
         throw error;

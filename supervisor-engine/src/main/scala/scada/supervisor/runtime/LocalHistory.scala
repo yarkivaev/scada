@@ -3,12 +3,17 @@ package scada.supervisor.runtime
 import cats.effect.{IO, Ref}
 import cats.syntax.all.*
 import fs2.Stream
-import io.circe.Json
+import io.circe.{Json, Printer}
 import io.circe.parser.parse
+import io.circe.syntax.*
 import io.yarkivaev.temporal.{LocalStreams, Observation, Processing, Work, Worker}
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.HexFormat
+import scada.stream.replay.{Replay, ReplayFailure, ReplayInput, ReplayManifest, ReplayRange, ReplaySeed}
+import scada.stream.worker.{ProcessingError, Processor, StepResult}
 import scada.supervisor.core.*
 import scada.supervisor.core.segmentation.Timeline
 import scada.supervisor.core.segmentation.Timeline.{Boundary, Event, Interval, Output}
@@ -43,28 +48,94 @@ object LocalHistory:
 
   /** Finite event-time classification: never inject wall-clock silence into past data. */
   def classify(machine: MachineConfig, points: Vector[Observation], seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty): Vector[HistorySegment] =
-    val gap = machine.window.toLong * 2000
-    val classifyParams = Timeline.classifier(machine.segments)
-    val groups = points.groupBy(_.time).toVector.sortBy(_._1)
-    val initialSegment = seed.flatMap: initial =>
-      val stored = initial.segment.filter(_.start <= initial.time)
-      classifyParams(Params(initial.values)) match
-        case Some(name) => Some(stored.filter(_.name == name).getOrElse(HistorySegment(name,initial.time,initial.time)))
-        case None => stored
-    val initialOpen = initialSegment.map(row => Interval(row.name, row.start, row.end))
-    val initial = (seed.fold(Map.empty[String,Double])(_.values), seed.map(_.time), initialOpen, Vector.empty[Interval[Long]])
-    val (_, _, open, closed) = groups.foldLeft(initial):
-      case ((prior, previous, current, completed), (time, group)) =>
-        val continuous = previous.exists(t => connected(t,time,gap,continuity))
-        val values = (if continuous then prior else Map.empty) ++ group.map(p => p.channel -> p.value)
-        val name = classifyParams(Params(values)).orElse(if continuous then current.map(_.name) else None)
-        name match
-          case Some(n) =>
-            val next = Timeline.step(Boundary.Observed, current, Event.Sample(time, n, continuous))
-            val finished = next.outputs.collect { case Output.Closed(row) => row }
-            (values, Some(time), next.open, completed ++ finished)
-          case None => (values, Some(time), current, completed)
-    (closed ++ open).map(row => HistorySegment(row.name, row.start, row.end))
+    val classifier = Classification(machine, continuity)
+    val (terminal, closed) = grouped(points).foldLeft((classifier.initial(seed), Vector.empty[HistorySegment])):
+      case ((state, completed), sample) =>
+        val next = classifier.advance(state, sample)
+        (next.state, completed ++ next.outputs)
+    closed ++ terminal.segment.map(segment)
+
+  private final case class Sample(time: Long, values: Map[String, Double])
+  private final case class ClassificationState(
+      time: Option[Long], parameters: Map[String, (Long, Double)], segment: Option[Interval[Long]]
+  )
+  private[runtime] final case class Replayed(segments: Vector[HistorySegment], state: Option[HistoryState])
+
+  private def segment(row: Interval[Long]): HistorySegment = HistorySegment(row.name, row.start, row.end)
+
+  private def grouped(points: Vector[Observation]): Vector[Sample] =
+    points.groupBy(_.time).toVector.sortBy(_._1).map: (time, group) =>
+      Sample(time, group.map(p => p.channel -> p.value).toMap)
+
+  private final class Classification(machine: MachineConfig, continuity: Vector[HistoryRange])
+      extends Processor[Unit, ClassificationState, Sample, HistorySegment]:
+    private val classify = Timeline.classifier(machine.segments)
+    private val gap = machine.window.toLong * 2000
+
+    def initial(seed: Option[HistorySeed]): ClassificationState =
+      val carried = seed.flatMap: value =>
+        val stored = value.segment.filter(_.start <= value.time)
+        val evaluated = classify(Params(value.values)) match
+          case Some(name) => Some(stored.filter(_.name == name).getOrElse(HistorySegment(name, value.time, value.time)))
+          case None => stored
+        evaluated.map(row => Interval(row.name, row.start, row.end))
+      val parameters = seed.fold(Map.empty[String, (Long, Double)])(value => value.values.map((key, reading) => key -> (value.time, reading)))
+      ClassificationState(seed.map(_.time), parameters, carried)
+
+    def advance(state: ClassificationState, sample: Sample): StepResult[ClassificationState, HistorySegment] =
+      val continuous = state.time.exists(connected(_, sample.time, gap, continuity))
+      val parameters = (if continuous then state.parameters else Map.empty) ++
+        sample.values.map((key, value) => key -> (sample.time, value))
+      val name = classify(Params(parameters.map((key, value) => key -> value._2)))
+        .orElse(if continuous then state.segment.map(_.name) else None)
+      val next = ClassificationState(Some(sample.time), parameters, state.segment)
+      name.fold(StepResult(next, Vector.empty[HistorySegment])): classified =>
+        val result = Timeline.step(Boundary.Observed, state.segment, Event.Sample(sample.time, classified, continuous))
+        StepResult(next.copy(segment = result.open), result.outputs.collect { case Output.Closed(row) => segment(row) })
+
+    override def step(config: Unit, state: ClassificationState, sample: Sample)
+        : Either[ProcessingError, StepResult[ClassificationState, HistorySegment]] = Right(advance(state, sample))
+
+  private[runtime] def replay(
+      machine: MachineConfig, points: Vector[Observation], baseRevision: String, runId: String,
+      seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty
+  ): IO[Replayed] = IO.defer:
+    val classifier = Classification(machine, continuity)
+    val initial = classifier.initial(seed)
+    val samples = grouped(points)
+    def values(readings: Map[String, Double]): Json =
+      Json.obj(readings.toVector.map((key, value) => key -> java.lang.Double.doubleToRawLongBits(value).asJson)*)
+    val input = ReplayInput(digest(Json.fromValues(samples.map(sample => Json.arr(sample.time.asJson, values(sample.values))))), samples)
+    val seedId = digest(Json.fromValues(seed.toVector.map: value =>
+      val interval = value.segment.map(row => Json.arr(row.name.asJson, row.start.asJson, row.end.asJson))
+      Json.arr(value.time.asJson, values(value.values), interval.asJson)
+    ))
+    val rules = machine.segments.map(rule => Json.arr(rule.name.asJson, rule.condition.toString.asJson))
+    val ranges = continuity.map(range => Json.arr(range.from.asJson, range.until.asJson))
+    val rulesVersion = digest(Json.arr("observed-v1".asJson, machine.window.asJson, rules.asJson, ranges.asJson))
+    val timeline = machine.id.raw
+    val start = ReplaySeed(seedId, timeline, rulesVersion, input.id, 0, initial)
+    val manifest = ReplayManifest(timeline, ReplayRange(0, samples.size), rulesVersion, input.id, seedId, baseRevision, runId)
+    def failure(problem: ReplayFailure) = IllegalStateException(s"History page replay failed: $problem")
+    IO.fromEither(Replay.plan(manifest, input, start).leftMap(failure)).flatMap: plan =>
+      Replay.run(plan, (), classifier).flatMap(result => IO.fromEither(result.leftMap(failure))).map: result =>
+        val terminal = result.terminalState
+        val tail = terminal.segment.map(segment)
+        val state = samples.lastOption.map(last => HistoryState(last.time, terminal.parameters, tail))
+        Replayed(result.outputs.map(_.value) ++ tail, state)
+
+  private def digest(value: Json): String =
+    val text = Printer.noSpaces.copy(sortKeys = true).print(value)
+    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)))
+
+  private[runtime] def commitFence(machine: MachineId, workId: String, token: String, generation: Option[Long]): Json =
+    val outputId = digest(Json.arr(machine.raw.asJson, workId.asJson, token.asJson))
+    val fields = ("outputId" -> outputId.asJson) :: generation.toList.map(current => "generation" -> current.asJson)
+    Json.obj("fence" -> Json.obj(fields*))
+
+  private[runtime] def contextRevision(context: Json): IO[String] =
+    IO.fromOption(context.hcursor.get[String]("revision").toOption.filter(_.nonEmpty))(
+      IllegalStateException("History context revision required"))
 
   def sources(context: Json): Vector[Json] =
     val current = context.hcursor.get[Vector[Json]]("segments").getOrElse(Vector.empty)
@@ -177,7 +248,12 @@ object LocalHistory:
         "properties" -> LocalHistory.metadata(inherited,"properties",Json.obj(tagged.properties.toVector.map((k,v) => k -> Json.fromString(v))*))).deepMerge(proof.fold(Json.obj())(owner => Json.obj("preserveSuffix" -> owner)))
 
 /** Durable HTTP work queue is local to the receiving edge. Failed requests retry without acknowledging input. */
-final class LocalHistory(config: CheckpointApiConfig, machine: MachineConfig, announce: Vector[Json] => IO[Unit] = _ => IO.unit):
+final class LocalHistory(
+    config: CheckpointApiConfig,
+    machine: MachineConfig,
+    announce: Vector[Json] => IO[Unit] = _ => IO.unit,
+    generation: Option[Long] = None
+):
   private val transport=HistoryClient(config)
   import transport.{request,retry}
   private val encoded = URLEncoder.encode(machine.id.raw,StandardCharsets.UTF_8)
@@ -208,12 +284,12 @@ final class LocalHistory(config: CheckpointApiConfig, machine: MachineConfig, an
         // Cursors are a bounded cache; receiver work remains durable when a cursor is evicted.
         val kept = routed.state.copy(streams = routed.state.streams.takeRight(64))
         (HistoryPool(kept,previous.states.filter((id,_) => kept.streams.exists(_.id == id))),routed.work.copy(from = from,until = until))
-      committed <- Ref.of[IO,Boolean](false)
       calculated <- Ref.of[IO,Option[HistoryState]](None)
       snapshot <- Ref.of[IO,Json](Json.Null)
       ports = new Processing[IO,HistorySegment]:
         def context(work: Work): IO[Option[Vector[Observation]]] =
-          request("GET",s"/v1/history/context?machine=$encoded&from=$from&until=$until&paddingMs=${machine.window.toLong*2000}" + raw.hcursor.get[Long]("cursor").toOption.fold("")(value => s"&cursor=$value") + raw.hcursor.get[Long]("end").toOption.fold("")(value => s"&end=$value")).flatTap(snapshot.set).flatMap: response =>
+          val claim = s"&workId=${URLEncoder.encode(id,StandardCharsets.UTF_8)}&workToken=${URLEncoder.encode(token,StandardCharsets.UTF_8)}"
+          request("GET",s"/v1/history/context?machine=$encoded&from=$from&until=$until&paddingMs=${machine.window.toLong*2000}$claim" + raw.hcursor.get[Long]("cursor").toOption.fold("")(value => s"&cursor=$value") + raw.hcursor.get[Long]("end").toOption.fold("")(value => s"&end=$value")).flatTap(snapshot.set).flatMap: response =>
             if !response.hcursor.get[Boolean]("available").getOrElse(false) then IO.pure(None)
             else IO.fromEither(response.hcursor.get[Vector[Json]]("items").flatMap(_.traverse: item =>
               val p = item.hcursor
@@ -242,14 +318,24 @@ final class LocalHistory(config: CheckpointApiConfig, machine: MachineConfig, an
                 from <- row.hcursor.get[Long]("from").toOption
                 until <- row.hcursor.get[Long]("until").toOption
               yield HistoryRange(from,until)
-            val result = LocalHistory.classify(machine,points,seed,continuity)
-            calculated.set(LocalHistory.state(machine,points,result,seed,continuity)).as(result)
+            LocalHistory.contextRevision(context).flatMap: revision =>
+              LocalHistory.replay(machine, points, revision, id, seed, continuity)
+                .flatTap(result => calculated.set(result.state)).map(_.segments)
         def commit(work: Work, result: Vector[HistorySegment]): IO[Unit] =
           snapshot.get.flatMap: context =>
             val rows = LocalHistory.commitRows(machine,result,context,raw.hcursor.get[Long]("cursor").toOption.isDefined)
-            request("POST","/v1/history/commit",Json.obj("machine" -> Json.fromString(machine.id.raw),"workId" -> Json.fromString(id),"segments" -> Json.arr(rows*), "context" -> context.hcursor.downField("context").focus.getOrElse(Json.obj()).deepMerge(Json.obj("nativeTailMode" -> Json.fromString(LocalHistory.nativeTailProtocol),"revision" -> context.hcursor.downField("revision").focus.getOrElse(Json.Null),"workToken" -> Json.fromString(token))))).flatTap(_ => announce(rows) *> committed.set(true)).void
-        def acknowledge(work: Work): IO[Unit] =
-          committed.get.flatMap(done => if done then IO.unit else request("POST","/v1/history/commit",Json.obj("machine" -> Json.fromString(machine.id.raw),"workId" -> Json.fromString(id),"segments" -> Json.arr(),"context" -> Json.obj("workToken" -> Json.fromString(token),"from" -> Json.fromLong(from),"until" -> Json.fromLong(until)))).void)
+            val claim = context.hcursor.downField("context").focus.getOrElse(Json.obj()).deepMerge(Json.obj(
+              "nativeTailMode" -> Json.fromString(LocalHistory.nativeTailProtocol),
+              "revision" -> context.hcursor.downField("revision").focus.getOrElse(Json.Null),
+              "workToken" -> Json.fromString(token)
+            )).deepMerge(LocalHistory.commitFence(machine.id, id, token, generation))
+            val payload = Json.obj("machine" -> Json.fromString(machine.id.raw), "workId" -> Json.fromString(id),
+              "segments" -> Json.arr(rows*), "context" -> claim)
+            request("POST", "/v1/history/commit", payload).flatMap: response =>
+              if response.hcursor.get[Boolean]("applied").contains(true) then announce(rows)
+              else calculated.set(None)
+        // The receiver owns work retirement. Unavailable context yields no verified proposal.
+        def acknowledge(work: Work): IO[Unit] = IO.unit
       _ <- Worker(ports).run(routed).guarantee(pool.update(p => p.copy(cursors = p.cursors.acknowledge(routed.id))))
       result <- calculated.get
       _ <- pool.update: previous =>

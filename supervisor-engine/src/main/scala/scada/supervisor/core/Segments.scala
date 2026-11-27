@@ -21,6 +21,8 @@ import cats.syntax.all.*
  * }}}
  */
 trait Segments[F[_]]:
+  def atRevision[A](machine: MachineId)(prepareAndWrite: F[A]): F[A] = prepareAndWrite
+
   def upsert(machine: MachineId, segment: TaggedSegment): F[Unit]
 
   def upsertTransition(machine: MachineId, rows: List[TaggedSegment])(using Monad[F]): F[Unit] =

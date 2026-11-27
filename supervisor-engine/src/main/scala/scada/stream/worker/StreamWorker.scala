@@ -1,6 +1,6 @@
 package scada.stream.worker
 
-import cats.effect.IO
+import cats.effect.{IO, Ref}
 import fs2.Stream
 
 final case class TaskIdentity(taskId: String, inputId: String, runId: String)
@@ -55,6 +55,22 @@ trait CheckpointStore[S, O]:
 
   /** Atomically validate ownership and revision, then replace the checkpoint. */
   def commit(ownership: Long, expectedRevision: Long, next: Checkpoint[S, O]): IO[Unit]
+
+object CheckpointStore:
+  /** A session store for sources that recover by reseeding and cannot resume by delivery position. */
+  def session[S, O](initial: Checkpoint[S, O], token: Long): IO[CheckpointStore[S, O]] =
+    Ref.of[IO, Checkpoint[S, O]](initial).map: ref =>
+      new CheckpointStore[S, O]:
+        def load(task: TaskIdentity, ownership: Long): IO[Checkpoint[S, O]] =
+          IO.raiseUnless(task == initial.task && ownership == token)(StaleOwnership(task, ownership)) *> ref.get
+
+        def commit(ownership: Long, expectedRevision: Long, next: Checkpoint[S, O]): IO[Unit] =
+          IO.raiseUnless(next.task == initial.task && ownership == token)(StaleOwnership(next.task, ownership)) *>
+            ref.modify: current =>
+              if current.revision == expectedRevision && next.revision == expectedRevision + 1 then
+                (next, IO.unit)
+              else (current, IO.raiseError(IllegalStateException("Session checkpoint revision changed")))
+            .flatten
 
 /** Runtime for a deterministic processor. The sink checks ownership and deduplicates by OutputId. */
 final class StreamWorker[C, S, I, O](

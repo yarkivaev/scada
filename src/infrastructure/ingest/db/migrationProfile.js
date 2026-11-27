@@ -21,6 +21,7 @@ const privilegedOnly = new Set([
     'C0005__central_operators_grants.sql',
     'C0006__central_operators_registration.sql',
     'C0007__central_segment_replace_delete.sql',
+    'C0008__segment_write_receipts_grants.sql',
     'E0002__edge_retention_delete.sql',
     'E0003__edge_operations_grants.sql',
     'E0004__edge_operations_delete.sql',
@@ -28,7 +29,9 @@ const privilegedOnly = new Set([
     'E0008__metric_receipts_grants.sql',
     'E0012__external_history_grants.sql',
     'E0014__history_correction_grants.sql',
-    'E0016__history_retention_grants.sql'
+    'E0016__history_retention_grants.sql',
+    'E0019__segment_write_fence.sql',
+    'E0020__segment_write_fence_grants.sql'
 ]);
 
 /**

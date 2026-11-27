@@ -27,6 +27,8 @@ final class CheckpointSegments(
 ) extends CoreSegments[IO]:
   require(!preferCheckpoint || refreshCache.isDefined,"Checkpoint-first decisions require an exact cache refresh port")
 
+  override def atRevision[A](machine: MachineId)(action: IO[A]): IO[A] = underlying.atRevision(machine)(action)
+
   def find(machine: MachineId, start: Timestamp): IO[Option[TaggedSegment]] =
     if preferCheckpoint then checkpoint.fetchSegment(machine,start).flatTap(row => refreshCache.get(machine,start,row))
     else underlying.find(machine, start).flatMap:

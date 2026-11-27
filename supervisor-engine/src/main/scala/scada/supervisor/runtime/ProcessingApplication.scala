@@ -1,9 +1,11 @@
 package scada.supervisor.runtime
 
-import cats.effect.{ExitCode, IO, IOApp, Ref, Resource}
+import cats.effect.{ExitCode, IO, Ref, Resource}
 import cats.effect.std.Semaphore
 import cats.syntax.all.*
 import fs2.Stream
+import scada.stream.worker.OutputScope
+import scada.stream.worker.postgres.WorkerDatabase
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import scada.supervisor.core.{
@@ -13,7 +15,7 @@ import scada.supervisor.core.{
   Reading,
   Segmentation,
   Segments as CoreSegments,
-  Supervisor,
+  ReadingWorker,
   TagDef,
   TaggedSegment,
   Timestamp
@@ -26,27 +28,8 @@ import scada.supervisor.infra.stomp.{DurableStomp, StompConnection, StompDecisio
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.*
 
-/**
- * Live entry point and composition root. Loads HOCON, wires the
- * module graph, opens the startup ceremony (checkpoint API replay, live
- * MQTT, STOMP decisions) and runs every per-machine supervisor loop
- * concurrently with the decision consumer until killed.
- *
- * `F` is pinned to `IO` here; `core` stays tagless.
- *
- * Decorator order:
- * {{{
- * StompSegments(CheckpointSegments(StateSegments(...), checkpoint), connection, dest)
- * }}}
- * Segment persistence/publish remains the durable boundary. Replay
- * cursor is derived from supervisor-sink checkpoint API during startup.
- *
- * {{{
- * sbt "runMain scada.supervisor.runtime.EngineApp config/application.conf"
- * }}}
- */
-open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
-
+/** Wires broker inputs, task ownership, processing jobs and timeline output adapters. */
+final class ProcessingApplication(profile: RuntimeProfile):
   private val defaultPath: String = "config/application.conf"
 
   private given Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -55,40 +38,53 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
     args match
       case "--capabilities" :: Nil => IO.println(io.circe.Json.obj("role" -> io.circe.Json.fromString("supervisor"),
         "historyProtocols" -> io.circe.Json.arr(profile.historyProtocols.map(io.circe.Json.fromString)*)).noSpaces).as(ExitCode.Success)
-      case "--check" :: path :: Nil => ConfigLoad(profile = profile.configuration).load(path).as(ExitCode.Success)
+      case "--check" :: path :: Nil => load(path).as(ExitCode.Success)
       case "--check" :: _ => IO.raiseError(IllegalArgumentException("Usage: supervisor --check CONFIG"))
-      case _ => ConfigLoad(profile = profile.configuration).load(args.headOption.getOrElse(defaultPath)).flatMap(live).as(ExitCode.Success)
+      case _ => load(args.headOption.getOrElse(defaultPath)).flatMap(live).as(ExitCode.Success)
+
+  private def load(path: String): IO[AppConfig] =
+    ConfigLoad(profile = profile.configuration).load(path).flatMap: config =>
+      val outputEnabled = config.connectivity.rabbitmq.destinations.segments.isDefined
+      IO.raiseWhen(outputEnabled && config.connectivity.checkpointApi.isEmpty)(
+        IllegalArgumentException("A timeline sink checkpoint API is required when segment output is enabled")
+      ).as(config)
 
   private def live(config: AppConfig): IO[Unit] =
     Logger[IO].info(s"supervisor starting: machines=${config.machines.size} stomp=${config.connectivity.rabbitmq.destinations.segments.isDefined} checkpointApi=${config.connectivity.checkpointApi.isDefined}") *>
       Ref.of[IO, Map[MachineId, SortedMap[Timestamp, TaggedSegment]]](Map.empty).flatMap: segmentsRef =>
-        resources(config).use: publishConn =>
+        (for
+          owners <- Resource.eval(Ref.of[IO, Map[String, Long]](Map.empty))
+          outputs <- Resource.eval(OutputScope.create)
+          publish <- resources(config)
+          writer <- Resource.eval(timelineWriter(config, owners, outputs, publish))
+        yield (owners, outputs, publish, writer)).use: (owners, outputs, publishConn, writer) =>
           val checkpoint = checkpointWithDecorators(config)
           val base       = StateSegments[IO](segmentsRef, profile.statePolicy)
           val withFallback = checkpoint.fold(base)(cp => CheckpointSegments(base, cp))
-          val decorated  = decorate(config, publishConn, withFallback)
-          profile.decorate(config, decorated).flatMap(runStreams(config, _, checkpoint, base, publishConn))
+          val decorated  = decorate(config, writer, withFallback)
+          profile.decorate(config, decorated).flatMap(runStreams(config, _, checkpoint, base, publishConn, writer, owners, outputs))
 
-  private def runStreams(config: AppConfig, segments: CoreSegments[IO], checkpoint: Option[Checkpoint], base: StateSegments[IO], publish: Option[StompSender]): IO[Unit] =
+  private def runStreams(config: AppConfig, segments: CoreSegments[IO], checkpoint: Option[Checkpoint], base: StateSegments[IO], publish: Option[StompSender], writer: Option[TimelineWriter],
+      owners: Ref[IO, Map[String, Long]], outputs: OutputScope): IO[Unit] =
 
-    val supervisor = Supervisor[IO](Segmentation[IO](profile.classifyReading), profile.tagging, segments, config.cyclePhases)
+    val worker = ReadingWorker(Segmentation[IO](profile.classifyReading), profile.tagging, segments, config.cyclePhases, outputs = Some(outputs))
     val decisionSegments = checkpoint.filter(_ => config.localHistory).fold(segments)(cp =>
       CheckpointSegments(segments,cp,preferCheckpoint=true,refreshCache=Some(base.refresh)))
     val stall = config.connectivity.checkpointApi.map(api => api.timeoutSeconds.seconds).getOrElse(60.seconds)
     val seeding = checkpoint.map(Seeding(_, config.seeding.capacity, stall))
     val protectedMachines = Orphans.protectedMachines(config) ++ config.machines.filter(_.mode.isDefined).map(_.id)
-    val canCloseOrphans = config.leaseHeld && config.machines.exists(machine => !protectedMachines(machine.id))
+    val canCloseOrphans = config.leaseUrl.isEmpty && config.leaseHeld && config.machines.exists(machine => !protectedMachines(machine.id))
     Logger[IO].info("supervisor ready, closing orphaned pending segments") *>
       closeWhenHeld(canCloseOrphans, checkpoint, segments, protectedMachines) *>
       Logger[IO].info("supervisor ready, entering stream loop") *>
       (if config.machines.isEmpty then IO.never
-       else streams(config, supervisor, decisionSegments, seeding, checkpoint, publish, segments).compile.drain) *>
+       else streams(config, worker, decisionSegments, seeding, checkpoint, publish, segments, writer, owners, outputs).compile.drain) *>
       Logger[IO].info("supervisor stream loop exited")
   /**
    * Closes orphan pending rows only while this process holds the writer lease.
    *
    * {{{
-   * SupervisorRuntime.closeWhenHeld(false, checkpoint, segments, Set.empty)
+   * ProcessingApplication.closeWhenHeld(false, checkpoint, segments, Set.empty)
    * }}}
    */
   private[runtime] def closeWhenHeld(held: Boolean, checkpoint: Option[Checkpoint], segments: CoreSegments[IO], historical: Set[MachineId]): IO[Unit] =
@@ -137,65 +133,50 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
           def send(frame: scada.supervisor.infra.stomp.StompFrame): IO[Unit] = lock.permit.use(_ => durable.send(frame))
         )
 
+  private def timelineWriter(config: AppConfig, owners: Ref[IO, Map[String, Long]], outputs: OutputScope,
+      publish: Option[StompSender]): IO[Option[TimelineWriter]] =
+    config.connectivity.checkpointApi.traverse: api =>
+      val owner = (machine: String) => owners.get.flatMap: current =>
+        val grant = current.get(machine)
+        IO.raiseWhen(config.leaseUrl.isDefined && grant.isEmpty)(
+          IllegalStateException(s"No active timeline writer for $machine")).as(grant)
+      TimelineWriter.create(HistoryClient(api), owner, outputs, publish)
+
+  private def track(owners: Ref[IO, Map[String, Long]])(machine: String, generation: Option[Long]): Resource[IO, Unit] =
+    generation.fold(Resource.unit[IO])(value => Resource.make(owners.update(_.updated(machine, value)))(_ =>
+      owners.update(current => if current.get(machine).contains(value) then current.removed(machine) else current)))
+
   private def decorate(
       config: AppConfig,
-      publish: Option[StompSender],
+      writer: Option[TimelineWriter],
       base: CoreSegments[IO]
   ): CoreSegments[IO] =
-    (publish, config.connectivity.rabbitmq.destinations.segments) match
-      case (Some(conn), Some(dest)) => StompSegments(base, conn, dest, policy = profile.wirePolicy)
+    (writer, config.connectivity.rabbitmq.destinations.segments) match
+      case (Some(sink), Some(dest)) => StompSegments(base, sink, dest, policy = profile.wirePolicy)
       case _                        => base
 
   private def streams(
       config: AppConfig,
-      supervisor: Supervisor[IO],
+      worker: ReadingWorker,
       segments: CoreSegments[IO],
       seeding: Option[Seeding],
       checkpoint: Option[Checkpoint],
       publish: Option[StompSender],
-      profileSegments: CoreSegments[IO]
+      profileSegments: CoreSegments[IO],
+      writer: Option[TimelineWriter],
+      owners: Ref[IO, Map[String, Long]],
+      outputs: OutputScope
   ): Stream[IO, Unit] =
-    Stream(machineStreams(config, supervisor, seeding, checkpoint, publish, profileSegments = Some(profileSegments))*).parJoinUnbounded
-      .concurrently(decisionStream(config, segments))
-      .concurrently(profile.decisions(config, segments))
-
-  /** Sends a committed page. A configured lease uses the holder generation and a non-holder sends nothing. */
-  private[runtime] def historyAnnounce(sender: Option[StompSender], config: AppConfig, machine: MachineId, grant: Option[LeaseGrant] = None): Vector[io.circe.Json] => IO[Unit] =
-    WriterLease.publication(config.leaseUrl, grant, config.writerEpoch) match
-      case None => (_: Vector[io.circe.Json]) => IO.unit
-      case Some(epoch) =>
-        (sender, config.connectivity.rabbitmq.destinations.segments) match
-          case (Some(conn), Some(dest)) => HistoryBus.publish(conn, dest, machine, epoch)
-          case _ => (_: Vector[io.circe.Json]) => IO.unit
-
-  /**
-   * Publishes committed history only after a real segment end is covered.
-   * A leader may publish when nothing has been replicated. A standby does not.
-   * A configured lease stamps its generation and a process that does not hold it does not publish.
-   * The same gate covers every configured machine.
-   *
-   * {{{
-   * SupervisorRuntime.leadAnnounce(sender, config, MachineId("machine-1"), 5L, Some(4L), Some(LeaseGrant(true, 7)))(rows)
-   * }}}
-   */
-  private[runtime] def leadAnnounce(
-      sender: Option[StompSender],
-      config: AppConfig,
-      machine: MachineId,
-      observationMs: Long,
-      segmentEndMs: Option[Long],
-      grant: Option[LeaseGrant] = None
-  ): Vector[io.circe.Json] => IO[Unit] =
-    val leader = ObservationLead.leading(config.writerRole, config.leaseUrl)
-    if config.leaseHeld && ObservationLead.ready(observationMs, segmentEndMs, leader) then historyAnnounce(sender, config, machine, grant)
-    else (_: Vector[io.circe.Json]) => IO.unit
+    Stream(machineStreams(config, worker, seeding, checkpoint, publish, profileSegments = Some(profileSegments), writer = writer, observe = track(owners), outputs = Some(outputs),
+      decisionSegments = Some(segments))*).parJoinUnbounded
+      .concurrently(decisionStream(config, segments, owners))
 
   /**
    * Sources can replay checkpoint readings
    * after the cursor, then continue with the live subscription.
    *
    * {{{
-   * SupervisorRuntime.sourced(machine, aliases, live, seeding)
+   * ProcessingApplication.sourced(machine, aliases, live, seeding)
    * }}}
    */
   private[runtime] def sourced(
@@ -207,13 +188,17 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
     seeding.fold(live)(_.seed(machine, aliases, live))
 
   /** Holds one classifier per machine. The loser waits and tries the same lock again. */
-  private def lease(url: Option[String], machine: String, leader: Boolean, body: Stream[IO, Unit]): Stream[IO, Unit] =
+  private def lease(url: Option[String], machine: String, leader: Boolean,
+      observe: (String, Option[Long]) => Resource[IO, Unit], body: Option[WorkerDatabase] => Stream[IO, Unit]): Stream[IO, Unit] =
     url match
-      case None => body
+      case None => body(None)
       case Some(value) =>
         val attempt = Stream.resource(WriterLease.open(value, machine)).flatMap: hold =>
           Stream.eval(if hold.held && !leader then hold.ready(machine, false).map(_.isDefined) else IO.pure(false)).flatMap: caught =>
-            if WriterGate.admit(hold.held, leader, caught) then body
+            if WriterGate.admit(hold.held, leader, caught) then
+              val database = hold.generation.map(token =>
+                WorkerDatabase(doobie.Transactor.fromConnection[IO](hold.connection, None), token))
+              Stream.resource(observe(machine, hold.generation)) >> body(database)
             else
               val reason = if hold.held then s"classifier waiting for telemetry on $machine" else s"classifier lease denied for $machine"
               Stream.exec(Logger[IO].info(reason)) ++ Stream.sleep_[IO](5.seconds)
@@ -221,13 +206,17 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
 
   private[runtime] def machineStreams(
       config: AppConfig,
-      supervisor: Supervisor[IO],
+      worker: ReadingWorker,
       seeding: Option[Seeding],
       checkpoint: Option[Checkpoint],
       sender: Option[StompSender] = None,
       observationMs: Long = 0L,
       segmentEndMs: Option[Long] = None,
-      profileSegments: Option[CoreSegments[IO]] = None
+      profileSegments: Option[CoreSegments[IO]] = None,
+      writer: Option[TimelineWriter] = None,
+      observe: (String, Option[Long]) => Resource[IO, Unit] = (_, _) => Resource.unit[IO],
+      outputs: Option[OutputScope] = None,
+      decisionSegments: Option[CoreSegments[IO]] = None
   ): List[Stream[IO, Unit]] =
     config.machines.map: machine =>
       val aliases  = config.routing.aliases.getOrElse(machine.id, Nil)
@@ -239,27 +228,42 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
         case Some(_) if config.localHistory && config.leaseUrl.isEmpty && !ObservationLead.ready(observationMs, segmentEndMs, leader) =>
           Stream.never[IO]
         case Some(api) if config.localHistory =>
-          HistoryRun(this, profile).gated(config, machine, aliases, sender, api, observationMs, segmentEndMs)
+          HistoryRun(profile, writer, observe,
+            (settings, source) => decisionSegments.fold(Stream.empty.covaryAll[IO, Unit])(
+              profile.decisions(settings, source, _))
+          ).gated(config, machine, aliases, sender, api, observationMs, segmentEndMs)
         case _ =>
-          val body = profileSegments.flatMap(profile.live(config, machine, aliases, _, checkpoint, seeding)).getOrElse:
-            val live = Mqtt(mqttCfg, aliases).subscribe
-            val readings = sourced(machine, aliases, live, seeding)
-            Stream.eval(if machine.mode.isDefined then IO.pure(None) else PendingIsland.resolve(checkpoint, machine)).flatMap: initial =>
-              Stream.eval(supervisor.run(machine, readings, initial))
-          lease(config.leaseUrl, machine.id.raw, leader, body)
+          val body = (database: Option[WorkerDatabase]) =>
+            profileSegments.flatMap(profile.live(config, machine, aliases, _, checkpoint, seeding, outputs, database)).getOrElse:
+              val live = Mqtt(mqttCfg, aliases).subscribe
+              val readings = sourced(machine, aliases, live, seeding)
+              Stream.eval(if machine.mode.isDefined then IO.pure(None) else PendingIsland.resolve(checkpoint, machine)).flatMap: initial =>
+                Stream.eval(worker.run(machine, readings, initial))
+          val prepare = profileSegments.filter(_ => config.leaseUrl.nonEmpty && machine.mode.isEmpty).fold(IO.unit): segments =>
+            checkpoint.fold(IO.unit)(_.fetchPendingSegments.flatMap(rows =>
+              Orphans.list(rows.filter(_.machine == machine.id)).traverse_(Close.run(segments, _))))
+          lease(config.leaseUrl, machine.id.raw, leader, observe, database => Stream.exec(prepare) ++ body(database))
 
   private[runtime] def heed(decision: Decision, segments: CoreSegments[IO], tagDefs: List[TagDef]): IO[Unit] =
-    decision.applyTo(segments, tagDefs, profile.tagging).handleErrorWith:
+    val write = decision.applyTo(segments, tagDefs, profile.tagging)
+    val scoped = decision match
+      case Decision.Resolve(machine, _, _, _) => segments.atRevision(machine)(write)
+      case Decision.Split(machine, _, _) => segments.atRevision(machine)(write)
+      case Decision.Skip(_) => write
+    scoped.handleErrorWith:
       case _: IllegalArgumentException => IO.unit
       case error => IO.raiseError(error)
 
-  private def decisionStream(config: AppConfig, segments: CoreSegments[IO]): Stream[IO, Unit] =
-    val byMachine = config.machines.map(m => m.id -> m).toMap
-    StompDecisions(config.connectivity.rabbitmq).subscribe.evalMap: decision =>
-      val machine = decision match
-        case Decision.Resolve(id, _, _, _) => byMachine.get(id)
-        case Decision.Split(id, _, _) => byMachine.get(id)
-        case _ => None
-      machine.flatMap(_.mode) match
-        case Some(_) => IO.unit
-        case None => heed(decision, segments, machine.fold(List.empty[TagDef])(_.tags))
+  private def decisionStream(config: AppConfig, segments: CoreSegments[IO], owners: Ref[IO, Map[String, Long]])
+      : Stream[IO, Unit] =
+    if !config.leaseHeld then Stream.empty
+    else
+      val byMachine = config.machines.map(m => m.id -> m).toMap
+      StompDecisions(config.connectivity.rabbitmq).subscribe.evalMap: decision =>
+        val target = decision match
+          case Decision.Resolve(id, _, _, _) => byMachine.get(id)
+          case Decision.Split(id, _, _) => byMachine.get(id)
+          case Decision.Skip(_) => None
+        target.filter(_.mode.isEmpty).fold(IO.unit): machine =>
+          owners.get.flatMap(current =>
+            IO.whenA(config.leaseUrl.isEmpty || current.contains(machine.id.raw))(heed(decision, segments, machine.tags)))

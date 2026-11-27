@@ -1,3 +1,4 @@
+import fencedSegments from '../sinks/fencedSegments.js';
 import contiguousPhases, { validatePhaseAnchors } from '../sinks/contiguousPhases.js';
 import stompOptions from './stompOptions.js';
 import segmentTransactions from './segmentTransactions.js';
@@ -68,6 +69,14 @@ function repairCasting(pool, protectedTracks) {
     });
 }
 
+export function segmentRecipient(postgres,pool,config) {
+    const { segmentSink, splitSink } = segmentSinks(postgres, pool);
+    const continued = continuedSegments(segmentSink, pool, silenceBudget(config.segmentWindow || 15));
+    const dispatch = contiguousPhases(pool, config.phaseAnchors,
+        segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool));
+    return fencedSegments(pool,dispatch,config);
+}
+
 /**
  * Pipeline for streaming STOMP segment data to PostgreSQL segments table.
  * Subscribes to the durable ingest queue so shovel traffic survives consumer gaps.
@@ -80,13 +89,10 @@ function repairCasting(pool, protectedTracks) {
  * @param {object} config - Pipeline configuration
  * @returns {object} Pipeline with start() and stop() methods
  */
-export default function segmentPipeline(stomp, postgres, pool, config) {
+export default function segmentPipeline(stomp, postgres, pool, config, recipient) {
     const settings = pipelineSettings(config);
     const budget = silenceBudget(settings.segmentWindow || 15);
-    const { segmentSink, splitSink } = segmentSinks(postgres, pool);
-    const continued = continuedSegments(segmentSink, pool, budget);
-    const dispatch = contiguousPhases(pool, settings.phaseAnchors,
-        segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool));
+    const {dispatch} = recipient ?? segmentRecipient(postgres,pool,settings);
     // eslint-disable-next-line prefer-const -- The timer codec closes over the source constructed with that codec.
     let source;
     const codec = segmentCodec(dispatch);
