@@ -23,6 +23,28 @@ For HTTP/state tests without PostgreSQL:
 import stateDataFake from '@yarkivaev/scada/stateDataFake';
 ```
 
+## Management CLI smoke tests
+
+Run these from the repository root after `npm ci`, with Node.js 22, OpenSSL
+and a local Docker daemon that can run privileged test containers. The k3s test
+also requires `kubectl` in the same minor version range as the test cluster and
+Helm 3. The systemd test requires private cgroup v2 support and downloads Debian
+packages during its test image build.
+
+```bash
+npx mocha --exit test/bin/test_management.js
+bash test/smoke/management-k3s.sh
+bash test/smoke/management-systemd.sh
+```
+
+The k3s test installs the npm tarball in a temporary directory, starts the
+gateway with TLS, and checks Helm and server-side apply against a fresh cluster.
+The systemd test uses two HTTPS gateways to start a real service and read its
+journal in a separate Linux container. Both check read-only access and retry,
+use only loopback ports or container-private addresses, and remove the test
+containers at exit. The k3s test uses only the kubeconfig it generates from its
+own container.
+
 ## Scala Supervisor checks
 
 Run `sbt test assembly` from `supervisor-engine/` with JDK 21. The release workflow runs these checks on `main` before tagging and publishing. Verify profile-specific behavior in each consuming plant repository.

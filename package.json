@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.6.42",
+  "version": "2.7.0",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
     "modbus-to-mqtt": "./src/bin/modbus-to-mqtt.js",
     "supervisor-sink": "./src/bin/supervisor-sink.js",
     "scada-collector": "./src/bin/collector.js",
-    "scada-controller": "./src/bin/controller.js"
+    "scada-controller": "./src/bin/controller.js",
+    "scada": "./src/bin/scada.js"
   },
   "scripts": {
     "test": "mocha --exit 'test/**/test*.js'",

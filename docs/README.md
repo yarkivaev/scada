@@ -16,7 +16,7 @@ A plant typically runs a site at the edge, close to its equipment. Collectors re
 | Deploy a plant image and configure its services | [Helm installation](install/helm.md) |
 | Run collectors on separate nodes | [Collector runtime](collect/runtime.md) |
 | Classify readings and replay history | [Supervisor engine](../supervisor-engine/README.md) |
-| Find the command and its inputs | [CLI tools](reference/cli.md) |
+| Manage SCADA from a workstation | [SCADA management CLI](reference/cli.md#manage-scada-from-a-workstation) |
 | Design for controller, collector and Supervisor failures | [High availability](architecture/high-availability.md) |
 
 ## [Quick-start guide](quick-start.md)
