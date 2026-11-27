@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
+import loadText from '../application/management/loadText.js';
+import topologyText from '../application/management/topologyText.js';
 import management from '../application/management/management.js';
 import readInventory from '../infrastructure/management/inventory.js';
 import managementServer from '../infrastructure/management/server.js';
@@ -9,6 +11,7 @@ import { request, send } from '../infrastructure/management/protocol.js';
 const usage = `Usage:
   scada contexts
   scada status [--context NAME]
+  scada load [--context SITE]
   scada get components [--context NAME]
   scada logs COMPONENT --context NAME [--tail LINES]
   scada plan --context NAME
@@ -42,7 +45,7 @@ function commandOf([verb, arg, ...rest], { context, tail }) {
         (verb === 'contexts' && context !== undefined)) {
         throw new Error('invalid command arguments; see scada --help');
     }
-    const action = ['get', 'status'].includes(verb) ? 'components' : verb;
+    const action = verb === 'get' ? 'components' : verb;
     const result = request.safeParse({
         action,
         ...(context !== undefined && { context }),
@@ -54,7 +57,13 @@ function commandOf([verb, arg, ...rest], { context, tail }) {
     return result.data;
 }
 
-function textOf({ contexts, changes, logs }) {
+function textOf({ contexts, changes, logs, topology, load }) {
+    if (topology) {
+        return topologyText(topology);
+    }
+    if (load) {
+        return loadText(load);
+    }
     if (contexts) {
         return contexts.flatMap(({ name, runtime, components, error }) => {
             if (components?.length) {
@@ -69,8 +78,17 @@ function textOf({ contexts, changes, logs }) {
     return logs;
 }
 
-function unhealthy({ error, components }) {
-    return Boolean(error) || !components.length || components.some(({ state }) => { return state !== 'ready'; });
+function contextUnhealthy({ error, components }) {
+    return Boolean(error) || !components?.length || components.some(({ state }) => { return state !== 'ready'; });
+}
+
+function unhealthy(result) {
+    return result.topology ? result.topology.state !== 'ready' : result.contexts.some(contextUnhealthy);
+}
+
+function incompleteLoad({ brokers, metrics }) {
+    return brokers.some(({ error }) => { return Boolean(error); }) ||
+        metrics.some((source) => { return source.error || source.metrics.some(({ error }) => { return Boolean(error); }); });
 }
 
 async function client(args) {
@@ -84,7 +102,7 @@ async function client(args) {
     const result = await send(url, token, command);
     const text = values.output === 'json' ? JSON.stringify(result) : textOf(result);
     process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
-    if (positionals[0] === 'status' && result.contexts.some(unhealthy)) {
+    if ((command.action === 'status' && unhealthy(result)) || (result.load && incompleteLoad(result.load))) {
         process.exitCode = 1;
     }
 }
@@ -94,9 +112,9 @@ async function serve(args) {
     if (!config || Boolean(cert) !== Boolean(key) || !/^\d{1,5}$/u.test(port) || Number(port) > 65535) {
         throw new Error('serve requires --config and accepts --port 0-65535 and a --cert/--key pair');
     }
-    const targets = await readInventory(config, process.env);
+    const { targets, topology, network } = await readInventory(config, process.env);
     const tls = cert ? { cert: await readFile(cert), key: await readFile(key) } : undefined;
-    const { address, server } = await managementServer(management(targets), {
+    const { address, server } = await managementServer(management(targets, topology, network), {
         host, port: Number(port), tls, token: process.env.SCADA_TOKEN, readToken: process.env.SCADA_READ_TOKEN
     });
     function close() {

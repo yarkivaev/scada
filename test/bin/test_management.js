@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,9 +18,9 @@ async function tool(directory, name, body) {
     await writeFile(join(directory, name), `#!/usr/bin/env node\n${body}`, { mode: 0o755 });
 }
 
-async function serve(directory, contexts, extraEnv = {}, flags = []) {
+async function serve(directory, contexts, extraEnv = {}, flags = [], { system, observations } = {}) {
     const config = join(directory, 'config.json');
-    await writeFile(config, JSON.stringify({ contexts }));
+    await writeFile(config, JSON.stringify({ contexts, system, observations }));
     const child = spawn(process.execPath, [cli, 'serve', '--config', config, '--port', '0', ...flags], {
         env: { ...process.env, SCADA_TOKEN: token, SCADA_READ_TOKEN: readToken,
             PATH: `${directory}:${process.env.PATH}`, ...extraEnv },
@@ -79,6 +81,174 @@ describe('SCADA management over HTTP', function () {
         servers.push(server);
         return server;
     }
+
+    it('shows the production document before runtime details and preserves declared flows', async () => {
+        await writeFile(join(directory, 'objects.yaml'), `namespace:
+  - id: mill
+    nodes:
+      - id: hall
+        nodes:
+          - id: unit
+            nodes:
+              - id: speed
+profiles:
+  cell:
+    variables:
+      cluster: sample
+`);
+        await writeFile(join(directory, 'plant.yaml'), `include:
+  - objects.yaml
+servers:
+  - id: cell
+    profile:
+      id: cell
+    objects:
+      - mill/hall/unit
+    fan_in:
+      - from: modbus://example.invalid:502
+        name: mill/hall/unit/speed
+    fan_out:
+      - to: archive
+        name: mill/hall/unit/speed
+  - id: archive
+    profile:
+      id: cell
+`);
+        await tool(directory, 'systemctl', "process.stdout.write('LoadState=loaded\\nActiveState=active\\n');");
+        await tool(directory, 'kubectl', 'process.exit(1);');
+        const target = { runtime: 'systemd', units: { 'reader.service': 'running' } };
+        const context = { runtime: 'kubernetes', kubeContext: 'lab', namespace: 'plant', release: 'archive' };
+        const api = await serve(directory, { reader: target, archive: context }, {}, [], {
+            system: { file: 'plant.yaml', sites: { cell: ['reader'] } }
+        });
+        servers.push(api);
+        const result = await api.run(['status'], readToken).catch(({ stdout, code }) => {
+            assert.equal(code, 1);
+            return JSON.parse(stdout);
+        });
+        assert.deepEqual(result.topology.namespace, ['mill', 'mill/hall', 'mill/hall/unit', 'mill/hall/unit/speed']);
+        assert.deepEqual(result.topology.sites.map(({ name, state }) => { return [name, state]; }),
+            [['cell', 'ready'], ['archive', 'unknown']]);
+        assert.deepEqual(result.topology.flows, [{
+            from: 'cell', to: 'archive', streams: ['mill/hall/unit/speed'], traffic: 'unknown', evidence: []
+        }]);
+        assert.equal(result.topology.state, 'unknown');
+        const scoped = await api.run(['status', '--context', 'cell'], readToken);
+        assert.deepEqual(scoped.topology.sites.map(({ name }) => { return name; }), ['cell']);
+        const { stdout } = await exec(process.execPath, [cli, 'status', '--server', api.server], {
+            env: { ...process.env, SCADA_TOKEN: readToken }
+        }).catch((error) => { return error; });
+        assert.match(stdout, /^Production.*unknown/mu);
+        assert.match(stdout, /cell -> archive/u);
+        assert.doesNotMatch(stdout, /reader\.service/u);
+        assert.deepEqual(await api.run(['get', 'components', '--context', 'reader']), {
+            contexts: [{ name: 'reader', components: [{ id: 'reader.service', state: 'ready' }] }]
+        });
+        await tool(directory, 'systemctl', "process.stdout.write('LoadState=loaded\\nActiveState=inactive\\n');");
+        await assert.rejects(api.run(['status', '--context', 'reader']), (error) => {
+            return error.code === 1 && JSON.parse(error.stdout).topology.state === 'degraded';
+        });
+    });
+
+    it('shows observed flow acknowledgements separately from broker queue backlog', async () => {
+        const unsafeQueue = 'scada.zz\u001b\u202e';
+        const broker = createServer((req, res) => {
+            const url = new URL(req.url, 'http://localhost');
+            assert.equal(req.method, 'GET');
+            assert.equal(url.pathname, '/api/queues/%2F');
+            assert.equal(req.headers.authorization, 'Basic b3A6cmVhZA==');
+            assert.equal(url.searchParams.get('name'), '^scada\\.');
+            const page = Number(url.searchParams.get('page'));
+            res.end(JSON.stringify({ page_count: 2, items: page === 1 ? [{
+                name: 'scada.speed.outbox', messages_ready: 6, messages_unacknowledged: 3, consumers: 1,
+                message_stats: { ack_details: { rate: 2.2 }, publish_details: { rate: 3.4 } }
+            }] : [{
+                name: 'scada.quiet.outbox', messages_ready: 1, messages_unacknowledged: 0, consumers: 1,
+                message_stats: { ack_details: { rate: 0 } }
+            }, {
+                name: 'scada.shared.outbox', messages_ready: 0, messages_unacknowledged: 0, consumers: 2,
+                message_stats: { ack_details: { rate: 99 } }
+            }, { name: unsafeQueue, messages_ready: 0, messages_unacknowledged: 0 },
+            { name: 'unmanaged', messages_ready: 100 }] }));
+        });
+        broker.listen(0, '127.0.0.1');
+        await once(broker, 'listening');
+        try {
+            await writeFile(join(directory, 'plant.yaml'), `namespace:
+  - id: mill
+profiles:
+  cell:
+    variables:
+      cluster: sample
+servers:
+  - id: cell
+    profile:
+      id: cell
+  - id: archive
+    profile:
+      id: cell
+`);
+            const observations = { rabbitmq: { source: {
+                site: 'cell', url: `http://127.0.0.1:${broker.address().port}`,
+                prefix: 'scada.', username: 'op', passwordEnv: 'BROKER_PASSWORD'
+            } }, links: [
+                { from: 'cell', to: 'archive', broker: 'source', queue: 'scada.speed.outbox' },
+                { from: 'cell', to: 'archive', broker: 'source', queue: 'scada.quiet.outbox' },
+                { from: 'cell', to: 'archive', broker: 'source', queue: 'scada.shared.outbox' }
+            ] };
+            const api = await serve(directory, {}, { BROKER_PASSWORD: 'read' }, [], { system: { file: 'plant.yaml' }, observations });
+            servers.push(api);
+            const status = await api.run(['status']).catch(({ stdout, code }) => {
+                assert.equal(code, 1);
+                return JSON.parse(stdout);
+            });
+            const [link] = status.topology.flows;
+            assert.equal(link.traffic, 'flowing');
+            assert.deepEqual(link.evidence.map(({ traffic }) => { return traffic; }), ['flowing', 'idle', 'unknown']);
+            const { load: snapshot } = await api.run(['load', '--context', 'cell'], readToken);
+            assert.deepEqual(snapshot.brokers[0].queues.map(({ name, ready, unacked }) => { return [name, ready, unacked]; }),
+                [['scada.speed.outbox', 6, 3], ['scada.quiet.outbox', 1, 0], ['scada.shared.outbox', 0, 0], [unsafeQueue, 0, 0]]);
+            const { stdout } = await exec(process.execPath, [cli, 'load', '--server', api.server], {
+                env: { ...process.env, SCADA_TOKEN: readToken }, timeout: 5000
+            });
+            assert.equal(stdout.includes(unsafeQueue), false);
+            assert.ok(stdout.includes(String.raw`scada.zz\u{1b}\u{202e}`));
+        } finally {
+            broker.close();
+        }
+    });
+
+    it('uses the existing component status contract with an older gateway', async () => {
+        const commands = [];
+        const gateway = createServer(async (req, res) => {
+            const chunks = [];
+            for await (const chunk of req) {
+                chunks.push(chunk);
+            }
+            const command = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            commands.push(command);
+            if (command.action === 'status') {
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: 'invalid management command' }));
+                return;
+            }
+            res.end(JSON.stringify({ contexts: [{
+                name: 'edge', components: [{ id: 'reader.service', state: 'ready' }]
+            }] }));
+        });
+        gateway.listen(0, '127.0.0.1');
+        await once(gateway, 'listening');
+        try {
+            const { stdout } = await exec(process.execPath, [cli, 'status', '--context', 'edge',
+                '--server', `http://127.0.0.1:${gateway.address().port}`], {
+                env: { ...process.env, SCADA_TOKEN: readToken }, timeout: 5000
+            });
+            assert.match(stdout, /edge\treader\.service\tready/u);
+            assert.deepEqual(commands, [{ action: 'status', context: 'edge' }, { action: 'components', context: 'edge' }]);
+        } finally {
+            gateway.close();
+        }
+    });
 
     it('lists SCADA workloads in one Kubernetes context and reports a failing target separately', async () => {
         await tool(directory, 'kubectl', `
