@@ -17,6 +17,7 @@ async function prepare(pool, state, token) {
     token.client.on?.('error', token.onError);
     await token.runner.query('BEGIN');
     await token.runner.query("SELECT set_config('statement_timeout', $1, true)", [String(state.timeoutMs)]);
+    if (token.cancelled || state.stopped) { throw state.failure ?? new Error('Segment transaction stopped'); }
 }
 async function rollback(token) {
     if (!token.client || token.cancelled) { return false; }
@@ -27,6 +28,7 @@ async function rollback(token) {
     }
 }
 async function apply(dispatch, records, token) {
+    token.writing = true;
     if (typeof dispatch.acceptMany === 'function') {
         await dispatch.acceptMany(records, token.runner);
         return;
@@ -37,15 +39,14 @@ async function apply(dispatch, records, token) {
     }
 }
 async function execute(pool, dispatch, records, state, token) {
-    let phase = 'prepare';
     try {
         await prepare(pool, state, token);
-        phase = 'apply';await apply(dispatch, records, token);
-        phase = 'commit';await token.runner.query('COMMIT');
+        await apply(dispatch, records, token);
+        await token.runner.query('COMMIT');
         return { sqlCalls: token.calls };
     } catch (error) {
         const confirmed = await rollback(token);
-        if (confirmed && phase !== 'prepare' && permanent(error)) { error.permanent = true; }
+        if (confirmed && token.writing && permanent(error)) { error.permanent = true; }
         else if (!state.stopped && !token.cancelled) { state.fail(error); }
         throw error;
     } finally {
@@ -67,9 +68,10 @@ export default function segmentTransaction(pool, dispatch, { timeoutMs = 10000, 
             const token = { client: null, released: false, cancelled: false, calls: 0 };
             token.runner = { query(...args) { token.calls += 1;return token.client.query(...args); } };
             state.active.add(token);
-            return deadline(execute(pool, dispatch, records, state, token), timeoutMs, 'Segment transaction', () => {
+            return deadline(execute(pool, dispatch, records, state, token), timeoutMs, 'Segment transaction', error => {
                 token.cancelled = true;
-                release(token, true);
+                try { release(token, true); }
+                finally { if (token.writing) { state.fail(error); } }
             });
         },
         abort(error = new Error('Segment transaction stopped')) {

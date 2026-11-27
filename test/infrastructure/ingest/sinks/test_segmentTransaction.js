@@ -47,6 +47,19 @@ describe('segment transaction connection ownership', () => {
         assert.equal(failures.length === 0 && connects === 2, true,
             'a later batch stayed blocked after a timeout');
     });
+    it('fences the sink when a transaction times out after applying writes begins', async () => {
+        const releases = [];
+        const failures = [];
+        const client = new EventEmitter();
+        client.query = async () => { return { rows: [] }; };
+        client.release = destroy => { releases.push(destroy); };
+        const writer = segmentTransaction({ connect() { return client; } },
+            { accept() { return new Promise(() => {}); } },
+            { timeoutMs: 20, onFatal(error) { failures.push(error); } });
+        await assert.rejects(writer.write([{}]), /timed out/u);
+        assert.equal(failures.length, 1);
+        assert.deepEqual(releases, [true]);
+    });
     it('hands a segment batch to acceptMany in one call', async function() {
         const batches = [];
         const client = new EventEmitter();
