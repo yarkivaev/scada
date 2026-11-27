@@ -1,3 +1,4 @@
+import { phaseAnchors } from '../infrastructure/ingest/sinks/contiguousPhases.js';
 import ingestHealth from './ingestHealth.js';
 import segmentTransactionConfig from './segmentTransactionConfig.js';
 import segmentBatchStats from './segmentBatchStats.js';
@@ -71,6 +72,7 @@ export function readDeploymentConfig(env) {
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
         pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
+            phaseAnchors: phaseAnchors(env.CONTIGUOUS_PHASE_ANCHORS),
             repairHistoryOnStart: historyRepair(env.SEGMENT_REPAIR_HISTORY_ON_START),
             transactions: segmentTransactionConfig(env, dbPoolMax),
             maxMessageBytes: milliseconds(env, 'STOMP_MAX_MESSAGE_BYTES', 1048576),

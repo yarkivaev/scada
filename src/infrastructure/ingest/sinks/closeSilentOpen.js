@@ -13,7 +13,7 @@ import processingErrorLog from '../processingErrorLog.js';
  *   const closer = closeSilentOpen(pool);
  *   await closer.close(30);
  */
-export default function closeSilentOpen(pool) {
+export default function closeSilentOpen(pool, excludedMachines = []) {
     if (!pool || typeof pool.query !== 'function') {
         throw new Error('Pool must have a query() method');
     }
@@ -28,8 +28,9 @@ export default function closeSilentOpen(pool) {
                          )
                      WHERE duration = 0
                        AND end_time > start_time
-                       AND updated_at < NOW() - make_interval(secs => $1)`,
-                    [budgetSeconds]
+                       AND updated_at < NOW() - make_interval(secs => $1)
+                       ${excludedMachines.length ? "AND NOT (machine = ANY($2::text[]))" : ""}`,
+                    excludedMachines.length ? [budgetSeconds, excludedMachines] : [budgetSeconds]
                 );
             } catch (error) {
                 processingErrorLog('close_silent_open', error, { budgetSeconds });

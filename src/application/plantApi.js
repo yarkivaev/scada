@@ -5,6 +5,7 @@ import measurementStream from '../infrastructure/http/plant/streams/measurementS
 import alertRoute from '../infrastructure/http/plant/routes/alertRoute.js';
 import alertStream from '../infrastructure/http/plant/streams/alertStream.js';
 import timelineRoute from '../infrastructure/http/plant/routes/timelineRoute.js';
+import { phaseAnchors } from '../infrastructure/ingest/sinks/contiguousPhases.js';
 import timelineStream from '../infrastructure/http/plant/streams/timelineStream.js';
 import operationRoute from '../infrastructure/http/plant/routes/operationRoute.js';
 import operationStream from '../infrastructure/http/plant/streams/operationStream.js';
@@ -18,6 +19,22 @@ import { routes } from '@yarkivaev/simple-server';
 
 function pass(_id, rows) {
     return rows;
+}
+
+function currentPhase(watchedPhases, clock) {
+    return function project(machine, rows) {
+        if (!watchedPhases.has(machine)) {
+            return rows;
+        }
+        const now = clock();
+        return rows.map((row) => {
+            if ((row.kind ?? 'phase') !== 'phase' || ![0, '0'].includes(row.duration)) {
+                return row;
+            }
+            const start = new Date(row.start_time ?? row.startTime);
+            return { ...row, end_time: now > start ? now : start };
+        });
+    };
 }
 
 /**
@@ -39,6 +56,7 @@ export default function plantApi(basePath, plant, config) {
     });
     const extra = opts.extraRoutes || [];
     const decorate = opts.decorateTimeline || pass;
+    const watchedPhases = opts.watchedPhases ?? phaseAnchors(process.env.CONTIGUOUS_PHASE_ANCHORS);
     const routeList = [
         ...catalogRoute(basePath, opts.tagCatalog),
         ...topologyRoute(basePath, plant, time),
@@ -48,8 +66,8 @@ export default function plantApi(basePath, plant, config) {
         ...measurementRoute(basePath, plant, time),
         ...alertStream(basePath, plant, time),
         ...alertRoute(basePath, plant),
-        ...timelineRoute(basePath, plant, opts.timelineOperator, decorate),
-        ...timelineStream(basePath, plant, time, decorate),
+        ...timelineRoute(basePath, plant, opts.timelineOperator, decorate, currentPhase(watchedPhases, time)),
+        ...timelineStream(basePath, plant, time, decorate, watchedPhases),
         ...operationRoute(basePath, plant, opts.timelineOperator, opts.operationDecisions, opts.owners),
         ...operationStream(basePath, plant, time),
         ...heartbeatStream(basePath, time, opts.heartbeat),

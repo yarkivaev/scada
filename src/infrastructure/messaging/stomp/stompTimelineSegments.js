@@ -44,13 +44,17 @@ function segmentRow(parsed, startTime, endTime) {
 
 function emitPiece(bus, piece) {
     const times = timestamps(piece);
-    bus.emit({ type: 'created', segment: segmentRow(piece, times.startTime, times.endTime) });
+    const event = { type: 'created', segment: segmentRow(piece, times.startTime, times.endTime) };
+    if (piece.type === 'retag') {
+        event.retag = true;
+    }
+    bus.emit(event);
 }
 
 function consume(raw, buses) {
     const parsed = JSON.parse(raw.payload);
     const bus = buses[parsed.machine];
-    if (!bus) {
+    if (!bus || parsed.type === 'phase-transition') {
         return;
     }
     if (parsed.type === 'split-family' && Array.isArray(parsed.pieces)) {

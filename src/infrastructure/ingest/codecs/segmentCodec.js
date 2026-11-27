@@ -25,11 +25,30 @@ function familyRecord(parsed) {
     };
 }
 
+const maxTransitionPieces = 128;
+
+function transitionRecord(parsed) {
+    if (typeof parsed.machine !== 'string' || !Array.isArray(parsed.pieces) ||
+        parsed.pieces.length < 2 || parsed.pieces.length > maxTransitionPieces) {
+        throw new Error('Invalid phase transition envelope');
+    }
+    const pieces = parsed.pieces.map((piece) => {
+        return segmentNormalize({ ...piece, type: 'segment', kind: 'phase', machine: parsed.machine });
+    });
+    if (pieces.at(-1).duration !== 0 || pieces.slice(0, -1).some((piece, index) => {
+        return piece.duration <= 0 || piece.end_time !== pieces[index + 1].start_time;
+    })) {
+        throw new Error('A phase transition must close adjacent phases and open the next');
+    }
+    return { type: 'phase-transition', machine: parsed.machine, pieces };
+}
+
 /** Decode once before admission so invalid envelopes never enter a transaction batch. */
 export function decodeSegment(raw) {
     try {
         const parsed = JSON.parse(raw.payload);
         if (parsed.type === 'split-family') { return familyRecord(parsed); }
+        if (parsed.type === 'phase-transition') { return transitionRecord(parsed); }
         return segmentNormalize(parsed);
     } catch (error) {
         error.permanent = true;

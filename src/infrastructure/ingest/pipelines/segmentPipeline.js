@@ -1,3 +1,4 @@
+import contiguousPhases, { validatePhaseAnchors } from '../sinks/contiguousPhases.js';
 import stompOptions from './stompOptions.js';
 import segmentTransactions from './segmentTransactions.js';
 import segmentBatchPolicy from './segmentBatchPolicy.js';
@@ -53,16 +54,16 @@ function pipelineSettings(config) {
     return settings;
 }
 
-async function repairHistory(pool, budget) {
+async function repairHistory(pool, budget, protectedTracks) {
     try {
-        await abutSegments(pool, budget);
+        await abutSegments(pool, budget, protectedTracks);
     } catch (error) {
         processingErrorLog('abut_segments', error, { budgetSeconds: budget });
     }
 }
 
-function repairCasting(pool) {
-    foldCastingPhases(pool).catch((error) => {
+function repairCasting(pool, protectedTracks) {
+    foldCastingPhases(pool, protectedTracks).catch((error) => {
         processingErrorLog('fold_casting_phases', error, {});
     });
 }
@@ -84,7 +85,8 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const budget = silenceBudget(settings.segmentWindow || 15);
     const { segmentSink, splitSink } = segmentSinks(postgres, pool);
     const continued = continuedSegments(segmentSink, pool, budget);
-    const dispatch = segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
+    const dispatch = contiguousPhases(pool, settings.phaseAnchors,
+        segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool));
     // eslint-disable-next-line prefer-const -- The timer codec closes over the source constructed with that codec.
     let source;
     const codec = segmentCodec(dispatch);
@@ -106,20 +108,22 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         stompOptions(settings, { serial: false, manualAck: true, deliveryTimeoutMs, onFatal(error) {
             coalesce.abort?.(error);settings.onFatal?.(error);
         } }));
-    const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
+    const silence = silentOpenWatch(closeSilentOpen(pool, [...(settings.phaseAnchors?.keys() ?? [])]), budget, {
         intervalMs: (settings.poll || 5) * 1000
     });
     return {
         health() { return source.health(); },
         destination,
         async start() {
+            const protectedTracks = [...(settings.phaseAnchors?.keys() ?? [])];
+            await validatePhaseAnchors(pool, settings.phaseAnchors);
             if (settings.repairHistoryOnStart !== false) {
-                await repairHistory(pool, budget);
+                await repairHistory(pool, budget, protectedTracks);
             }
             await source.start();
             await silence.start();
             if (settings.repairHistoryOnStart !== false) {
-                repairCasting(pool);
+                repairCasting(pool, protectedTracks);
             }
         },
         stop() {

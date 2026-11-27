@@ -75,7 +75,7 @@ async function respondToRequest(gate, timeline, requestId, req, res) {
  * @example
  *   timelineRoute('/api/v1', plant, { provider, requireOperator: true, defaultUser: 'hmi-kiosk' });
  */
-export default function timelineRoute(basePath, plant, operatorOptions, decorate) {
+export default function timelineRoute(basePath, plant, operatorOptions, decorate, currentPhase) {
     const gate = timelineOperator(operatorOptions);
     return [
         route('GET', `${basePath}/machines/:machineId/segments`, async (req, res, params, query) => {
@@ -97,7 +97,7 @@ export default function timelineRoute(basePath, plant, operatorOptions, decorate
                 });
             }
             const rows = await decorate(params.machineId, await result.machine.timeline.list(options));
-            jsonResponse({ items: segmentItems(rows) }).send(res);
+            jsonResponse({ items: segmentItems(currentPhase ? currentPhase(params.machineId, rows) : rows) }).send(res);
         }),
         route('PATCH', `${basePath}/machines/:machineId/segments`, async (req, res, params) => {
             const result = machineInPlant(plant, params.machineId);

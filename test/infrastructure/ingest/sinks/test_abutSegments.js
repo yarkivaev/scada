@@ -23,6 +23,16 @@ describe('abutSegments', function() {
         );
     });
 
+    it('keeps anchored phase tracks out of every repair query', async function() {
+        const calls = [];
+        await abutSegments({ query(sql, params) { calls.push([sql, params]); } }, 30, ['phase-probe']);
+        assert.equal(calls.length, 3);
+        for (const [sql, params] of calls) {
+            assert.match(sql, /kind <> 'phase' OR NOT \(machine = ANY\(\$2::text\[\]\)\)/u);
+            assert.deepEqual(params, [30, ['phase-probe']]);
+        }
+    });
+
     it('deletes the next same-name row that overlaps or abuts inside the budget', async function() {
         const queries = [];
         const pool = {

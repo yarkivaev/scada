@@ -1,5 +1,5 @@
 import assert from 'assert';
-import segmentCodec from '../../../../src/infrastructure/ingest/codecs/segmentCodec.js';
+import segmentCodec, { decodeSegment } from '../../../../src/infrastructure/ingest/codecs/segmentCodec.js';
 import { segmentDispatch } from '../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js';
 
 function fakeCloser() {
@@ -7,6 +7,19 @@ function fakeCloser() {
 }
 
 describe('segmentCodec', function() {
+    it('admits bounded contiguous replay batches and rejects a gap inside a batch', function() {
+        const first = 1700000000000;
+        const pieces = Array.from({ length: 65 }, (_piece, index) => {
+            const start = first + index * 1000;
+            const duration = index < 64 ? 1 : 0;
+            return { name: index % 2 === 0 ? 'on' : 'off', start, end: start + duration * 1000, duration };
+        });
+        const payload = { type: 'phase-transition', machine: 'cm1', pieces };
+        assert.strictEqual(decodeSegment({ payload: JSON.stringify(payload) }).pieces.length, 65);
+        pieces[16].end -= 1;
+        assert.throws(() => { return decodeSegment({ payload: JSON.stringify(payload) }); }, /close adjacent phases/u);
+    });
+
     it('transforms valid segment payload to record', async function() {
         const received = [];
         const collector = { accept: (record) => { return received.push(record); } };

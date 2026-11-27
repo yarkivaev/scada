@@ -34,6 +34,13 @@ function reads(pool) {
             if (!Array.isArray(kinds) || kinds.length === 0) {
                 return [];
             }
+            if (kinds.length === 1 && kinds[0] === 'phase') {
+                const result = await pool.query(
+                    `SELECT kind, name, start_time, end_time, duration, options, tags, properties
+                     FROM segments WHERE machine = $1 AND kind = 'phase' ORDER BY start_time DESC LIMIT 1`,
+                    [machineId]);
+                return result.rows;
+            }
             const result = await pool.query(
                 `SELECT DISTINCT ON (kind) kind, name, start_time, end_time, duration, options, tags, properties
                  FROM segments WHERE machine = $1 AND kind = ANY($2)
