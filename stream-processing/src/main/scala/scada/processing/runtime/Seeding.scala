@@ -1,12 +1,13 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{Params, Reading, Timestamp}
 import cats.effect.{IO, Outcome}
 import cats.effect.std.Queue
 import fs2.Stream
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import scala.concurrent.duration.*
-import scada.processing.core.{MachineConfig, MachineId, Params, Reading, Timestamp}
+import scada.processing.core.{MachineConfig, MachineId}
 import scada.processing.infra.checkpoint.{Checkpoint, RawReadingData}
 import scada.processing.infra.config.AliasMapping
 

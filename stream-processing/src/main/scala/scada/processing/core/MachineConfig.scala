@@ -1,5 +1,6 @@
 package scada.processing.core
 
+import io.yarkivaev.segmentation.{SegmentDef, TagDef}
 /**
  * Per-machine supervision configuration.
  *

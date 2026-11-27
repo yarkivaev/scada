@@ -1,5 +1,6 @@
 package scada.processing.infra.mqtt
 
+import io.yarkivaev.segmentation.{Params, Reading, Timestamp}
 import cats.effect.{IO, Resource}
 import fs2.Stream
 import io.circe.parser.parse as parseJson
@@ -14,7 +15,6 @@ import org.eclipse.paho.client.mqttv3.{
 import org.slf4j.LoggerFactory
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-import scada.processing.core.*
 import scada.processing.infra.config.{AliasMapping, MqttConfig}
 import scala.concurrent.duration.*
 

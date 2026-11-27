@@ -1,27 +1,12 @@
 name := "scada-stream-processing"
 organization := "io.yarkivaev"
-version := "2.8.0"
+version := "2.9.0"
 ThisBuild / scalaVersion := "3.5.2"
 
-lazy val root = project.in(file(".")).aggregate(segmentation).settings(
-  assembly / aggregate := false
-)
-
-lazy val segmentation = project.in(file("modules/segmentation")).settings(
-  // Compile the same sources that the npm package exposes to plant profiles.
-  Compile / unmanagedSources := {
-    val core = (LocalRootProject / baseDirectory).value / "src" / "main" / "scala" / "scada" / "processing" / "core"
-    val rules = Seq("Condition.scala", "Params.scala", "SegmentDef.scala").map(core / _)
-    rules ++ ((core / "segmentation") ** "*.scala").get
-  },
-  libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
-)
-
-Compile / unmanagedSourceDirectories ++= Seq("temporal-streams", "gaps-and-islands")
-  .map(baseDirectory.value / "vendor" / _ / "src" / "main" / "scala")
-Compile / unmanagedJars += {
-  val jar = baseDirectory.value / "dependencies" / "stream-worker.jar"
-  require(jar.isFile, "Run ./resolve-worker.sh to fetch the pinned Stream Worker JAR")
+Compile / unmanagedSourceDirectories += baseDirectory.value / "vendor" / "temporal-streams" / "src" / "main" / "scala"
+Compile / unmanagedJars ++= Seq("stream-worker", "timeline-segmentation").map { dependency =>
+  val jar = baseDirectory.value / "dependencies" / s"$dependency.jar"
+  require(jar.isFile, "Run ./resolve-dependencies.sh to fetch the pinned processing JARs")
   Attributed.blank(jar)
 }
 Compile / mainClass := Some("scada.processing.runtime.ProcessingApp")

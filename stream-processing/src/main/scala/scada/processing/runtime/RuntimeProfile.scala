@@ -1,10 +1,11 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{Reading, ReadingOverride, Tagging}
 import cats.effect.IO
 import fs2.Stream
 import io.circe.Json
 import io.yarkivaev.streamworker.OutputScope
-import scada.processing.core.{MachineConfig, Reading, ReadingOverride, Segments, Tagging}
+import scada.processing.core.{MachineConfig, Segments}
 import scada.processing.infra.checkpoint.Checkpoint
 import scada.processing.infra.config.{AliasMapping, AppConfig, CheckpointApiConfig, ConfigProfile}
 import scada.processing.infra.state.SegmentStatePolicy

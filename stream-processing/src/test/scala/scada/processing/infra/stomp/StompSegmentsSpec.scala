@@ -1,5 +1,6 @@
 package scada.processing.infra.stomp
 
+import io.yarkivaev.segmentation.{Segment, SplitEntry, SplitPieces, TaggedSegment, Timestamp}
 import cats.effect.{IO, Ref}
 import io.circe.parser.parse as parseJson
 import munit.CatsEffectSuite

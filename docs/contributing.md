@@ -47,7 +47,7 @@ own container.
 
 ## Scala stream processing checks
 
-From `stream-processing/` with JDK 21, run `./resolve-worker.sh` followed by `sbt test assembly`. The release workflow runs these checks on `main` before tagging and publishing. Verify profile-specific behavior in each consuming plant repository.
+From `stream-processing/` with JDK 21, run `./resolve-dependencies.sh` followed by `sbt test assembly`. The release workflow runs these checks on `main` before tagging and publishing. Verify profile-specific behavior in each consuming plant repository.
 
 ## Design conventions
 

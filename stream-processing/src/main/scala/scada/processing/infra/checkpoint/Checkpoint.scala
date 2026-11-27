@@ -1,5 +1,6 @@
 package scada.processing.infra.checkpoint
 
+import io.yarkivaev.segmentation.{TaggedSegment, Timestamp}
 import cats.effect.IO
 import fs2.Stream
 import scada.processing.core.*

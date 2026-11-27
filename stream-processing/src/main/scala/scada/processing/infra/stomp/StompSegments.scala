@@ -1,5 +1,6 @@
 package scada.processing.infra.stomp
 
+import io.yarkivaev.segmentation.{Segment, SplitFollow, TaggedSegment, Timestamp}
 import cats.Monad
 import cats.effect.IO
 import cats.syntax.all.*

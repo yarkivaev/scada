@@ -1,7 +1,7 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{Segment, TaggedSegment, Timestamp}
 import cats.effect.IO
-import scada.processing.core.*
 import scada.processing.core.Segments as CoreSegments
 import scada.processing.infra.checkpoint.PendingSegmentData
 

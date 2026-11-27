@@ -1,9 +1,9 @@
 package scada.processing.infra.stomp
 
+import io.yarkivaev.segmentation.{SplitEntry, Timestamp}
 import io.circe.Json
 import io.circe.parser.parse as parseJson
-import scada.processing.core.{Decision, MachineId, SplitEntry, Timestamp}
-
+import scada.processing.core.{Decision, MachineId}
 /**
  * Inbound-wire parser for operator [[Decision]]s arriving on the
  * STOMP `user_decisions` destination. Reads a JSON body and picks the

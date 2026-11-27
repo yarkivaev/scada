@@ -1,5 +1,6 @@
 package scada.processing.infra.state
 
+import io.yarkivaev.segmentation.{Segment, TaggedSegment, Timestamp}
 import cats.effect.IO
 import cats.syntax.all.*
 import scada.processing.core.*

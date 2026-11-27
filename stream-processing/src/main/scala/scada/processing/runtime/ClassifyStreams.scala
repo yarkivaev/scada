@@ -1,5 +1,6 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{HistorySegment, HistoryState}
 import cats.effect.IO
 import cats.effect.std.Semaphore
 import fs2.Stream

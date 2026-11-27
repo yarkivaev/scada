@@ -1,7 +1,6 @@
 package scada.processing.infra.stomp
 
-import scada.processing.core.{TaggedSegment, Timestamp}
-
+import io.yarkivaev.segmentation.{TaggedSegment, Timestamp}
 /** Controls the wire representation and publishing semantics for segment types. */
 trait SegmentWirePolicy:
   def boundary(row: TaggedSegment, time: Timestamp): Long = time.millis

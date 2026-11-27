@@ -1,5 +1,6 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{HistoryRange, HistorySeed, HistorySegment, HistoryState, ObservedSegmentation, Reading, Segment, Tagging, Timestamp}
 import cats.effect.{IO, Ref}
 import cats.syntax.all.*
 import fs2.Stream
@@ -15,15 +16,10 @@ import java.util.HexFormat
 import scada.stream.replay.{Replay, ReplayFailure, ReplayInput, ReplayManifest, ReplayRange, ReplaySeed}
 import io.yarkivaev.streamworker.{ProcessingError, Processor, StepResult}
 import scada.processing.core.*
-import scada.processing.core.segmentation.Timeline
-import scada.processing.core.segmentation.Timeline.{Boundary, Event, Interval, Output}
+import io.yarkivaev.segmentation.ObservedSegmentation.{Sample, State, segment}
 import scada.processing.infra.config.{AliasMapping, CheckpointApiConfig}
 import scala.concurrent.duration.*
 
-final case class HistoryRange(from: Long, until: Long)
-final case class HistorySeed(time: Long, values: Map[String,Double], segment: Option[HistorySegment] = None)
-final case class HistorySegment(name: String, start: Long, end: Long)
-final case class HistoryState(position: Long, parameters: Map[String,(Long,Double)], segment: Option[HistorySegment])
 final case class HistoryPool(cursors: LocalStreams, states: Map[Long,HistoryState]):
   def expire(now: Long): HistoryPool =
     val alive = cursors.evict(now)
@@ -35,72 +31,28 @@ final case class HistoryPool(cursors: LocalStreams, states: Map[Long,HistoryStat
     val merged = equal.foldLeft(advanced)((pool,id) => pool.merge(stream,id,true))
     HistoryPool(merged,known.filter((id,_) => merged.streams.exists(_.id == id)))
 object LocalHistory:
-  def connected(before: Long, after: Long, gap: Long, continuity: Vector[HistoryRange]): Boolean =
-    before <= after && (BigInt(after)-BigInt(before) <= gap || continuity.exists(r => r.from <= before && r.until >= after))
-  def state(machine: MachineConfig, points: Vector[Observation], result: Vector[HistorySegment], seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty): Option[HistoryState] =
-    points.map(_.time).maxOption.map: end =>
-      val gap = machine.window.toLong*2000
-      val state = points.groupBy(_.time).toVector.sortBy(_._1).foldLeft((seed.map(_.time),seed.fold(Map.empty[String,(Long,Double)])(s => s.values.map((k,v) => k -> (s.time,v))))):
-        case ((previous,values),(time,group)) =>
-          val prior = if previous.exists(t => connected(t,time,gap,continuity)) then values else Map.empty[String,(Long,Double)]
-          (Some(time),prior ++ group.map(p => p.channel -> (p.time,p.value)))
-      HistoryState(end,state._2,result.lastOption)
+  def classify(machine: MachineConfig, points: Vector[Observation], seed: Option[HistorySeed] = None,
+      continuity: Vector[HistoryRange] = Vector.empty): Vector[HistorySegment] =
+    ObservedSegmentation(machine.segments, machine.window, continuity).run(grouped(points), seed)
 
-  /** Finite event-time classification: never inject wall-clock silence into past data. */
-  def classify(machine: MachineConfig, points: Vector[Observation], seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty): Vector[HistorySegment] =
-    val classifier = Classification(machine, continuity)
-    val (terminal, closed) = grouped(points).foldLeft((classifier.initial(seed), Vector.empty[HistorySegment])):
-      case ((state, completed), sample) =>
-        val next = classifier.advance(state, sample)
-        (next.state, completed ++ next.outputs)
-    closed ++ terminal.segment.map(segment)
-
-  private final case class Sample(time: Long, values: Map[String, Double])
-  private final case class ClassificationState(
-      time: Option[Long], parameters: Map[String, (Long, Double)], segment: Option[Interval[Long]]
-  )
   private[runtime] final case class Replayed(segments: Vector[HistorySegment], state: Option[HistoryState])
-
-  private def segment(row: Interval[Long]): HistorySegment = HistorySegment(row.name, row.start, row.end)
 
   private def grouped(points: Vector[Observation]): Vector[Sample] =
     points.groupBy(_.time).toVector.sortBy(_._1).map: (time, group) =>
       Sample(time, group.map(p => p.channel -> p.value).toMap)
 
-  private final class Classification(machine: MachineConfig, continuity: Vector[HistoryRange])
-      extends Processor[Unit, ClassificationState, Sample, HistorySegment]:
-    private val classify = Timeline.classifier(machine.segments)
-    private val gap = machine.window.toLong * 2000
-
-    def initial(seed: Option[HistorySeed]): ClassificationState =
-      val carried = seed.flatMap: value =>
-        val stored = value.segment.filter(_.start <= value.time)
-        val evaluated = classify(Params(value.values)) match
-          case Some(name) => Some(stored.filter(_.name == name).getOrElse(HistorySegment(name, value.time, value.time)))
-          case None => stored
-        evaluated.map(row => Interval(row.name, row.start, row.end))
-      val parameters = seed.fold(Map.empty[String, (Long, Double)])(value => value.values.map((key, reading) => key -> (value.time, reading)))
-      ClassificationState(seed.map(_.time), parameters, carried)
-
-    def advance(state: ClassificationState, sample: Sample): StepResult[ClassificationState, HistorySegment] =
-      val continuous = state.time.exists(connected(_, sample.time, gap, continuity))
-      val parameters = (if continuous then state.parameters else Map.empty) ++
-        sample.values.map((key, value) => key -> (sample.time, value))
-      val name = classify(Params(parameters.map((key, value) => key -> value._2)))
-        .orElse(if continuous then state.segment.map(_.name) else None)
-      val next = ClassificationState(Some(sample.time), parameters, state.segment)
-      name.fold(StepResult(next, Vector.empty[HistorySegment])): classified =>
-        val result = Timeline.step(Boundary.Observed, state.segment, Event.Sample(sample.time, classified, continuous))
-        StepResult(next.copy(segment = result.open), result.outputs.collect { case Output.Closed(row) => segment(row) })
-
-    override def step(config: Unit, state: ClassificationState, sample: Sample)
-        : Either[ProcessingError, StepResult[ClassificationState, HistorySegment]] = Right(advance(state, sample))
+  private def processor(classifier: ObservedSegmentation): Processor[Unit, State, Sample, HistorySegment] =
+    new Processor[Unit, State, Sample, HistorySegment]:
+      def step(config: Unit, state: State, sample: Sample)
+          : Either[ProcessingError, StepResult[State, HistorySegment]] =
+        val result = classifier.step(state, sample)
+        Right(StepResult(result.state, result.outputs))
 
   private[runtime] def replay(
       machine: MachineConfig, points: Vector[Observation], baseRevision: String, runId: String,
       seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty
   ): IO[Replayed] = IO.defer:
-    val classifier = Classification(machine, continuity)
+    val classifier = ObservedSegmentation(machine.segments, machine.window, continuity)
     val initial = classifier.initial(seed)
     val samples = grouped(points)
     def values(readings: Map[String, Double]): Json =
@@ -118,7 +70,7 @@ object LocalHistory:
     val manifest = ReplayManifest(timeline, ReplayRange(0, samples.size), rulesVersion, input.id, seedId, baseRevision, runId)
     def failure(problem: ReplayFailure) = IllegalStateException(s"History page replay failed: $problem")
     IO.fromEither(Replay.plan(manifest, input, start).leftMap(failure)).flatMap: plan =>
-      Replay.run(plan, (), classifier).flatMap(result => IO.fromEither(result.leftMap(failure))).map: result =>
+      Replay.run(plan, (), processor(classifier)).flatMap(result => IO.fromEither(result.leftMap(failure))).map: result =>
         val terminal = result.terminalState
         val tail = terminal.segment.map(segment)
         val state = samples.lastOption.map(last => HistoryState(last.time, terminal.parameters, tail))

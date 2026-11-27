@@ -1,5 +1,6 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{Reading, Segmentation, TagDef, TaggedSegment, Timestamp}
 import cats.effect.{ExitCode, IO, Ref, Resource}
 import cats.effect.std.Semaphore
 import cats.syntax.all.*
@@ -7,18 +8,7 @@ import fs2.Stream
 import io.yarkivaev.streamworker.OutputScope
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-import scada.processing.core.{
-  Decision,
-  MachineConfig,
-  MachineId,
-  Reading,
-  Segmentation,
-  Segments as CoreSegments,
-  ReadingWorker,
-  TagDef,
-  TaggedSegment,
-  Timestamp
-}
+import scada.processing.core.{Decision, MachineConfig, MachineId, Segments as CoreSegments, ReadingWorker}
 import scada.processing.infra.checkpoint.{Checkpoint, ClickhouseReadingsCheckpoint, SupervisorSinkCheckpoint}
 import scada.processing.infra.config.{AliasMapping, AppConfig, ConfigLoad, RabbitMqConfig}
 import scada.processing.infra.mqtt.Mqtt

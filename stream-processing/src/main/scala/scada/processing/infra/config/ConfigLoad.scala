@@ -1,5 +1,6 @@
 package scada.processing.infra.config
 
+import io.yarkivaev.segmentation.{Condition, CycleAnchors, CyclePhase, CyclePhases, SegmentDef, TagDef}
 import cats.effect.IO
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueType}
 import scada.processing.core.*
