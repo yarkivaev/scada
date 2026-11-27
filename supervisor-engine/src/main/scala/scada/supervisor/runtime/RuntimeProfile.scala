@@ -18,9 +18,6 @@ trait RuntimeProfile:
   def wirePolicy: SegmentWirePolicy = SegmentWirePolicy.default
   def historyProtocols: Vector[String] = Vector("preserve-known-suffix-v1")
   def decorate(config: AppConfig, segments: Segments[IO]): IO[Segments[IO]] = IO.pure(segments)
-  def replayAliases(machine: MachineConfig, aliases: List[AliasMapping]): List[AliasMapping] = aliases
-  def readings(machine: MachineConfig, live: Stream[IO, Reading]): Stream[IO, Reading] = live
-  def input(config: AppConfig, machine: MachineConfig, aliases: List[AliasMapping]): Option[Stream[IO, Reading]] = None
   def live(config: AppConfig, machine: MachineConfig, aliases: List[AliasMapping], segments: Segments[IO],
       checkpoint: Option[Checkpoint], seeding: Option[Seeding]): Option[Stream[IO, Unit]] = None
   def decisions(config: AppConfig, segments: Segments[IO]): Stream[IO, Unit] = Stream.empty

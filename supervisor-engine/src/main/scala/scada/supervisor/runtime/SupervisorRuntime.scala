@@ -204,8 +204,7 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
       live: Stream[IO, Reading],
       seeding: Option[Seeding]
   ): Stream[IO, Reading] =
-    val input = profile.readings(machine, live)
-    seeding.fold(input)(_.seed(machine, profile.replayAliases(machine, aliases), input))
+    seeding.fold(live)(_.seed(machine, aliases, live))
 
   /** Holds one classifier per machine. The loser waits and tries the same lock again. */
   private def lease(url: Option[String], machine: String, leader: Boolean, body: Stream[IO, Unit]): Stream[IO, Unit] =
@@ -243,7 +242,7 @@ open class SupervisorRuntime(profile: RuntimeProfile) extends IOApp:
           HistoryRun(this, profile).gated(config, machine, aliases, sender, api, observationMs, segmentEndMs)
         case _ =>
           val body = profileSegments.flatMap(profile.live(config, machine, aliases, _, checkpoint, seeding)).getOrElse:
-            val live = profile.input(config, machine, aliases).getOrElse(Mqtt(mqttCfg, aliases).subscribe)
+            val live = Mqtt(mqttCfg, aliases).subscribe
             val readings = sourced(machine, aliases, live, seeding)
             Stream.eval(if machine.mode.isDefined then IO.pure(None) else PendingIsland.resolve(checkpoint, machine)).flatMap: initial =>
               Stream.eval(supervisor.run(machine, readings, initial))
