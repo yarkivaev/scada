@@ -1,10 +1,11 @@
 package scada.processing.core
 
+import io.yarkivaev.segmentation.{CyclePhases, Reading, SegmentCursor, Segmentation, TaggedSegment, Tagging, Timestamp}
 import cats.effect.IO
 import cats.syntax.all.*
 import fs2.Stream
 import io.yarkivaev.streamworker.*
-import scada.processing.core.segmentation.Timeline.Interval
+import io.yarkivaev.segmentation.Timeline.Interval
 import scala.concurrent.duration.*
 
 /** Assembles the MQTT session input and its segment output port. */
@@ -21,12 +22,12 @@ final class ReadingWorker(
     def step(machine: MachineConfig, state: State, input: Input): Either[ProcessingError, StepResult[State, TaggedSegment]] =
       input match
         case Input.Sample(reading) =>
-          segmentation.step(machine, state, reading).map(result =>
-            StepResult(result.state, result.outputs.map(emission => tagging.resolve(machine.tags, emission.value))))
+          val result = segmentation.step(machine.segments, machine.window, state, reading)
+          Right(StepResult(result.state, result.outputs.map(emission => tagging.resolve(machine.tags, emission.value))))
         case Input.Restore(cursor) =>
-          Right(StepResult(state, Vector(pending(cursor.name, cursor.start, cursor.end))))
+          Right(StepResult(state, Vector(Segmentation.pending(cursor.name, cursor.start, cursor.end))))
         case Input.Pulse(now, rows) =>
-          Right(StepResult(state, pulse(now, rows).toVector))
+          Right(StepResult(state, Segmentation.extendPending(now, rows).toVector))
 
   def run(machine: MachineConfig, readings: Stream[IO, Reading], initial: Option[SegmentCursor] = None): IO[Unit] =
     if machine.mode.isDefined then
@@ -69,14 +70,3 @@ object ReadingWorker:
     case Sample(reading: Reading)
     case Restore(cursor: SegmentCursor)
     case Pulse(now: Timestamp, rows: List[TaggedSegment])
-
-  private def pending(name: String, start: Timestamp, end: Timestamp): TaggedSegment =
-    TaggedSegment(Segment(name, start, end, 0.0), Nil, Nil, Map.empty)
-
-  private def pulse(now: Timestamp, rows: List[TaggedSegment]): Option[TaggedSegment] =
-    rows.filter(_.segment.duration == 0).maxByOption(_.segment.start) match
-      case Some(open) =>
-        Option.when(now.isAfter(open.segment.end))(open.copy(segment = open.segment.copy(end = now)))
-      case None =>
-        rows.maxByOption(_.segment.end).filter(last => now.isAfter(last.segment.end))
-          .map(last => pending(last.segment.name, last.segment.end, now))

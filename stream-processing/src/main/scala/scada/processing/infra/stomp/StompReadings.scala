@@ -1,9 +1,9 @@
 package scada.processing.infra.stomp
 
+import io.yarkivaev.segmentation.{Params, Reading, Timestamp}
 import cats.effect.{IO, Resource}
 import fs2.Stream
 import io.circe.parser.parse
-import scada.processing.core.*
 import scada.processing.infra.config.{AliasMapping,RabbitMqConfig}
 
 /** One pre-bound durable AMQP queue preserves parameter/rise order. Slash aliases match dotted routing keys. */

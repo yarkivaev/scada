@@ -2,7 +2,7 @@ package scada.processing.infra.stomp
 
 import cats.effect.IO
 import fs2.Stream
-import scada.processing.core.{Decision,MachineId}
+import scada.processing.core.{Decision, MachineId}
 import scada.processing.infra.config.RabbitMqConfig
 
 /** A durable per-machine copy; unrelated machine decisions are discarded only from this copy. */

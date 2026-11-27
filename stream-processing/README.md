@@ -11,7 +11,7 @@ outputs to other receivers. See the [SCADA architecture](../docs/architecture/RE
 Use JDK 21. From this directory, run:
 
 ```sh
-./resolve-worker.sh
+./resolve-dependencies.sh
 sbt test assembly
 java -jar target/scala-3.5.2/scada-stream-processing.jar --check /path/to/application.conf
 CLASSIFY_GROUP=machine-1 java -jar target/scala-3.5.2/scada-stream-processing.jar /path/to/application.conf
@@ -56,12 +56,11 @@ The profile can load a plant-specific machine mode, select a live stream or
 history worker, and define segment annotation and publication policies.
 The engine supplies the shared execution, replay, writer leases, and transport.
 
-The npm package carries the processing sources and the pinned Stream Worker JAR
-under `stream-processing/`. This is a source distribution for plant builds. A plant build pins the SCADA package version and
-compiles those sources with its own profile. The engine can also be built
-directly from this repository as a standalone JAR. The worker is released at
-[stream-worker](https://github.com/yarkivaev/stream-worker). The lock file pins
-the dependency version and checksum.
+A plant build pins the SCADA npm package and compiles its processing sources
+with the plant profile. The package includes the exact JARs pinned by version
+and SHA-256 in the two lock files. Both libraries publish independently.
+[Stream Worker](https://github.com/yarkivaev/stream-worker)
+[Timeline Segmentation](https://github.com/yarkivaev/timeline-segmentation)
 
 ## Stream processing modules
 
@@ -69,7 +68,7 @@ the dependency version and checksum.
 | --- | --- |
 | `io.yarkivaev.streamworker.Processor` | Computes the next state and ordered outputs from configuration, state and one event. All time used by a processor comes from the input. |
 | `io.yarkivaev.streamworker.StreamWorker` | Reads an ordered source supplied by the caller, atomically saves the position, state and pending outputs, and retries unconfirmed outputs on restart. |
-| `scada.processing.core.segmentation.Timeline` | Computes generic interval transitions. The existing live and history adapters retain their respective boundary policies. Build it independently with `sbt 'segmentation/test'`. |
+| `io.yarkivaev.segmentation` | Evaluates segment and tag rules and computes interval transitions. Live and history adapters pass their input and boundary policy to the library. |
 | `scada.stream.replay.Replay` | Recalculates a fixed input snapshot and returns a proposal tied to a timeline revision. It can process sections in parallel where compatible starting states exist, then verifies the states at each boundary. |
 
 Durable source adapters assign stable positions to records and combine upstream

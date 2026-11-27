@@ -1,9 +1,9 @@
 package scada.processing.infra.stomp
 
+import io.yarkivaev.segmentation.TaggedSegment
 import io.circe.Json
 import io.circe.syntax.*
-import scada.processing.core.{MachineId, TaggedSegment}
-
+import scada.processing.core.MachineId
 /**
  * Wire-format envelope for one event on the supervisor-sink channel.
  * Knows how to render itself as JSON; STOMP publishing just treats the

@@ -1,5 +1,6 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{Condition, HistoryRange, HistorySeed, HistorySegment, HistoryState, SegmentDef}
 import cats.effect.unsafe.implicits.global
 import io.yarkivaev.temporal.Observation
 import scada.processing.core.*

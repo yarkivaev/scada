@@ -7,7 +7,7 @@ import createQueue from '../../../src/application/runtime/deliveryQueue.js';
 const target=[{id:'one',type:'amqp'}];
 const pause=ms=>{return new Promise(resolve=>{setTimeout(resolve,ms);});};
 function gate(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
-async function until(probe){const end=Date.now()+500;while(!probe()){assert(Date.now()<end,'fixture condition deadline');await pause(2);}}
+async function until(probe, timeoutMs = 500){const end=Date.now()+timeoutMs;while(!probe()){assert(Date.now()<end,'fixture condition deadline');await pause(2);}}
 describe('bounded pipelined delivery confirmations',()=>{
  let directory;const owned=[];
  function queue(options={}){const value=createQueue(directory,{maxBytes:1000000,failureCooldownMs:0,...options});owned.push(value);return value;}
@@ -20,9 +20,37 @@ describe('bounded pipelined delivery confirmations',()=>{
   try{await until(()=>{return order.length===3;});assert.equal(peak,3);assert.equal(starts,1);}finally{confirm.resolve();}
   assert.deepEqual(await drain,{delivered:6,failed:0});assert.deepEqual(order,['a','b','c','d','e','f']);assert.equal(item.status().pending,0);
  });
- it('improves slow-confirm drain time without exceeding the configured window',async()=>{
-  let active=0; let peak=0;const item=queue({maxInFlight:4,factory(){return {async write(){active+=1;peak=Math.max(peak,active);await pause(30);active-=1;}};}});
-  await item.open();await Promise.all(Array.from({length:12},(value,i)=>{return item.accept({eventId:String(i)},target);}));const start=Date.now();assert.equal((await item.drain()).delivered,12);assert.equal(peak,4);assert(Date.now()-start<250,'serial confirmations would require at least360ms');
+ it('refills a confirmed slot while the other publications are still in flight',async function(){
+  this.timeout(12000);
+  const confirmations = Array.from({length:12}, () => { return gate(); });
+  const entered = [];
+  let active = 0;
+  let peak = 0;
+  const item = queue({maxInFlight:4, factory() {
+   return {async write(records) {
+    const position = Number(records[0].eventId);
+    entered.push(position);
+    active += 1;
+    peak = Math.max(peak, active);
+    await confirmations[position].promise;
+    active -= 1;
+   }};
+  }});
+  await item.open();
+  await Promise.all(Array.from(confirmations.keys(), index => { return item.accept({eventId:String(index)}, target); }));
+  const draining = item.drain();
+  try {
+   await until(() => { return entered.length >= 4; }, 5000);
+   assert.deepEqual(entered, [0, 1, 2, 3]);
+   confirmations[1].resolve();
+   await until(() => { return entered.length >= 5; }, 5000);
+   assert.deepEqual(entered, [0, 1, 2, 3, 4]);
+   assert.equal(active, 4);
+  } finally {
+   confirmations.forEach(confirmation => { confirmation.resolve(); });
+  }
+  assert.deepEqual(await draining, {delivered:12, failed:0});
+  assert.equal(peak, 4);
  });
  it('holds actual slots and prospective ACK reservations after caller timeout and fences retries',async()=>{
   const late=gate();let writes=0;const item=queue({maxInFlight:1,maxOperations:1,writeTimeoutMs:15,factory(){return {async write(){writes+=1;await late.promise;},async stop(){}};}});

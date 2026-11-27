@@ -1,11 +1,11 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{Condition, SegmentDef}
 import cats.effect.{IO, Ref}
 import fs2.Stream
 import io.yarkivaev.temporal.Observation
 import munit.CatsEffectSuite
-import scada.processing.core.{Condition, MachineConfig, MachineId, SegmentDef}
-
+import scada.processing.core.{MachineConfig, MachineId}
 final class ClassifyCheckpointSpec extends CatsEffectSuite:
   for url <- sys.env.get("SCADA_STREAM_WORKER_TEST_JDBC") do
     test("AMQP takeover restores the queued write before acknowledging the retried input"):

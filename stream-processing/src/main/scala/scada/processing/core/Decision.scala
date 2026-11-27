@@ -1,5 +1,6 @@
 package scada.processing.core
 
+import io.yarkivaev.segmentation.{SplitEntry, SplitPieces, TagDef, TaggedSegment, Tagging, Timestamp}
 import cats.Monad
 import cats.MonadThrow
 import cats.syntax.all.*
@@ -54,14 +55,3 @@ enum Decision:
   ): F[Unit] =
     val cascaded = tagging.resolve(tagDefs, seg.segment, tags)
     segments.resolve(machine, seg.segment, cascaded.tags, cascaded.options, properties)
-
-/**
- * One piece of a [[Decision.Split]]. `tag` may be empty when the
- * operator does not know the reason. `open` marks the live tail.
- *
- * {{{
- * SplitEntry(Timestamp(100.0), Timestamp(160.0), "maintenance")
- * }}}
- */
-final case class SplitEntry(start: Timestamp, end: Timestamp, tag: String, open: Boolean = false):
-  def tagged: TaggedSegment = SplitPieces.row(start, this)

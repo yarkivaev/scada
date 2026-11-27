@@ -1,7 +1,7 @@
 package scada.processing.infra.config
 
-import scada.processing.core.{CyclePhases, MachineConfig, MachineId}
-
+import io.yarkivaev.segmentation.CyclePhases
+import scada.processing.core.{MachineConfig, MachineId}
 /**
  * Alias routing entry: which MQTT topic carries which metric.
  *

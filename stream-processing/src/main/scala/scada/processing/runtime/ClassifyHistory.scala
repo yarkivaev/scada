@@ -1,12 +1,13 @@
 package scada.processing.runtime
 
+import io.yarkivaev.segmentation.{HistorySegment, Segment, TaggedSegment, Timestamp}
 import cats.effect.{IO, Ref}
 import cats.syntax.all.*
 import fs2.Stream
 import io.circe.Json
 import io.yarkivaev.temporal.{Conflict, History, Observation}
 import java.time.Instant
-import scada.processing.core.{MachineConfig, MachineId, Segment, TaggedSegment, Timestamp}
+import scada.processing.core.{MachineConfig, MachineId}
 import scada.processing.infra.stomp.SplitFamily
 
 /**

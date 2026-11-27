@@ -49,7 +49,7 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U scada_test < ../db/migrations/E0018__stream_worker_checkpoint.sql
-      - run: ./resolve-worker.sh
+      - run: ./resolve-dependencies.sh
       - run: sbt test assembly
         env:
           PGUSER: scada_test

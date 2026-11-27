@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -33,7 +33,7 @@
     "test": "mocha --exit 'test/**/test*.js'",
     "test:deep": "mocha --exit 'test/domain/**/test*.js' 'test/infrastructure/ingest/**/test*.js'",
     "coverage": "c8 --all --src src npm test",
-    "prepack": "sh stream-processing/resolve-worker.sh",
+    "prepack": "sh stream-processing/resolve-dependencies.sh",
     "lint": "eslint . && node scripts/check-eo-names.mjs",
     "lint:fix": "eslint . --fix",
     "lint:eo": "node scripts/check-eo-names.mjs"
@@ -70,6 +70,8 @@
     "stream-processing/vendor/",
     "stream-processing/dependencies/stream-worker.jar",
     "stream-processing/stream-worker.lock",
+    "stream-processing/dependencies/timeline-segmentation.jar",
+    "stream-processing/timeline-segmentation.lock",
     "src/"
   ]
 }

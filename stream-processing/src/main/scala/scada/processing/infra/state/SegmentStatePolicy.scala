@@ -1,7 +1,6 @@
 package scada.processing.infra.state
 
-import scada.processing.core.TaggedSegment
-
+import io.yarkivaev.segmentation.TaggedSegment
 /** Preserves or replaces operator annotations when a segment is updated. */
 trait SegmentStatePolicy:
   def merge(existing: TaggedSegment, incoming: TaggedSegment): TaggedSegment =

@@ -1,9 +1,9 @@
 package scada.processing.infra.stomp
 
+import io.yarkivaev.segmentation.{TaggedSegment, Timestamp}
 import io.circe.Json
 import io.circe.syntax.*
-import scada.processing.core.{MachineId, TaggedSegment, Timestamp}
-
+import scada.processing.core.MachineId
 /**
  * One STOMP body that replaces a whole split family. The sink applies
  * it in a single transaction so a boundary edit cannot leave the
