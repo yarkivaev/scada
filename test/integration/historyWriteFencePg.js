@@ -89,15 +89,17 @@ describe('fenced segment recipient on Postgres', function() {
             fence:{outputId:'replicated-output',revision:before.revision}}),confirmed);
     });
 
-    it('retains operator metadata on anchored phases when a late pipe clears silence', async function() {
+    it('retains operator metadata and clears processor-owned properties on anchored phases', async function() {
         const machine = randomUUID();
-        const recipient = segmentRecipient(url,pool,{phaseAnchors:new Map([[machine,new Date(1000).toISOString()]])});
+        const recipient = segmentRecipient(url, pool, {
+            phaseAnchors: new Map([[machine,new Date(1000).toISOString()]]), processorProperties: ['processor_status']
+        });
         const pending = {machine,type:'segment',name:'running',start:1000,end:2000,duration:0};
         const {revision:initial} = await recipient.live.revision(machine);
-        await recipient.live.apply({...pending,properties:{phase_revision:'1',casting_silence_at:'2'},
+        await recipient.live.apply({...pending,properties:{phase_revision:'1',processor_status:'2'},
             fence:{outputId:'pending',revision:initial}});
         await pool.query('UPDATE segments SET tags=$2,properties=$3 WHERE machine=$1',
-            [machine,'["operator"]','{"phase_revision":"1","note":"checked","casting_silence_at":"2"}']);
+            [machine,'["operator"]','{"phase_revision":"1","note":"checked","processor_status":"2"}']);
         const {revision} = await recipient.live.revision(machine);
         await recipient.live.apply({...pending,end:2100,options:['stale-options'],properties:{phase_revision:'2',note:'stale'},
             fence:{outputId:'restored',revision}});

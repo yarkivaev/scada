@@ -3,15 +3,12 @@ import writeFencedSegment, {
     activeSegmentLease, checkSegmentRevision, segmentLeaseMatches, segmentRevision, serialSegmentTransaction, storeWriteReceipt, writeReceipt
 } from '../../persistence/pg/segmentWriteFence.js';
 
-const computedProperties = new Set(['phase_revision', 'casting', 'cadence_rule', 'cadence_threshold_ms',
-    'casting_detected_at', 'casting_silence_at', 'source_interrupted']);
-
 function properties(value) {
     const decoded = JSON.parse(value ?? 'null');
     return decoded && typeof decoded === 'object' && !Array.isArray(decoded) ? decoded : {};
 }
 
-function keepOperatorFields(row, prior) {
+function keepOperatorFields(row, prior, computedProperties) {
     if (!prior) { return row; }
     const tagged = prior.tags && !['[]','null'].includes(prior.tags.trim());
     const preserved = tagged ? {...row,options:prior.options,resolved:prior.resolved} : row;
@@ -29,20 +26,20 @@ function keepOperatorFields(row, prior) {
     }
 }
 
-async function preparePhases(client, rows) {
+async function preparePhases(client, rows, computedProperties) {
     const {rows:previous} = await client.query(
         "SELECT start_time,properties,tags,options,resolved FROM segments WHERE machine=$1 AND kind='phase' AND start_time=ANY($2::timestamptz[])",
         [rows[0].machine,rows.map(row => { return row.start_time; })]);
     const byStart = new Map(previous.map(row => { return [new Date(row.start_time).toISOString(),row]; }));
-    return rows.map(row => { return keepOperatorFields(row,byStart.get(row.start_time)); });
+    return rows.map(row => { return keepOperatorFields(row, byStart.get(row.start_time), computedProperties); });
 }
 
-async function applyLive(dispatch, record, client, phaseAnchors) {
+async function applyLive(dispatch, record, client, {phaseAnchors,computedProperties}) {
     const transition = record.type === 'phase-transition';
     if (!transition && (record.type !== 'segment' || record.kind !== 'phase')) {
         return dispatch.accept(record,client);
     }
-    const rows = await preparePhases(client,transition ? record.pieces : [record]);
+    const rows = await preparePhases(client, transition ? record.pieces : [record], computedProperties);
     if (!transition) { return dispatch.accept(rows[0],client); }
     if (phaseAnchors?.has(record.machine)) { return dispatch.accept({...record,pieces:rows},client); }
     // The ordinary recipient has no transition envelope. Its ordered writes still share this transaction.
@@ -51,17 +48,17 @@ async function applyLive(dispatch, record, client, phaseAnchors) {
     },Promise.resolve());
 }
 
-async function applyReplica(dispatch,record,client,{acceptReplicaSegments,phaseAnchors}) {
+async function applyReplica(dispatch, record, client, settings) {
     const receipt = await writeReceipt(client,record.machine,record.committedOutputId,record.body);
     if (receipt) { return receipt; }
     // Authority can acknowledge a relay of its own receipt without accepting new replica writes.
-    if (!acceptReplicaSegments) { return {applied:false}; }
+    if (!settings.acceptReplicaSegments) { return {applied:false}; }
     const {rows:[storage]} = await client.query("SELECT to_regclass('segment_timeline_revisions') AS local_revision");
     const eligible = storage.local_revision
         ? await segmentLeaseMatches(client,record.machine,undefined)
         : !await activeSegmentLease(client,record.machine);
     if (!eligible) { return {applied:false}; }
-    await applyLive(dispatch,record,client,phaseAnchors);
+    await applyLive(dispatch, record, client, settings);
     const revision = storage.local_revision ? await segmentRevision(client,record.machine) : {};
     const outcome = {applied:true,...revision};
     await storeWriteReceipt(client,record.machine,record.committedOutputId,record.body,outcome);
@@ -72,7 +69,7 @@ function persist(dispatch, record, client, settings) {
     if (record.fence) {
         return writeFencedSegment(client,record.machine,record.fence,record.body,async () => {
             await checkSegmentRevision(client,record.machine,record.fence.revision);
-            await applyLive(dispatch,record,client,settings.phaseAnchors);
+            await applyLive(dispatch, record, client, settings);
             return {applied:true,...await segmentRevision(client,record.machine)};
         });
     }
@@ -85,15 +82,16 @@ function protectedRecord(record) {
 
 /** Uses the same configured dispatch for broker deliveries and synchronous HTTP writes. */
 export default function fencedSegments(pool, dispatch, settings) {
+    const policy = {...settings, computedProperties: new Set(['phase_revision', ...(settings.processorProperties ?? [])])};
     function accept(record, client) {
         if (!protectedRecord(record)) { return dispatch.accept(record,client); }
         if (!client) {
             return serialSegmentTransaction(pool,record.machine,runner => {
-                return persist(dispatch,record,runner,settings);
+                return persist(dispatch,record,runner,policy);
             },settings.acceptTimeoutMs);
         }
         return client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',[ `history:${record.machine}` ])
-            .then(() => {return persist(dispatch,record,client,settings)});
+            .then(() => {return persist(dispatch,record,client,policy)});
     }
     return {
         dispatch: {
