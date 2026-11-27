@@ -1,6 +1,6 @@
 name := "scada-supervisor-engine"
 organization := "io.yarkivaev"
-version := "2.6.43"
+version := "2.7.1"
 ThisBuild / scalaVersion := "3.5.2"
 
 lazy val root = project.in(file(".")).aggregate(segmentation).settings(
