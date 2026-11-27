@@ -1,7 +1,21 @@
 name := "scada-supervisor-engine"
 organization := "io.yarkivaev"
-version := "2.6.41"
-scalaVersion := "3.5.2"
+version := "2.6.42"
+ThisBuild / scalaVersion := "3.5.2"
+
+lazy val root = project.in(file(".")).aggregate(segmentation).settings(
+  assembly / aggregate := false
+)
+
+lazy val segmentation = project.in(file("modules/segmentation")).settings(
+  // Compile the same sources that the npm package exposes to plant profiles.
+  Compile / unmanagedSources := {
+    val core = (LocalRootProject / baseDirectory).value / "src" / "main" / "scala" / "scada" / "supervisor" / "core"
+    val rules = Seq("Condition.scala", "Params.scala", "SegmentDef.scala").map(core / _)
+    rules ++ ((core / "segmentation") ** "*.scala").get
+  },
+  libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
+)
 
 Compile / unmanagedSourceDirectories ++= Seq("temporal-streams", "gaps-and-islands")
   .map(baseDirectory.value / "vendor" / _ / "src" / "main" / "scala")

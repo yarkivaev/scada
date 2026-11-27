@@ -12,7 +12,12 @@ class LocalHistorySpec extends munit.FunSuite:
   }
   test("maxGap splits equal states rather than merging across missing history") {
     val rows = LocalHistory.classify(machine,Vector(Observation("a","power",0,0),Observation("b","power",31000,0)))
-    assertEquals(rows.size,2)
+    assertEquals(rows,Vector(HistorySegment("off",0,0),HistorySegment("off",31000,31000)))
+  }
+
+  test("finite replay closes a phase at its last sample on a class change") {
+    val points = Vector(Observation("a","power",0,0),Observation("b","power",1000,0),Observation("c","power",2000,10),Observation("d","power",3000,10))
+    assertEquals(LocalHistory.classify(machine,points),Vector(HistorySegment("off",0,1000),HistorySegment("heat",2000,3000)))
   }
 
   test("overlay splits old annotated off around heat and inherits expanded pieces") {

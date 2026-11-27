@@ -10,6 +10,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import scada.supervisor.core.*
+import scada.supervisor.core.segmentation.Timeline
+import scada.supervisor.core.segmentation.Timeline.{Boundary, Event, Interval, Output}
 import scada.supervisor.infra.config.{AliasMapping, CheckpointApiConfig}
 import scala.concurrent.duration.*
 
@@ -42,27 +44,27 @@ object LocalHistory:
   /** Finite event-time classification: never inject wall-clock silence into past data. */
   def classify(machine: MachineConfig, points: Vector[Observation], seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty): Vector[HistorySegment] =
     val gap = machine.window.toLong * 2000
-    val lookup = (name: String) => machine.segments.find(_.name == name).map(_.condition)
+    val classifyParams = Timeline.classifier(machine.segments)
     val groups = points.groupBy(_.time).toVector.sortBy(_._1)
     val initialSegment = seed.flatMap: initial =>
       val stored = initial.segment.filter(_.start <= initial.time)
-      val evaluated = machine.segments.find(_.condition.matches(Params(initial.values),lookup)).map(_.name)
-      evaluated match
+      classifyParams(Params(initial.values)) match
         case Some(name) => Some(stored.filter(_.name == name).getOrElse(HistorySegment(name,initial.time,initial.time)))
         case None => stored
-    groups.foldLeft((seed.fold(Map.empty[String,Double])(_.values),seed.map(_.time),initialSegment.toVector)):
-      case ((prior,previous,segments),(time,group)) =>
+    val initialOpen = initialSegment.map(row => Interval(row.name, row.start, row.end))
+    val initial = (seed.fold(Map.empty[String,Double])(_.values), seed.map(_.time), initialOpen, Vector.empty[Interval[Long]])
+    val (_, _, open, closed) = groups.foldLeft(initial):
+      case ((prior, previous, current, completed), (time, group)) =>
         val continuous = previous.exists(t => connected(t,time,gap,continuity))
         val values = (if continuous then prior else Map.empty) ++ group.map(p => p.channel -> p.value)
-        val name = machine.segments.find(_.condition.matches(Params(values),lookup)).map(_.name)
-          .orElse(if continuous then segments.lastOption.map(_.name) else None)
-        val next = name.fold(segments): n =>
-          segments.lastOption match
-            case Some(last) if continuous && last.name == n => segments.init :+ last.copy(end = time)
-            case Some(_) if continuous => segments :+ HistorySegment(n,time,time)
-            case _ => segments :+ HistorySegment(n,time,time)
-        (values,Some(time),next)
-    ._3
+        val name = classifyParams(Params(values)).orElse(if continuous then current.map(_.name) else None)
+        name match
+          case Some(n) =>
+            val next = Timeline.step(Boundary.Observed, current, Event.Sample(time, n, continuous))
+            val finished = next.outputs.collect { case Output.Closed(row) => row }
+            (values, Some(time), next.open, completed ++ finished)
+          case None => (values, Some(time), current, completed)
+    (closed ++ open).map(row => HistorySegment(row.name, row.start, row.end))
 
   def sources(context: Json): Vector[Json] =
     val current = context.hcursor.get[Vector[Json]]("segments").getOrElse(Vector.empty)

@@ -58,3 +58,30 @@ The npm package carries the Scala sources and the pinned, vendored Scala librari
 under `supervisor-engine/`. This is a source distribution for plant builds. A plant build pins the SCADA package version and
 compiles those sources with its own profile. The engine can also be built
 directly from this repository as a standalone JAR.
+
+## Stream processing modules
+
+The deployed entry point still uses the Supervisor runtime described above.
+The following Scala modules are available to plant profiles and new runtimes.
+
+| Module | Responsibility |
+| --- | --- |
+| `scada.stream.worker.Processor` | Computes the next state and ordered outputs from configuration, state and one event. All time used by a processor comes from the input. |
+| `scada.stream.worker.StreamWorker` | Reads an ordered source supplied by the caller, atomically saves the position, state and pending outputs, and retries unconfirmed outputs on restart. |
+| `scada.supervisor.core.segmentation.Timeline` | Computes generic interval transitions. The existing live and history adapters retain their respective boundary policies. Build it independently with `sbt 'segmentation/test'`. |
+| `scada.stream.replay.Replay` | Recalculates a fixed input snapshot and returns a proposal tied to a timeline revision. It can process sections in parallel where compatible starting states exist, then verifies the states at each boundary. |
+
+Source adapters assign a stable position to each record and combine upstream
+streams into a reproducible order before passing them to the worker. Timer
+expiration, operator decisions and end of input can be explicit events. An
+output has the same ID when retried. A receiving adapter must deduplicate that
+ID and validate the active ownership token before applying the output.
+
+`PgCheckpointStore` preserves the checkpoint and pending outputs when a
+coordinator supplies a higher ownership token. Set
+`SCADA_STREAM_WORKER_TEST_JDBC` to a local test database and apply
+`db/migrations/E0018__stream_worker_checkpoint.sql` to run its integration
+test with `sbt 'testOnly *PgCheckpointStoreSpec'`. A stopped worker can
+resume after an explicit state migration to a new rules version. The
+existing production history and state sink remain responsible for applying
+corrections and operator annotations.
