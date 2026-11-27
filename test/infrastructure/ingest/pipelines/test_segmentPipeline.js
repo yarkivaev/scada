@@ -117,7 +117,7 @@ describe('segmentPipeline upsert configuration', function() {
 
     it('folds casting phases during startup repair', function() {
         const body = readFileSync(new URL('../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js', import.meta.url), 'utf8');
-        assert.match(body, /foldCastingPhases\(pool\)/u,
+        assert.match(body, /foldCastingPhases\(pool, protectedTracks\)/u,
             'startup repair still left covering casting offs unfolder');
         assert.doesNotMatch(body, /await foldCastingPhases/u,
             'startup still blocked /ready on the casting fold');

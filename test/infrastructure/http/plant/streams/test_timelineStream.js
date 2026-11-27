@@ -60,4 +60,35 @@ describe('timelineStream', function() {
         });
         assert.ok(chunks.join('').includes('repair_emergency'), 'stream kept stored options');
     });
+    it('notifies anchored phase readers on committed changes and ignores broker previews', async function() {
+        const machineId = 'phase-probe';
+        const history = alerts(alert, acknowledgedAlert);
+        let publish;
+        let close;
+        let stored = [];
+        const timeline = {
+            async latest() { return stored; },
+            stream(fn) { publish = fn; return { cancel() {} }; }
+        };
+        const signals = [];
+        const item = machine(machineId, { sensors: {}, alerts: history, timeline });
+        const area = shop('area', initialized({ [machineId]: item }, Object.values), history);
+        const api = plantApi('/api/v1', plantDomain(initialized({ area }, Object.values)), { watchedPhases: new Set([machineId]) });
+        await api.handle(
+            { method: 'GET', url: `/api/v1/machines/${machineId}/segments/stream`, headers: {}, on(_event, stop) { close = stop; } },
+            { writeHead() {}, write(content) { signals.push(content); }, end() {} }
+        );
+        try {
+            const row = { name: 'on', duration: 0, start_time: new Date(), end_time: new Date() };
+            await publish({ type: 'created', segment: row });
+            assert.equal(signals.join('').match(/timeline_changed/gu).length, 1);
+            assert.doesNotMatch(signals.join(''), /segment_created/u);
+            stored = [row];
+            await new Promise(resolve => { setTimeout(resolve, 1100); });
+            assert.equal(signals.join('').match(/timeline_changed/gu).length, 2);
+        } finally {
+            close();
+        }
+    });
+
 });

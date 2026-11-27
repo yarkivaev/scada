@@ -124,14 +124,16 @@ async function foldOwnedRetry(pool, machine, attempt) {
  * Folds overlapping phases on casting machines into a unique timeline.
  *
  * @param {object} pool - pg pool
+ * @param {string[]} protectedTracks - driver machines with authoritative phases
  * @returns {Promise<void>}
  *
  * @example
  *   await foldCastingPhases(pool);
  */
-export default async function foldCastingPhases(pool) {
+export default async function foldCastingPhases(pool, protectedTracks = []) {
     const found = await pool.query(
-        `SELECT DISTINCT machine FROM segments WHERE machine LIKE 'cm%' AND kind='phase'`
+        `SELECT DISTINCT machine FROM segments WHERE machine LIKE 'cm%' AND kind='phase' AND NOT (machine = ANY($1::text[]))`,
+        [protectedTracks]
     );
     await found.rows.reduce(async (prior, row) => {
         await prior;

@@ -6,6 +6,7 @@ const GAP_SQL = `UPDATE segments AS left_row
                     lead(start_time) OVER (PARTITION BY machine, kind ORDER BY start_time) AS next_start,
                     lead(name) OVER (PARTITION BY machine, kind ORDER BY start_time) AS next_name
              FROM segments
+             WHERE kind <> 'phase' OR NOT (machine = ANY($2::text[]))
          ) AS next_row
          WHERE left_row.machine = next_row.machine
            AND left_row.kind = next_row.kind
@@ -37,6 +38,7 @@ const ABSORB_SQL = `UPDATE segments AS left_row
                     lead(end_time) OVER (PARTITION BY machine, kind ORDER BY start_time) AS next_end,
                     lead(duration) OVER (PARTITION BY machine, kind ORDER BY start_time) AS next_duration
              FROM segments
+             WHERE kind <> 'phase' OR NOT (machine = ANY($2::text[]))
          ) AS next_row
          WHERE left_row.machine = next_row.machine
            AND left_row.kind = next_row.kind
@@ -51,6 +53,7 @@ const COLLAPSE_SQL = `DELETE FROM segments AS later
                     lead(start_time) OVER (PARTITION BY machine, kind ORDER BY start_time) AS next_start,
                     lead(name) OVER (PARTITION BY machine, kind ORDER BY start_time) AS next_name
              FROM segments
+             WHERE kind <> 'phase' OR NOT (machine = ANY($2::text[]))
          ) AS pair
          WHERE later.machine = pair.machine
            AND later.kind = pair.kind
@@ -65,13 +68,14 @@ const COLLAPSE_SQL = `DELETE FROM segments AS later
  *
  * @param {object} pool - pg pool
  * @param {number} budgetSeconds - maximum gap that still counts as continuous
+ * @param {string[]} protectedTracks - machines whose phase boundaries are authoritative
  * @returns {Promise<void>}
  *
  * @example
  *   await abutSegments(pool, 30);
  */
-export default async function abutSegments(pool, budgetSeconds) {
-    await pool.query(GAP_SQL, [budgetSeconds]);
-    await pool.query(ABSORB_SQL, [budgetSeconds]);
-    await pool.query(COLLAPSE_SQL, [budgetSeconds]);
+export default async function abutSegments(pool, budgetSeconds, protectedTracks = []) {
+    await pool.query(GAP_SQL, [budgetSeconds, protectedTracks]);
+    await pool.query(ABSORB_SQL, [budgetSeconds, protectedTracks]);
+    await pool.query(COLLAPSE_SQL, [budgetSeconds, protectedTracks]);
 }
