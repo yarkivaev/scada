@@ -124,6 +124,18 @@ describe('continuedSegments', function() {
             'continued heartbeat still grew end_time past the live point');
     });
 
+    it('replays a completed phase at its original start when another phase is newer', async function() {
+        const start = '2026-11-01T00:00:00.000Z';
+        const store = sink();
+        const wrapped = continuedSegments(store, priorPool({
+            name: 'off', start_time: '2026-11-01T00:00:30.000Z', end_time: '2026-11-01T00:00:31.000Z'
+        }), 30);
+        const closed = { machine: 'fixture', kind: 'phase', name: 'on', start_time: start,
+            end_time: '2026-11-01T00:00:30.000Z', duration: 30 };
+        await wrapped.write([closed]);
+        assert.deepEqual(store.written, [closed]);
+    });
+
     it('loads the previous row once for a same-machine batch', async function() {
         let selects = 0;
         const origin = 1_701_500_000_000 + Math.floor(Math.random() * 1e8);
