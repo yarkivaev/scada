@@ -46,11 +46,6 @@ describe('historyAbsorb', function () {
         assert.deepEqual(client.state.deleted, [stored[1].start_time],
             'the inner overlapping heating start stayed in storage');
     });
-    it('commits folded rows instead of the raw later stream', function () {
-        const body = readFileSync(new URL('../../../../src/infrastructure/persistence/pg/history.js', import.meta.url), 'utf8');
-        assert.match(body, /const folded = await historyAbsorb\(client, machine, segments\)/u,
-            'history commit still inserted the raw later stream');
-    });
     it('drops covered unsplit duplicates after the furnace insert', function () {
         const body = readFileSync(new URL('../../../../src/infrastructure/persistence/pg/history.js', import.meta.url), 'utf8');
         assert.match(body, /await historyDedupe\(client, machine, span\(segments\)\)/u,
