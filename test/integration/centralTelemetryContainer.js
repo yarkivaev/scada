@@ -13,6 +13,7 @@ import centralMetricsSink from '../../src/infrastructure/ingest/telemetry/centra
 import centralTelemetryPreflight from '../../src/infrastructure/ingest/telemetry/centralTelemetryPreflight.js';
 import centralPolicy from '../../src/infrastructure/ingest/telemetry/centralPolicy.js';
 import { admissionDomain, targetIdentity, encodeBatch, decodeBatch, MAX_BATCH_BYTES } from '../../src/infrastructure/ingest/telemetry/centralEnvelope.js';
+import replayStoredTelemetry from '../../src/infrastructure/ingest/telemetry/replayStoredTelemetry.js';
 import amqpMetricsIngest from '../../src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import siteSyncTargets from '../../src/application/sync/siteSyncTargets.js';
 import amqpSource from '../../src/infrastructure/streams/amqpSource.js';
@@ -72,6 +73,39 @@ describe('ClickHouse native admission and immutable compact history', function()
         return (await response.json()).map((row) => { return { ts: Number(row.ts)-BASE, value: row.value }; });
     }
     function point(topic, ts, value, compactWindowMs = 1000) { return { topic, ts:BASE+ts, value, ...rule, compactWindowMs, historyWindowMs:Math.max(2000,compactWindowMs*2) }; }
+    it('replays bounded ClickHouse pages with their original timestamps into RabbitMQ', async function() {
+        const from = '2024-02-12T00:00:00.000Z';
+        const to = '2024-02-12T00:00:01.000Z';
+        const expected = [{ ts: Date.parse(from) + 234, value: 13 }, { ts: Date.parse(from) + 235, value: 15 }];
+        await client.insert({ table: 'scada.metrics', format: 'JSONEachRow', values: [
+            { topic: 'replay/probe', ts: '2024-02-12 00:00:00.234', value: 13 },
+            { topic: 'replay/probe', ts: '2024-02-12 00:00:00.235', value: 15 },
+            { topic: 'replay/probe', ts: '2024-02-12 00:00:01.000', value: 17 }
+        ] });
+        await channel.assertExchange('scada.telemetry', 'topic', { durable: true });
+        const { queue } = await channel.assertQueue('', { exclusive: true });
+        try {
+            await channel.bindQueue(queue, 'scada.telemetry', 'replay.probe');
+            const result = await replayStoredTelemetry({
+                CLICKHOUSE_URL: url, AMQP_URL: broker, SOURCE_FROM: from, SOURCE_TO: to, SOURCE_PAGE_SIZE: '1'
+            });
+            assert.deepEqual(result, { from, to, records: expected.length });
+            const received = [];
+            for (const expectedPoint of expected) {
+                const delivery = await channel.get(queue, { noAck: true });
+                assert.ok(delivery);
+                assert.equal(delivery.properties.deliveryMode, 2);
+                const payload = JSON.parse(delivery.content.toString());
+                assert.equal(payload.ts, expectedPoint.ts);
+                received.push(payload);
+            }
+            assert.deepEqual(received, expected);
+            assert.equal(await channel.get(queue), false);
+        } finally {
+            await channel.deleteQueue(queue);
+            await client.command({ query: "ALTER TABLE scada.metrics DELETE WHERE topic='replay/probe' SETTINGS mutations_sync=2" });
+        }
+    });
     it('keeps legacy-only read-only consumers working before additive schema installation', async function() {
         const reader = await clickhouseConnection(clickhouse.getHost(), { port: clickhouse.getMappedPort(8123), username: 'reader', password: 'test' });
         try { assert.deepEqual(await reader.query('SELECT * FROM scada.metrics_read'), []); }
