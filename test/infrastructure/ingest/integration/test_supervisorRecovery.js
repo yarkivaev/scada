@@ -30,12 +30,12 @@ async function healthy(port) {
     try { return (await fetch(`http://127.0.0.1:${port}/ready`, { signal: AbortSignal.timeout(1000) })).status === 200; }
     catch { return false; }
 }
-function processFor(fixture) {
+function processFor(fixture, overrides = {}) {
     const child = spawn(process.execPath, [entry], { env: { ...process.env,
         STOMP_URL: fixture.stompUrl, STOMP_LOGIN: 'streams', STOMP_PASSCODE: 'streams', STOMP_HOST: '/',
         POSTGRES_URL: fixture.pgUrl, POSTGRES_ADMIN_URL: fixture.pgUrl, SINK_DB_PROFILE: 'central',
         STATE_HTTP_PORT: String(fixture.port), SINK_PIPELINES: 'true', COLLECTOR_MODE: 'embedded',
-        FLUSH_INTERVAL: '1', STOMP_ACCEPT_TIMEOUT_MS: '500', STOMP_PREFETCH: '128', RETENTION_ENABLED: 'false', ...fixture.env
+        FLUSH_INTERVAL: '1', STOMP_ACCEPT_TIMEOUT_MS: '500', STOMP_PREFETCH: '128', RETENTION_ENABLED: 'false', ...fixture.env, ...overrides
     }, stdio: ['ignore', 'pipe', 'pipe'] });
     fixture.output = '';
     for (const stream of [child.stdout, child.stderr]) { stream.on('data', chunk => { fixture.output += chunk.toString(); }); }
@@ -206,6 +206,14 @@ describe('supervisor sink durable recovery integration', function() {
         function row(machine, start, name = 'off', duration = 60) {
             return { type: 'segment', machine, name, start, end: start + 60000, duration, tags: [], properties: {} };
         }
+        function waitForDuration(machine, duration) {
+            return until(async () => {
+                assert.equal(fixture.child.exitCode, null, fixture.output);
+                assert.equal(fixture.child.signalCode, null, fixture.output);
+                const { rows } = await fixture.pool.query('SELECT duration FROM segments WHERE machine=$1', [machine]);
+                return rows[0]?.duration === duration;
+            });
+        }
         before(async () => {
             await until(() => {return drained(fixture)});
             await stopChild(fixture.child);await fixture.pool.query('UPDATE test_ingest_delay SET ms=0');
@@ -218,7 +226,7 @@ describe('supervisor sink durable recovery integration', function() {
                 CREATE TRIGGER capture_segment_write BEFORE INSERT ON segments FOR EACH ROW EXECUTE FUNCTION capture_segment_write()`);
             Object.assign(fixture, { env: { SEGMENTS_TX_ENABLED: 'true', SEGMENTS_TX_MAX_MESSAGES: '128', SEGMENTS_TX_MAX_WAIT_MS: '200',
                 SEGMENTS_TX_MAX_BYTES: '1048576', SEGMENTS_TX_COMPLETED_SEGMENTS: '0',
-                SEGMENTS_TX_CONCURRENCY: '2', SEGMENTS_TX_TIMEOUT_MS: '500', SEGMENTS_DEAD_LETTER_ENABLED: 'true' } });
+                SEGMENTS_TX_CONCURRENCY: '2', SEGMENTS_TX_TIMEOUT_MS: '10000', SEGMENTS_DEAD_LETTER_ENABLED: 'true' } });
             processFor(fixture);await until(() => {return healthy(fixture.port)}, 60000);
         });
 
@@ -292,10 +300,8 @@ describe('supervisor sink durable recovery integration', function() {
             }
             const terminal = { ...row(machine, start), end: start + 501000, duration: 501 };
             publish({ ...terminal, type: 'split' });publish(terminal);
-            await until(async () => {
-                const result = await fixture.pool.query('SELECT duration FROM segments WHERE machine=$1', [machine]);
-                return result.rows[0]?.duration === 501;
-            });await until(empty);
+            await waitForDuration(machine, 501);
+            await until(empty);
             const commits = await fixture.pool.query('SELECT count(*)::int writes,count(DISTINCT tx)::int commits FROM test_segment_commits WHERE machine=$1', [machine]);
             process.stdout.write(`        snapshot fixture: ${JSON.stringify({ messages: 1002, ...commits.rows[0] })}\n`);
             assert.equal(commits.rows[0].writes, 1002);
@@ -318,10 +324,8 @@ describe('supervisor sink durable recovery integration', function() {
                 publish({ ...row(machine, start, 'on', 0), end: start + (index + 1) * 1000 });
             }
             publish({ ...row(machine, start, 'on', 1001), end: start + 1001000 });
-            await until(async () => {
-                const rows = (await fixture.pool.query('SELECT duration FROM segments WHERE machine=$1', [machine])).rows;
-                return rows[0]?.duration === 1001;
-            });await until(empty);
+            await waitForDuration(machine, 1001);
+            await until(empty);
             const result = await fixture.pool.query('SELECT count(*)::int writes,count(DISTINCT tx)::int commits FROM test_segment_commits WHERE machine=$1', [machine]);
             process.stdout.write(`        plain snapshots: ${JSON.stringify({ messages: 1001, ...result.rows[0] })}\n`);
             const { rows: phases } = await fixture.pool.query(
@@ -343,13 +347,21 @@ describe('supervisor sink durable recovery integration', function() {
             assert.equal(fixture.child.exitCode, null, fixture.output);
         });
         it('fences a hung batch, keeps its frame in RabbitMQ and replays after replacement', async () => {
+            await stopChild(fixture.child);
+            const old = processFor(fixture, { SEGMENTS_TX_TIMEOUT_MS: '500' });
+            await until(() => {return healthy(fixture.port)}, 60000);
+            const machine = 'transaction-timeout';
             await fixture.pool.query('UPDATE test_ingest_delay SET ms=2000');
-            const machine = 'transaction-timeout';const old = fixture.child;publish(row(machine, 1700400000000));
-            await until(() => {return old.exitCode !== null}, 10000);assert.notEqual(old.exitCode, 0);
-            await until(async () => {
-                const queue = await fixture.channel.checkQueue('scada.segments.ingest');return queue.consumerCount === 0 && queue.messageCount === 1;
-            });
-            await delay(2200);await fixture.pool.query('UPDATE test_ingest_delay SET ms=0');
+            try {
+                publish(row(machine, 1700400000000));
+                await until(() => {return old.exitCode !== null}, 10000);assert.notEqual(old.exitCode, 0);
+                await until(async () => {
+                    const queue = await fixture.channel.checkQueue('scada.segments.ingest');return queue.consumerCount === 0 && queue.messageCount === 1;
+                });
+                await delay(2200);
+            } finally {
+                await fixture.pool.query('UPDATE test_ingest_delay SET ms=0');
+            }
             processFor(fixture);await until(() => {return healthy(fixture.port)}, 60000);
             await until(async () => {
                 const result = await fixture.pool.query('SELECT count(*)::int total FROM segments WHERE machine=$1', [machine]);
