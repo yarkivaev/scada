@@ -15,7 +15,9 @@ SCADA treats operation `kind` values as opaque strings and exposes generic ports
 | Scala transport, segment contract and history protocols | Classifier profiles, rules, catalogs and the application image |
 | `plantApi`, `siteServer`, `supervisorSink` | Application entrypoints, routes and reports |
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs and destination adapters |
-| ClickHouse and PostgreSQL adapters | Database and service configuration |
+| ClickHouse and PostgreSQL adapters, telemetry replay and snapshot replication | Database settings, snapshot tables and service configuration |
+| Kubernetes execution, storage checks and authenticated service-account transport | Cluster, resource and Secret declarations |
+| RabbitMQ reconciliation, mutual TLS and device-management transports | Broker topology, certificate identities and management policies |
 
 Pin the released SCADA package in each downstream build. A classifier image can pin the engine sources independently of the Node.js application package.
 

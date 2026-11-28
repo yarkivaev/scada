@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { controlClient, controlStore, reconcile } from '../../src/application/control/index.js';
+import { controlClient, controlStore, createOnlyJSON, reconcile } from '../../src/application/control/index.js';
 const call = controlClient({ endpoints: [process.env.ETCD_TEST_URL ?? 'http://127.0.0.1:32379'] });
 const prefix = `/integration/${Date.now()}`;
 const first = controlStore(call, prefix);
@@ -16,5 +16,12 @@ assert.ok(await second.acquire());
 assert.equal(await first.commit(token, view, { a: { generation: 99, assignments: [] } }), false);
 await assert.rejects(first.publish({ version: '2', nodes: [], tasks: [] }, '0'), /conflict/u);
 process.stdout.write('etcd publication, election, assignment and expired-leader fencing passed\n');
+
+const registry = createOnlyJSON(call, `${prefix}/fixtures/`);
+const record = { owner: 'fixture-west' };
+assert.deepEqual(await registry.reserve('sample', record), { won: true, record });
+assert.deepEqual(await registry.reserve('sample', { owner: 'fixture-east' }), { won: false, record });
+assert.deepEqual(await registry.list(), [{ id: 'sample', record }]);
+process.stdout.write('etcd create-only JSON reservation preserves the winning value\n');
 
 await import('./controlEtcdAuth.js');

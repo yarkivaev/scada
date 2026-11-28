@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { deploymentKube } from './deploymentKube.js';
 
 /** Retire only explicit Deployments with a single exact app label selector. */
 function validateRetirements(plan) {
@@ -32,14 +33,6 @@ function validate(plan, action) {
     fields.forEach((key) => {
         if (typeof plan[key] !== 'string' || !plan[key].trim()) { throw new Error(`release requires ${key}`); }
     });
-}
-
-/** Every Kubernetes command, including the post-rollout hook, shares this target. */
-function kubeAt(plan, execute) {
-    return (args, input, capture = false) => {
-        return execute('kubectl', ['--context', plan.context, '--namespace', plan.namespace, ...args],
-            { input, encoding: 'utf8', stdio: ['pipe', capture ? 'pipe' : 'inherit', 'inherit'] });
-    };
 }
 
 function applyWith(kube, manifests, flags, checkOnly) {
@@ -99,6 +92,11 @@ function applyRelease(plan, action, kube, manifests) {
     return '';
 }
 
+export function renderRelease(plan, execute = execFileSync) {
+    return execute('helm', ['template', plan.release, plan.chart, '--namespace', plan.namespace, '-f', '-'],
+        { input: JSON.stringify(plan.values), encoding: 'utf8' });
+}
+
 /**
  * Renders a Helm release and executes the selected kubectl action synchronously.
  * Supply chart, release, namespace and values. Cluster actions additionally require
@@ -112,10 +110,9 @@ function applyRelease(plan, action, kube, manifests) {
  */
 export default function executeRelease(plan, action = 'render', execute = execFileSync) {
     validate(plan, action);
-    const manifests = execute('helm', ['template', plan.release, plan.chart, '--namespace', plan.namespace, '-f', '-'],
-        { input: JSON.stringify(plan.values), encoding: 'utf8' });
+    const manifests = renderRelease(plan, execute);
     if (action === 'render') { return manifests; }
-    const kube = kubeAt(plan, execute);
+    const kube = deploymentKube(plan, execute);
     for (const resource of plan.prerequisites || []) { kube(['get', resource, '-o', 'name']); }
     if (action === 'diff') {
         return kube(['diff', '--server-side', `--field-manager=${plan.fieldManager}`, '-f', '-'], manifests);

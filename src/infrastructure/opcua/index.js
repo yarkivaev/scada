@@ -8,3 +8,4 @@ export default function opcuaConnections(connections, publish, options = {}) {
 }
 
 export { default as opcuaSource } from './source.js';
+export { default as opcuaHealth } from './health.js';
