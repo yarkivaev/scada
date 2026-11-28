@@ -1,4 +1,5 @@
 import { errorResponse, jsonResponse, readBody, route } from '@yarkivaev/simple-server';
+import { historyReplicaProtocol } from '../../../../persistence/pg/historyReplicaOutbox.js';
 import { hasAccess, sendForbidden } from '../../stateAccess.js';
 
 function endpoint(method, suffix, token, action) {
@@ -21,7 +22,11 @@ function endpoint(method, suffix, token, action) {
 export default function historyRoutes(token, history, liveSegments) {
     const live = liveSegments ? [
         endpoint('GET', 'live-revision', token, input => {return liveSegments.revision(input.machine)}),
-        endpoint('POST', 'live-apply', token, input => {return liveSegments.apply(input)})
+        endpoint('POST', 'live-apply', token, input => {return liveSegments.apply(input)}),
+        ...(liveSegments.applyOutbox ? [endpoint('POST', 'live-apply-outbox', token, input => {
+            const {replication,...segment} = input;
+            return liveSegments.applyOutbox(segment,replication);
+        })] : [])
     ] : [];
     if (!history) { return live; }
     return [
@@ -37,8 +42,15 @@ export default function historyRoutes(token, history, liveSegments) {
             if (input.context?.replication !== undefined) { throw new TypeError('Use the history outbox endpoint'); }
             return history.commit(input.machine, input.workId, input.segments, input.context);
         }),
-        ...(history.commitOutbox ? [endpoint('POST', 'commit-outbox', token, input => {
-            return history.commitOutbox(input.machine, input.workId, input.segments, input.context, input.replication);
-        })] : [])
+        ...(history.commitOutbox ? [
+            endpoint('POST', 'commit-outbox', token, input => {
+                return history.commitOutbox(input.machine, input.workId, input.segments, input.context,
+                    {...input.replication,protocol:undefined});
+            }),
+            endpoint('POST', 'commit-outbox-v2', token, input => {
+                return history.commitOutbox(input.machine, input.workId, input.segments, input.context,
+                    {...input.replication,protocol:historyReplicaProtocol});
+            })
+        ] : [])
     ];
 }

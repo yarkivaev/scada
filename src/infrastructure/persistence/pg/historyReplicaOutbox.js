@@ -1,7 +1,8 @@
-export const historyReplicaProtocol = 'transactional-history-outbox-v1';
+export const historyReplicaProtocol = 'transactional-history-outbox-v2';
 
 export function historyReplication(value) {
     if (!value || typeof value.exchange !== 'string' || !/^[\w.-]{1,255}$/u.test(value.exchange) ||
+        (value.protocol !== undefined && value.protocol !== historyReplicaProtocol) ||
         typeof value.routingKey !== 'string' || Buffer.byteLength(value.routingKey) > 255 ||
         (value.epoch !== undefined && (!Number.isSafeInteger(value.epoch) || value.epoch < 1))) {
         throw new TypeError('Invalid history replication destination or epoch');
@@ -22,23 +23,31 @@ function metadata(value, expected) {
     } catch { return null; }
 }
 
-function envelope({machine, segment: row, output_id: committedOutputId, epoch}) {
+function envelope({id, machine, segment: row, output_id: committedOutputId, epoch, origin}) {
+    const deleted = !Object.hasOwn(row, 'name');
+    const timelineChange = origin ? {
+        origin, position: id, kind: row.kind, startTime: row.start_time, row: deleted ? null : row
+    } : undefined;
+    if (deleted) {
+        return JSON.stringify({ type: 'segment-delete', machine, committedOutputId, timelineChange,
+            ...(epoch !== null && { epoch: Number(epoch) }) });
+    }
     const tags = metadata(row.tags, 'array');
     return JSON.stringify({
         type: 'segment', kind: row.kind ?? 'phase', machine, name: row.name,
         start: new Date(row.start_time).getTime(), end: new Date(row.end_time).getTime(),
         duration: row.duration ?? 0, status: row.duration ? 'completed' : 'pending', tags,
         options: metadata(row.options, 'array'), properties: metadata(row.properties, 'object'),
-        ...(tags && { resolved: true }), ...(epoch !== null && { epoch: Number(epoch) }), committedOutputId
+        ...(tags && { resolved: true }), ...(epoch !== null && { epoch: Number(epoch) }), committedOutputId, timelineChange
     });
 }
 
 export async function enableHistoryReplicaCapture(client, machine, fence, replication) {
-    const { exchange, routingKey, epoch } = historyReplication(replication);
+    const { exchange, routingKey, epoch, protocol } = historyReplication(replication);
     if (fence.generation !== undefined && epoch !== fence.generation) {
         throw new TypeError('History replication epoch must match the writer generation');
     }
-    const setting = JSON.stringify({ machine, outputId: fence.outputId, exchange, routingKey, epoch });
+    const setting = JSON.stringify({ machine, outputId: fence.outputId, exchange, routingKey, epoch, protocol });
     await client.query("SELECT set_config('scada.history_replica',$1,true)", [setting]);
 }
 
@@ -65,7 +74,7 @@ export async function deliverHistoryReplica(pool, publish, retryMs = 1000) {
     let delivered;
     try {
         await client.query('BEGIN');
-        const { rows: [row] } = await client.query(`SELECT queued.id,queued.machine,queued.exchange,queued.routing_key,queued.output_id,queued.epoch,queued.segment
+        const { rows: [row] } = await client.query(`SELECT queued.id,queued.machine,queued.exchange,queued.routing_key,queued.output_id,queued.epoch,queued.segment,queued.origin
             FROM history_replica_outbox queued WHERE queued.retry_at <= clock_timestamp()
             AND NOT EXISTS (SELECT 1 FROM history_replica_outbox prior WHERE prior.machine=queued.machine AND prior.id<queued.id)
             ORDER BY queued.id LIMIT 1 FOR UPDATE OF queued SKIP LOCKED`);

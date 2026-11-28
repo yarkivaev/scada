@@ -32,7 +32,8 @@ const privilegedOnly = new Set([
     'E0016__history_retention_grants.sql',
     'E0019__segment_write_fence.sql',
     'E0020__segment_write_fence_grants.sql',
-    'E0022__history_replica_outbox_grants.sql'
+    'E0022__history_replica_outbox_grants.sql',
+    'E0024__timeline_replica_origin_grants.sql'
 ]);
 
 /**

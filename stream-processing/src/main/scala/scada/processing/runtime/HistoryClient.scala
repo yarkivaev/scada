@@ -45,7 +45,7 @@ final class HistoryClient(config: CheckpointApiConfig):
   /** Retry a lost commit response with the same fenced body and receipt identity. */
   def commitHistory(body: Json, replication: Option[HistoryReplication] = None): IO[Json] =
     val (path, payload) = replication.fold(("/v1/history/commit", body)): target =>
-      ("/v1/history/commit-outbox", body.deepMerge(Json.obj("replication" -> target.json)))
+      ("/v1/history/commit-outbox-v2", body.deepMerge(Json.obj("replication" -> target.json)))
     def attempt(retries: Int): IO[Json] =
       request("POST", path, payload).handleErrorWith:
         case error: HistoryHttpError if error.status < 500 => IO.raiseError(error)

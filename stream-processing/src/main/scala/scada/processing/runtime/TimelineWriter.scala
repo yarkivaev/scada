@@ -17,7 +17,9 @@ final class TimelineWriter private (
     generation: String => IO[Option[Long]],
     scope: OutputScope,
     relay: Option[StompSender],
-    revisionScope: IOLocal[Option[(String, String)]]
+    revisionScope: IOLocal[Option[(String, String)]],
+    transactionalReplica: Boolean,
+    writerEpoch: Option[Long]
 ) extends StompSender:
   def atRevision[A](machine: String)(prepareAndWrite: IO[A]): IO[A] =
     revisionScope.get.flatMap:
@@ -54,14 +56,17 @@ final class TimelineWriter private (
         IllegalStateException(s"Timeline revision is missing for $machine"))
       metadata = List("outputId" -> outputId.asJson, "revision" -> revision.asJson) ++
         owner.toList.map(value => "generation" -> value.asJson)
-      answer <- api.request("POST", "/v1/history/live-apply", payload.deepMerge(Json.obj("fence" -> Json.obj(metadata*))))
+      input = payload.deepMerge(Json.obj("fence" -> Json.obj(metadata*)))
+      replication = Option.when(transactionalReplica)(destination).flatten.map(HistoryReplication.fromDestination(_, owner.orElse(writerEpoch)))
+      answer <- replication.fold(api.request("POST", "/v1/history/live-apply", input)): target =>
+        api.request("POST", "/v1/history/live-apply-outbox", input.deepMerge(Json.obj("replication" -> target.json)))
       _ <- IO.raiseUnless(answer.hcursor.get[Boolean]("applied").contains(true))(
         IllegalStateException(s"Timeline sink did not confirm output $outputId"))
       after <- IO.fromEither(answer.hcursor.get[String]("revision"))
       // An idempotent retry may return the original receipt, whose revision predates this scope.
       next <- IO(BigInt(revision).max(BigInt(after)).toString)
       _ <- revisionScope.set(Some((machine, next)))
-      _ <- (relay, destination) match
+      _ <- (relay.filter(_ => replication.isEmpty), destination) match
         case (Some(sender), Some(path)) =>
           val committed = payload.deepMerge(Json.obj("committedOutputId" -> outputId.asJson))
           val frame = StompFrame.send(path, "", committed.noSpaces)
@@ -71,8 +76,8 @@ final class TimelineWriter private (
 
 object TimelineWriter:
   def create(api: HistoryClient, generation: String => IO[Option[Long]], scope: OutputScope,
-      relay: Option[StompSender]): IO[TimelineWriter] =
-    IOLocal(Option.empty[(String, String)]).map(new TimelineWriter(api, generation, scope, relay, _))
+      relay: Option[StompSender], transactionalReplica: Boolean = false, writerEpoch: Option[Long] = None): IO[TimelineWriter] =
+    IOLocal(Option.empty[(String, String)]).map(new TimelineWriter(api, generation, scope, relay, _, transactionalReplica, writerEpoch))
 
   private val canonical = Printer.noSpaces.copy(sortKeys = true)
 

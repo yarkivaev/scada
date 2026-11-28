@@ -1,5 +1,6 @@
 import segmentNormalize from '../../../domain/segment/normalize.js';
 import { writeFence } from '../../persistence/pg/segmentWriteFence.js';
+import { decodeTimelineChange } from '../../persistence/pg/timelineReplica.js';
 import processingErrorLog from '../processingErrorLog.js';
 
 /**
@@ -50,9 +51,18 @@ function persistedRecord(parsed) {
     return segmentNormalize(parsed);
 }
 
+function timelineDelivery(body, committedOutputId, hasFence) {
+    if (hasFence) { throw new TypeError('A timeline change must be a replica delivery'); }
+    writeFence({outputId:committedOutputId});
+    return {...decodeTimelineChange(body),committedOutputId,body};
+}
+
 export function decodeSegmentBody(parsed) {
     const {fence,committedOutputId,...body} = parsed;
     delete body.epoch;
+    if (Object.hasOwn(body,'timelineChange') || body.type === 'segment-delete') {
+        return timelineDelivery(body,committedOutputId,Object.hasOwn(parsed,'fence'));
+    }
     const record = persistedRecord(body);
     if (Object.hasOwn(parsed,'fence')) {
         writeFence(fence);

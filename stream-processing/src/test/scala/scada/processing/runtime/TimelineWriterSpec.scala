@@ -14,13 +14,15 @@ import scada.processing.infra.config.CheckpointApiConfig
 import scada.processing.infra.stomp.{StompFrame, StompSender}
 
 final class TimelineWriterSpec extends CatsEffectSuite:
-  private def endpoint(applied: ConcurrentLinkedQueue[Json], committedRevision: Int => Int = count => 42 + count): Resource[IO, HistoryClient] =
+  private def endpoint(applied: ConcurrentLinkedQueue[Json], committedRevision: Int => Int = count => 42 + count,
+      path: String => Unit = _ => ()): Resource[IO, HistoryClient] =
     Resource.make(IO.blocking {
       val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
       server.createContext("/v1/history", exchange => {
         try
           val get = exchange.getRequestMethod == "GET"
           if !get then
+            path(exchange.getRequestURI.getPath)
             val json = parse(new String(exchange.getRequestBody.readAllBytes(), UTF_8)).toOption.get
             applied.add(json)
           val response = if get then """{"revision":"42"}"""
@@ -81,3 +83,21 @@ final class TimelineWriterSpec extends CatsEffectSuite:
       yield
         assertEquals(applied.iterator().asScala.toList.map(_.hcursor.downField("fence").get[String]("revision")),
           List(Right("42"), Right("42")))
+
+  test("replicated live writes request the outbox in the commit and skip direct publication"):
+    val applied = new ConcurrentLinkedQueue[Json]()
+    val paths = new ConcurrentLinkedQueue[String]()
+    val payload = Json.obj("machine" -> Json.fromString("machine"))
+    val relay = new StompSender:
+      def send(frame: StompFrame): IO[Unit] = IO.raiseError(IllegalStateException("direct relay"))
+    endpoint(applied, path = value => { val _ = paths.add(value) }).use: client =>
+      for
+        scope <- OutputScope.create
+        writer <- TimelineWriter.create(client, _ => IO.pure(Some(21L)), scope, Some(relay), transactionalReplica = true)
+        _ <- writer.applyMessage("machine", payload, "live", Some(21L), Some("/exchange/segments/phase"))
+      yield
+        assertEquals(paths.iterator().asScala.toList, List("/v1/history/live-apply-outbox"))
+        val replication = applied.peek().hcursor.downField("replication")
+        assertEquals(replication.get[String]("exchange"), Right("segments"))
+        assertEquals(replication.get[String]("routingKey"), Right("phase"))
+        assertEquals(replication.get[Long]("epoch"), Right(21L))
