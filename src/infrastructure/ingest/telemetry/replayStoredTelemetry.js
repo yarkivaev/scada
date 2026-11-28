@@ -37,7 +37,11 @@ async function* pages(pool, from, to, size) {
 }
 async function pull(client, from, to, size, offset) {
     const result = await client.query({
-        query: "SELECT topic,formatDateTime(ts,'%F %T.%f','UTC') AS ts,value FROM scada.metrics WHERE ts >= {from:DateTime64(6,'UTC')} AND ts < {to:DateTime64(6,'UTC')} ORDER BY topic,ts LIMIT {size:UInt32} OFFSET {offset:UInt32}",
+        query: `SELECT stored.topic,formatDateTime(stored.ts,'%F %T.%f','UTC') AS ts,stored.value
+            FROM scada.metrics AS stored
+            WHERE stored.ts >= parseDateTime64BestEffort({from:String},6,'UTC')
+              AND stored.ts < parseDateTime64BestEffort({to:String},6,'UTC')
+            ORDER BY stored.topic,stored.ts,stored.value LIMIT {size:UInt32} OFFSET {offset:UInt32}`,
         'query_params': {from, to, size, offset},
         format: 'JSONEachRow'
     });
