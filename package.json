@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
