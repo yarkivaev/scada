@@ -5,9 +5,6 @@ import amqp from 'amqplib';
 import amqpSink from '../../../src/infrastructure/streams/amqpSink.js';
 import amqpSource from '../../../src/infrastructure/streams/amqpSource.js';
 import deliveryQueue from '../../../src/application/runtime/deliveryQueue.js';
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 function pause(ms) {
     return new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -133,56 +130,55 @@ describe('AMQP source and sink integration', function() {
         assert.deepEqual(result,{premature:0,received:['first','first','second']},'Consumers overlapped or redelivery was overtaken');
     });
 
-    it('replays SQLite pending recipients after restart and retains mandatory returns until routing recovers', async function() {
+    it('retries pending recipients in memory and retains mandatory returns until routing recovers', async function() {
         this.timeout(30000);
-        const directory=await mkdtemp(path.join(os.tmpdir(),'sqlite-rabbit-'));
         const connection=await amqp.connect(url); const channel=await connection.createChannel();
-        const exchange='sqlite.spool'; const queue='sqlite.spool.queue';
+        const exchange='memory.spool'; const queue='memory.spool.queue';
         const exchanges=[{name:exchange,type:'direct',options:{durable:true}}];
         await channel.assertExchange(exchange,'direct',{durable:true}); await channel.assertQueue(queue,{durable:true});
         await channel.bindQueue(queue,exchange,'record');
-        let online=false; let first; let second; let third;
-        const options={maxBytes:100000,writeTimeoutMs:2000,factory(spec) {
-            return amqpSink(spec.id==='late'&&!online?'amqp://127.0.0.1:1':url,{...spec.options,retryMs:100,onError() {}});
+        let online=false; let first;
+        const options={maxBytes:100000,writeTimeoutMs:2000,failureCooldownMs:0,factory(spec) {
+            if (spec.id==='late'&&!online) { throw new Error('recipient offline'); }
+            return amqpSink(url,{...spec.options,retryMs:100,onError() {}});
         }};
         try {
-            first=deliveryQueue(directory,options); await first.open();
+            first=deliveryQueue(options); await first.open();
             const event={eventId:'original',exchange,routingKey:'record',body:Buffer.from('frozen')};
             const recipients=['good','late'].map(id=>{return {id,type:'amqp',url:{$secret:id},options:{exchanges}};});
             await first.accept(event,recipients); assert.deepEqual(await first.drain(),{delivered:1,failed:1});
-            assert.equal(first.status().pending,1); await first.close(); online=true;
-            second=deliveryQueue(directory,options); await second.open();
-            assert.deepEqual(await second.drain(),{delivered:1,failed:0}); assert.equal(second.status().pending,0);
+            assert.equal(first.status().pending,1); online=true;
+            assert.deepEqual(await first.drain(),{delivered:1,failed:0}); assert.equal(first.status().pending,0);
             const messages=[await channel.get(queue,{noAck:true}),await channel.get(queue,{noAck:true})];
             assert.equal(await channel.get(queue,{noAck:true}),false);
             assert.deepEqual(messages.map(item=>{return [item.content.toString(),item.properties.messageId];}),[['frozen','original'],['frozen','original']]);
-            await second.accept({...event,eventId:'unroutable',routingKey:'missing'},[recipients[0]]);
-            assert.deepEqual(await second.drain(),{delivered:0,failed:1}); assert.equal(second.status().pending,1); await second.close();
-            await channel.bindQueue(queue,exchange,'missing'); third=deliveryQueue(directory,options); await third.open();
-            assert.deepEqual(await third.drain(),{delivered:1,failed:0});
+            await first.accept({...event,eventId:'unroutable',routingKey:'missing'},[recipients[0]]);
+            assert.deepEqual(await first.drain(),{delivered:0,failed:1}); assert.equal(first.status().pending,1);
+            await channel.bindQueue(queue,exchange,'missing');
+            assert.deepEqual(await first.drain(),{delivered:1,failed:0});
             const recovered=await channel.get(queue,{noAck:true}); assert.equal(recovered.properties.messageId,'unroutable');
-            assert.equal(recovered.content.toString(),'frozen'); assert.equal(third.status().pending,0);
+            assert.equal(recovered.content.toString(),'frozen'); assert.equal(first.status().pending,0);
         } finally {
-            await first?.close(); await second?.close(); await third?.close();
-            await connection.close(); await rm(directory,{recursive:true,force:true});
+            await first?.close();
+            await connection.close();
         }
     });
 
     it('groups real mandatory confirmations while retaining returned members and replaying exact bodies',async function(){
         this.timeout(30000);
-        const directory=await mkdtemp(path.join(os.tmpdir(),'grouped-rabbit-'));const connection=await amqp.connect(url);const channel=await connection.createChannel();
+        const connection=await amqp.connect(url);const channel=await connection.createChannel();
         const exchange='grouped.spool';const queue='grouped.spool.queue';await channel.assertExchange(exchange,'direct',{durable:true});await channel.assertQueue(queue,{durable:true});await channel.bindQueue(queue,exchange,'good');
         const destinations=[{id:'one',type:'amqp',url,options:{exchanges:[{name:exchange,type:'direct',options:{durable:true}}]}}];
-        const options={maxBytes:100000,factory(spec){return amqpSink(spec.url,{...spec.options,onError(){}});}};let first;let second;
+        const options={maxBytes:100000,failureCooldownMs:0,factory(spec){return amqpSink(spec.url,{...spec.options,onError(){}});}};let first;
         try{
-            first=deliveryQueue(directory,options);await first.open();
+            first=deliveryQueue(options);await first.open();
             await Promise.all(['first','missing','last'].map(eventId=>{return first.accept({eventId,exchange,routingKey:eventId==='missing'?'missing':'good',body:Buffer.from(`frozen-${eventId}`)},destinations);}));
             assert.deepEqual(await first.drain(),{delivered:2,failed:1});assert.equal(first.status().pending,1);
             const successful=[await channel.get(queue,{noAck:true}),await channel.get(queue,{noAck:true})];
             assert.deepEqual(successful.map(item=>{return item.properties.messageId;}),['first','last']);
-            await first.close();await channel.bindQueue(queue,exchange,'missing');second=deliveryQueue(directory,options);await second.open();
-            assert.deepEqual(await second.drain(),{delivered:1,failed:0});const replay=await channel.get(queue,{noAck:true});assert.equal(replay.properties.messageId,'missing');assert.equal(replay.content.toString(),'frozen-missing');assert.equal(second.status().pending,0);
-        }finally{await first?.close();await second?.close();await connection.close();await rm(directory,{recursive:true,force:true});}
+            await channel.bindQueue(queue,exchange,'missing');
+            assert.deepEqual(await first.drain(),{delivered:1,failed:0});const replay=await channel.get(queue,{noAck:true});assert.equal(replay.properties.messageId,'missing');assert.equal(replay.content.toString(),'frozen-missing');assert.equal(first.status().pending,0);
+        }finally{await first?.close();await connection.close();}
     });
 
 });

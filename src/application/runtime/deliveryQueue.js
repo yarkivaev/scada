@@ -1,4 +1,4 @@
-import spoolProcess from '../../infrastructure/persistence/runtime/spoolProcess.js';
+import memoryDeliveryStore from '../../infrastructure/persistence/runtime/memoryDeliveryStore.js';
 import deliverySessions from './deliverySessions.js';
 import deliveryOperations from './deliveryOperations.js';
 import deliveryPublications from './deliveryPublications.js';
@@ -10,8 +10,8 @@ function snapshot(operation, checkBytes) {
     return { operation: frozen, bytes: Buffer.byteLength(JSON.stringify(frozen)) };
 }
 /* eslint max-lines-per-function: ["error", 125], max-statements: ["error", 25] */
-/** Node-owned queue: every point/receipt resolves only after its grouped FULL commit. */
-export default function deliveryQueue(directory, options, spool = spoolProcess(directory, options)) {
+/** Node-owned delivery using an injectable store and bounded publication sessions. */
+export default function deliveryQueue(options, spool = memoryDeliveryStore(options)) {
     const commands = deliveryOperations((operations) => { return spool.mutateMany(operations); }, options);
     const sessions = deliverySessions(options.factory, options.writeTimeoutMs);
     const batchSize = options.batchSize ?? 100;
@@ -45,7 +45,8 @@ export default function deliveryQueue(directory, options, spool = spoolProcess(d
             receipts.add(receipt);
         }
         async function advance(row, id) {
-            if (!state.closed && (blocked.get(row.targets[id]) ?? -Infinity) <= clock()) { receive(row, id); }
+            if (!state.closed && publications.available(row, id) && (blocked.get(row.targets[id]) ?? -Infinity) <= clock()
+                && (spool.hasAdmission?.(row.event.eventId, row.admission, id) ?? true)) { receive(row, id); }
             if (receipts.size >= receiptWindow) { await Promise.race(receipts); }
         }
         try {

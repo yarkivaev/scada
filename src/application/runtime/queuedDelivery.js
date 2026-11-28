@@ -2,15 +2,16 @@ import deliveryQueue from './deliveryQueue.js';
 import { sinks } from './streamPorts.js';
 
 /** Configured once per node; queue draining outlives any individual assignment. */
-export default function queuedDelivery(env, secrets, supplied) {
+export default function queuedDelivery(env, secrets, supplied, store) {
     let timer;
     let stopped = false;
     let burst = 0;
-    const queue = supplied ?? (env.COLLECTOR_SPOOL_DIR ? deliveryQueue(env.COLLECTOR_SPOOL_DIR, {
-        maxBytes: Number(env.COLLECTOR_SPOOL_MAX_BYTES), maxRecords: Number(env.COLLECTOR_SPOOL_MAX_RECORDS ?? 100000), factory(spec) { return sinks().get(spec.type)(spec, { secrets }); },
-        walCheckpoint: env.COLLECTOR_SPOOL_WAL_CHECKPOINT === 'managed' ? {} : undefined,
+    const queue = supplied ?? deliveryQueue({
+        maxBytes: Number(env.COLLECTOR_QUEUE_MAX_BYTES ?? 16 * 1024 * 1024),
+        maxRecords: Number(env.COLLECTOR_QUEUE_MAX_RECORDS ?? 4096),
+        factory(spec) { return sinks().get(spec.type)(spec, { secrets }); },
         onError(error) { process.stderr.write(`Collector delivery delayed: ${error.message}\n`); }
-    }) : undefined);
+    }, store);
     function nextDelay(result) {
         const status = queue.status?.();
         if (result?.delivered > 0 && status?.ready !== false && status?.drainFull && status.pending > 0) {

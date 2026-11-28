@@ -22,10 +22,11 @@ async function apply(runtime, document) {
         await runtime.apply(input);
     }
 }
-function healthView(runtime, state) {
+function healthView(runtime, state, queue) {
     return { status() {
         const status = runtime.status();
-        return { ...status, stopping: status.stopping || state.stopped, fatal: status.fatal || state.failed,
+        const { pending, bytes, maxBytes, recordLimit, droppedRecords, droppedBytes } = queue?.status?.() ?? {};
+        return { ...status, delivery: { pending, bytes, maxBytes, recordLimit, droppedRecords, droppedBytes }, stopping: status.stopping || state.stopped, fatal: status.fatal || state.failed,
             initialized: state.initialized && (!state.agent || state.agent.status().appliedGeneration !== null) };
     } };
 }
@@ -35,7 +36,7 @@ async function initialize(collector, owned, state, { env, registry, store }) {
     await owned.open?.();
     if (state.stopped) { throw new Error('Collector stopped during recovery'); }
     if (store) {
-        state.agent = assignmentAgent({ nodeId: env.COLLECTOR_NODE_ID, file: env.COLLECTOR_ASSIGNMENT_FILE, store, runtime,
+        state.agent = assignmentAgent({ nodeId: env.COLLECTOR_NODE_ID, store, runtime,
             validate(document) { return validateManifest(document, registry); },
             onError(error) { process.stderr.write(`collector control: ${error.name}\n`); } });
         await state.agent.start({ waitForInitialTick: false });
@@ -76,7 +77,7 @@ export default async function runCollector({ registry, env = process.env, argv =
     const host = env.COLLECTOR_HEALTH_HOST ?? '127.0.0.1';
     const store = env.COLLECTOR_CONTROL_ENDPOINTS
         ? controlStore(clientFromEnv(env, 'COLLECTOR_CONTROL'), env.COLLECTOR_CONTROL_PREFIX) : null;
-    const owned = runtimeServices(env, { ...services, cursor: services.cursor ?? store?.cursor });
+    const owned = runtimeServices(env, services);
     let runtime;
     try { runtime = createRuntime({ registry, ...owned }); }
     catch (error) {
@@ -103,9 +104,10 @@ export default async function runCollector({ registry, env = process.env, argv =
     if (signals) { state.detach = collectorSignals(collector); }
     try {
         if (env.COLLECTOR_HEALTH_PORT) {
-            Object.assign(state, { health: runtimeHealth(healthView(runtime, state), {
+            Object.assign(state, { health: runtimeHealth(healthView(runtime, state, owned.deliveryQueue), {
                 port: Number(env.COLLECTOR_HEALTH_PORT), host,
-                handle: spoolSurface(owned.deliveryQueue, env.STATE_HTTP_TOKEN, services.spoolMachine), staleMs: Number(env.COLLECTOR_LIVE_STALE_MS ?? 30000) }) });
+                handle: env.STATE_HTTP_TOKEN ? spoolSurface(owned.deliveryQueue, env.STATE_HTTP_TOKEN, services.spoolMachine) : null,
+                staleMs: Number(env.COLLECTOR_LIVE_STALE_MS ?? 30000) }) });
             await state.health;
         }
         const recoveryMs = Number(env.COLLECTOR_RECOVERY_TIMEOUT_MS ?? 900000);

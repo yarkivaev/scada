@@ -127,26 +127,16 @@ IDs differ from device IDs, supply `spoolMachine(topic)` to `runCollector`. The
 callback receives the slash-delimited wire topic and returns a machine ID or
 `null` for observations outside the history scope.
 
-## Enable task-state storage
+## Task state
 
-Collector state is optional for live-only assignments. Ordinary supervisor-sink
-business migrations skip collector state and never delete an existing state table.
-Call `migrate(pool, migrationsDir, profile, { runtimeState: true })` only when
-explicitly enabling task-state storage, or apply its SQL separately.
-The runner accepts `COLLECTOR_STATE_URL` for PostgreSQL. Apply
-`db/migrations/V0009__collector_task_state.sql` explicitly and grant the service
-role access before starting stateful assignments. The storage must be reachable
-from every eligible node. For process-local checkpoints, call
-`runCollector({ ...options, localTaskState: true })` with `COLLECTOR_SPOOL_DIR`
-set. Without a supplied `stateStore` or PostgreSQL URL, the runner opens and
-owns `task-state.sqlite` in that directory. The path and schema support existing
-collector checkpoints. Both built-in stores reject unsupported ownership
-tokens. Node-local SQLite checkpoints belong to the node that owns their disk.
+The runner provides bounded in-memory task state. Checkpoints and pending task
+state are discarded when the collector exits. The state store uses
+compare-and-swap to detect conflicting updates within the process.
 
 Plant adapters with JSON AMQP payloads can use `spooledOutput(context,
 destinations)` from `@yarkivaev/scada/runtime` to add collector, task and event
-IDs and await durable queue acceptance for each observation. Use
-`amqpDestinations(url, exchange)` for a single durable topic exchange.
+IDs and await in-memory queue acceptance. Use `amqpDestinations(url, exchange)`
+for a single durable topic exchange.
 
 ## Verification
 

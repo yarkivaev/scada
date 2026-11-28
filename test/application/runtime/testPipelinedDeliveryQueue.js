@@ -1,18 +1,14 @@
 /* eslint-disable no-await-in-loop -- Bounded fixture sequencing. */
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import createQueue from '../../../src/application/runtime/deliveryQueue.js';
 const target=[{id:'one',type:'amqp'}];
 const pause=ms=>{return new Promise(resolve=>{setTimeout(resolve,ms);});};
 function gate(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
 async function until(probe, timeoutMs = 500){const end=Date.now()+timeoutMs;while(!probe()){assert(Date.now()<end,'fixture condition deadline');await pause(2);}}
 describe('bounded pipelined delivery confirmations',()=>{
- let directory;const owned=[];
- function queue(options={}){const value=createQueue(directory,{maxBytes:1000000,failureCooldownMs:0,...options});owned.push(value);return value;}
- beforeEach(async()=>{directory=await mkdtemp(path.join(os.tmpdir(),'pipeline-queue-'));});
- afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));await rm(directory,{recursive:true,force:true});});
+ const owned=[];
+ function queue(options={}){const value=createQueue({maxBytes:1000000,failureCooldownMs:0,...options});owned.push(value);return value;}
+ afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));});
  it('initiates a bounded window in stable order and shares opening before any write',async()=>{
   const opening=gate(); const confirm=gate(); const started=gate();let inFlight=0; let peak=0; let starts=0;const order=[];
   const item=queue({maxInFlight:3,factory(){return {async start(){starts+=1;started.resolve();await opening.promise;},async write(records){inFlight+=1;peak=Math.max(peak,inFlight);order.push(records[0].eventId);await confirm.promise;inFlight-=1;}};}});
@@ -57,6 +53,20 @@ describe('bounded pipelined delivery confirmations',()=>{
   await item.open();await item.accept({eventId:'a'},target);assert.equal((await item.drain()).failed,1);assert.equal(item.status().queuedOperations,1);
   assert.equal(writes,1);late.resolve();await until(()=>{return item.status().queuedOperations===0;});assert.equal(item.status().pending,0);
  });
+ it('does not reuse an actual publication slot after the caller times out',async()=>{
+  const late=gate();const writes=[];
+  const item=queue({maxInFlight:1,writeTimeoutMs:20,factory(spec){return {async write(){writes.push(spec.id);await late.promise;},async stop(){}};}});
+  await item.open();await item.accept({eventId:'old'},target);
+  assert.equal((await item.drain()).failed,1);
+  try{
+   await item.accept({eventId:'new'},[{id:'other',type:'amqp'}]);
+   await item.drain();
+   assert.deepEqual(writes,['one']);
+  }finally{late.resolve();}
+  await until(()=>{return item.status().queuedOperations===0;});
+  assert.equal((await item.drain()).delivered,1);
+  assert.deepEqual(writes,['one','other']);
+ });
  it('aborts real writes on timeout and reopens only after their actual settlement',async()=>{
   let attempts=0; let stops=0;const item=queue({maxInFlight:2,writeTimeoutMs:15,factory(){return {async stop(){stops+=1;},write(records,{signal}){attempts+=1;if(attempts>1){return Promise.resolve();}return new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>{reject(signal.reason);},{once:true});});}};}});
   await item.open();await item.accept({eventId:'a'},target);assert.equal((await item.drain()).failed,1);await pause(5);assert.equal(item.status().queuedOperations,0);assert.equal((await item.drain()).delivered,1);assert(stops>=1);
@@ -80,14 +90,24 @@ describe('bounded pipelined delivery confirmations',()=>{
   await item.open();await Promise.all(Array.from({length:50},(value,i)=>{return item.accept({eventId:String(i)},target);}));const draining=item.drain();
   try{await until(()=>{return peak===32;});assert.equal(item.status().queuedOperations,32);}finally{confirm.resolve();}assert.deepEqual(await draining,{delivered:50,failed:0});assert.equal(peak,32);
  });
- it('fails close bounded while a noncooperative actual write retains ownership, then closes after settlement',async()=>{
+ it('fails close bounded while an actual write is outstanding, then clears the queue after settlement',async()=>{
   const late=gate();const item=queue({writeTimeoutMs:15,maxInFlight:1,factory(){return {async write(){await late.promise;},async stop(){}};}});await item.open();await item.accept({eventId:'a'},target);await item.drain();
-  try{await assert.rejects(item.close(),/timed out/u);const second=queue({factory(){return {async write(){}};}});await assert.rejects(second.open(),/owner|locked|already/iu);}finally{late.resolve();}
-  await pause(40);await item.close();
+  try{await assert.rejects(item.close(),/timed out/u);assert.equal(item.status().pending,1);}finally{late.resolve();}
+  await pause(40);await item.close();assert.equal(item.status().pending,0);
  });
  it('retires a late successful opening after timeout without publishing or leaking its resource',async()=>{
   const opening=gate();let live=false;let writes=0;const item=queue({writeTimeoutMs:15,factory(){return {async start(){await opening.promise;live=true;},async stop(){live=false;},async write(){writes+=1;}};}});
-  await item.open();await item.accept({eventId:'a'},target);assert.equal((await item.drain()).failed,1);opening.resolve();await until(()=>{return item.status().queuedOperations===0;});await item.close();assert.equal(writes,0);assert.equal(live,false);assert.equal(item.status().pending,1);
+  await item.open();await item.accept({eventId:'a'},target);assert.equal((await item.drain()).failed,1);opening.resolve();await until(()=>{return item.status().queuedOperations===0;});assert.equal(item.status().pending,1);await item.close();assert.equal(writes,0);assert.equal(live,false);assert.equal(item.status().pending,0);
+ });
+ it('does not publish an evicted page member that has not been sent yet',async()=>{
+  const entered=gate();const confirmed=gate();const sent=[];
+  const item=queue({maxRecords:2,maxInFlight:1,factory(){return {async write(records){sent.push(records[0].eventId);entered.resolve();await confirmed.promise;}};}});
+  await item.open();await item.accept({eventId:'old-active'},target);await item.accept({eventId:'old-waiting'},target);
+  const draining=item.drain();await entered.promise;
+  try{await item.accept({eventId:'new-first'},target);await item.accept({eventId:'new-last'},target);}
+  finally{confirmed.resolve();}
+  assert.deepEqual(await draining,{delivered:1,failed:0});
+  assert.deepEqual(sent,['old-active']);assert.equal(item.status().droppedRecords,2);assert.equal(item.status().pending,2);
  });
  it('rejects invalid publication-window values',()=>{
   for(const maxInFlight of [0,-1,1.1,Infinity,NaN]){assert.throws(()=>{queue({maxInFlight,factory(){}});},/maxInFlight/u);}
