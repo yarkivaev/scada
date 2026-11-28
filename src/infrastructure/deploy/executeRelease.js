@@ -16,11 +16,15 @@ function validateRetirements(plan) {
     }
 }
 
-/** Validates the target before helm or kubectl can fall back to a default. */
-function validate(plan, action) {
+export function requireReleaseAction(action) {
     if (!['render', 'check', 'diff', 'apply', 'adopt', 'check-adoption'].includes(action)) {
         throw new Error('action must be render, check, diff or apply (adopt/check-adoption for migration)');
     }
+}
+
+/** Validates the target before helm or kubectl can fall back to a default. */
+function validate(plan, action) {
+    requireReleaseAction(action);
     const fields = action === 'render' ? ['chart', 'release', 'namespace'] : ['chart', 'release', 'namespace', 'context', 'fieldManager'];
     validateRetirements(plan);
     if (plan.podsAbsentBeforeApply !== undefined && (!Array.isArray(plan.podsAbsentBeforeApply)

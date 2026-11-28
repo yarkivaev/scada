@@ -21,6 +21,15 @@ jobs:
   control:
     uses: ./.github/workflows/control.yml
 
+  kiosk-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s test/kiosk -p 'test_*.py'
+      - run: |
+          for file in src/infrastructure/management/kiosk/*.sh; do bash -n "$file"; done
+          node --input-type=module --check < src/infrastructure/management/kiosk/listen.mjs.txt
+
   stream-processing:
     runs-on: ubuntu-latest
     services:
@@ -73,7 +82,7 @@ jobs:
           SCADA_STREAM_WORKER_TEST_JDBC: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports['5432'] }}/scada_test
 
   tag:
-    needs: [check-version, lint, test, control, stream-processing]
+    needs: [check-version, lint, test, control, kiosk-assets, stream-processing]
     if: needs.check-version.outputs.should_release == 'true'
     uses: yarkivaev/npm-workflows/.github/workflows/tag.yml@main
     with:

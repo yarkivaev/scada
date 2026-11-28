@@ -1,0 +1,1 @@
+test -f /tmp/watchdog-ok && test $(($(date +%s) - $(stat -c %Y /tmp/watchdog-ok 2>/dev/null || echo 0))) -lt 165

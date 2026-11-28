@@ -1,0 +1,14 @@
+import net from 'node:net';
+const host = process.env.HOST_IP;
+const port = Number(process.env.CDP_PORT || '9222');
+net.createServer((client) => {
+  const up = net.connect(port, '127.0.0.1');
+  client.pipe(up);
+  up.pipe(client);
+  const stop = () => {
+    client.destroy();
+    up.destroy();
+  };
+  client.on('error', stop);
+  up.on('error', stop);
+}).listen(port, host);

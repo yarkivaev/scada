@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '@RUNTIME_ROLE@') THEN
+        CREATE ROLE @RUNTIME_ROLE@ NOLOGIN;
+    END IF;
+END
+$$;
+
+ALTER TABLE IF EXISTS public.segments OWNER TO @RUNTIME_ROLE@;
+ALTER TABLE IF EXISTS public.alerts OWNER TO @RUNTIME_ROLE@;
+ALTER SEQUENCE IF EXISTS public.alerts_id_seq OWNER TO @RUNTIME_ROLE@;
+ALTER TABLE IF EXISTS public.user_decisions OWNER TO @OWNER_ROLE@;
+ALTER TABLE IF EXISTS public.schema_migrations OWNER TO @RUNTIME_ROLE@;
