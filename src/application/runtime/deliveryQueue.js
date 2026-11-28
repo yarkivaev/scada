@@ -1,4 +1,4 @@
-import deliverySpool from '../../infrastructure/persistence/runtime/deliverySpool.js';
+import spoolProcess from '../../infrastructure/persistence/runtime/spoolProcess.js';
 import deliverySessions from './deliverySessions.js';
 import deliveryOperations from './deliveryOperations.js';
 import deliveryPublications from './deliveryPublications.js';
@@ -11,8 +11,7 @@ function snapshot(operation, checkBytes) {
 }
 /* eslint max-lines-per-function: ["error", 125], max-statements: ["error", 25] */
 /** Node-owned queue: every point/receipt resolves only after its grouped FULL commit. */
-export default function deliveryQueue(directory, options) {
-    const spool = deliverySpool(directory, options);
+export default function deliveryQueue(directory, options, spool = spoolProcess(directory, options)) {
     const commands = deliveryOperations((operations) => { return spool.mutateMany(operations); }, options);
     const sessions = deliverySessions(options.factory, options.writeTimeoutMs);
     const batchSize = options.batchSize ?? 100;

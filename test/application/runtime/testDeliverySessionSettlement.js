@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import queueFactory from '../../../src/application/runtime/deliveryQueue.js';
 import amqpSink from '../../../src/infrastructure/streams/amqpSink.js';
+import openAfterCrash from '../../helpers/runtime/openAfterCrash.js';
 const pause=ms=>{return new Promise(resolve=>{setTimeout(resolve,ms);});};
 async function until(probe){const end=Date.now()+500;while(!probe()){assert(Date.now()<end,'fixture deadline');await pause(2);}}
 function broker(){
@@ -34,7 +35,7 @@ describe('queue with actual AMQP publication settlement',()=>{
  it('replays only unacknowledged exact observations after SIGKILL during a pipelined drain',async function(){
   this.timeout(10000);const child=fork(new URL('../../helpers/runtime/queueConfirmChild.js',import.meta.url),[directory],{silent:true});
   try{const [message]=await once(child,'message');assert.equal(message,'one-receipt-committed-two-publishes-pending');}finally{const exit=once(child,'exit');child.kill('SIGKILL');await exit;}
-  const received=[];const item=queue({factory(){return {async write(records){received.push([records[0].eventId,records[0].body.toString()]);}};}});await item.open();assert.equal(item.status().pending,2);assert.deepEqual(await item.drain(),{delivered:2,failed:0});assert.deepEqual(received,[['uncertain-one','frozen-uncertain-one'],['uncertain-two','frozen-uncertain-two']]);
+  const received=[];const item=queue({factory(){return {async write(records){received.push([records[0].eventId,records[0].body.toString()]);}};}});await openAfterCrash(item);assert.equal(item.status().pending,2);assert.deepEqual(await item.drain(),{delivered:2,failed:0});assert.deepEqual(received,[['uncertain-one','frozen-uncertain-one'],['uncertain-two','frozen-uncertain-two']]);
  });
  it('waits for confirmations and durable receipts before close releases storage ownership',async()=>{
   const fixture=broker();const item=queue({factory(){return amqpSink('amqp://test',{connect(){return Promise.resolve(fixture.connection);},onError(){}});}});

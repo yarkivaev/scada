@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 
 describe('OPC UA lazy runtime', function () {
     it('keeps root import and factory validation free of node-opcua loading', function () {
+        // Give the child its configured 15-second import timeout.
+        this.timeout(16000);
         const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
             import { createRequire } from 'node:module';
             import './index.js';

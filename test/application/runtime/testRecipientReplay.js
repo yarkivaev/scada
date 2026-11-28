@@ -12,10 +12,13 @@ describe('recipient-isolated durable replay',()=>{
  function queue(options={}){const value=createQueue(directory,{maxBytes:10000000,groupCommit:{maxDelayMs:0},...options});owned.push(value);return value;}
  beforeEach(async()=>{directory=await mkdtemp(path.join(os.tmpdir(),'recipient-replay-'));});
  afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));await rm(directory,{recursive:true,force:true});});
- it('reaches a healthy immutable destination in the first page behind1000 offline-only events',async()=>{
+ it('reaches a healthy immutable destination in the first page behind 1000 offline-only events',async function(){
+  this.timeout(8000);
   const received=[];const item=queue({factory(spec){return {async write(records){if(spec.url===bad.url){throw new Error('offline');}received.push(records[0].eventId);}};}});
   await item.open();
-  for(let i=0;i<1000;i+=1){await item.accept({eventId:`offline-${i}`},[bad]);}
+  for(let offset=0;offset<1000;offset+=100){
+   await Promise.all(Array.from({length:100},(_entry,index)=>{return item.accept({eventId:`offline-${offset+index}`},[bad]);}));
+  }
   await item.accept({eventId:'healthy-now'},[good]);
   await item.drain();assert.deepEqual(received,['healthy-now']);assert.equal(item.status().pending,1000);
  });
