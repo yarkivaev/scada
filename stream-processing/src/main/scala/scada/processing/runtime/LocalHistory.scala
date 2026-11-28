@@ -186,7 +186,7 @@ final class LocalHistory(
     config: CheckpointApiConfig,
     machine: MachineConfig,
     input: HistoryInput,
-    announce: Vector[Json] => IO[Unit] = _ => IO.unit,
+    replication: Option[HistoryReplication] = None,
     generation: Option[Long] = None
 ):
   private val transport=HistoryClient(config)
@@ -266,9 +266,8 @@ final class LocalHistory(
             )).deepMerge(LocalHistory.commitFence(machine.id, id, token, generation))
             val payload = Json.obj("machine" -> Json.fromString(machine.id.raw), "workId" -> Json.fromString(id),
               "segments" -> Json.arr(rows*), "context" -> claim)
-            transport.commitHistory(payload).flatMap: response =>
-              if response.hcursor.get[Boolean]("applied").contains(true) then announce(rows)
-              else calculated.set(None)
+            transport.commitHistory(payload, replication).flatMap: response =>
+              IO.unlessA(response.hcursor.get[Boolean]("applied").contains(true))(calculated.set(None))
         // The receiver owns work retirement. Unavailable context yields no verified proposal.
         def acknowledge(work: Work): IO[Unit] = IO.unit
       _ <- Worker(ports).run(routed).guarantee(pool.update(p => p.copy(cursors = p.cursors.acknowledge(routed.id))))

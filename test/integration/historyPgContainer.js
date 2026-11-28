@@ -47,6 +47,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0013__history_staged_corrections.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0015__history_retention_frontier.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0017__history_live_covering.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/V0013__contiguous_phase_inbox.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/V0015__segment_write_receipts.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0019__segment_write_fence.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0021__history_replica_outbox.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('does not conflict a classifier claim after unstarted same-bucket work grows',async()=>{
@@ -249,7 +253,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(current.cursor,time+1000);
         assert.equal(current.token,old.rows[0].token);
     });
-    it('publishes a complete staged casting correction atomically and applies the latest operator cuts and labels', async () => {
+    it('publishes a complete staged casting correction to the outbox with the latest operator cuts and labels', async () => {
         const machine='staged-casting';const time=Math.floor(Date.now()/30000)*30000-60000;
         const points=[0,1000,5000].map(offset=>{return {eventId:`staged${offset}`,channel:'power',time:time+offset,value:offset};});
         const source=()=>{return {async registered(){},async start(){return time;},async seed(){return null;},async boundary(){return time+5000;},
@@ -257,6 +261,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};}
         };};
         const store=historyPg(pool,{observations:source});
+        const replication={exchange:'scada.segments',routingKey:''};
         await store.configure(machine,[{topic:'staged/power',channel:'power'}],30000,'casting');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties,resolved) VALUES($1,'phase','on',$2,$3,3,$5,$7,true),($1,'phase','on',$3,$4,2,$6,$7,true)",
             [machine,new Date(time),new Date(time+3000),new Date(time+5000),'["left"]','["right"]','{"cadence_threshold_ms":"99","operator_note":"keep"}']);
@@ -265,19 +270,22 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         let work=(await store.work(machine)).items.find(row=>{return row.id===inserted.rows[0].id;});
         let context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
         const first={kind:'phase',name:'on',start_time:new Date(time+1000),end_time:new Date(time+1000),duration:0,tags:[],properties:{casting:'true',cadence_threshold_ms:'10'}};
-        await store.commit(machine,work.id,[first],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
+        await store.commit(machine,work.id,[first],{...context.context,revision:context.revision,workToken:work.token,replace:true,replication,fence:{outputId:work.token},checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
         assert.deepEqual((await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows,initial);
         assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'0');
+        assert.equal((await pool.query('SELECT count(*) FROM history_replica_outbox WHERE machine=$1',[machine])).rows[0].count,'0');
         await pool.query('UPDATE segments SET consumed=false,tags=$3 WHERE machine=$1 AND start_time=$2',[machine,new Date(time+3000),'["new-right"]']);
         const continuingId=work.id;
         work=(await store.work(machine)).items.find(row=>{return row.id===continuingId;});
         context=await historyPg(pool,{observations:source}).context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'casting',workId:work.id,workToken:work.token});
         assert.deepEqual(context.classifierSeed,{at:time+1000,state:{count:2}});
-        await store.commit(machine,work.id,[{...first,end_time:new Date(time+5000),duration:4}],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{count:3}}});
+        await store.commit(machine,work.id,[{...first,end_time:new Date(time+5000),duration:4}],{...context.context,revision:context.revision,workToken:work.token,replace:true,replication,fence:{outputId:work.token},checkpoint:{key:'casting',at:time+5000,state:{count:3}}});
         const rows=(await pool.query('SELECT start_time,end_time,tags,properties,consumed FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
         assert.deepEqual(rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[1000,3000,['left']],[3000,5000,['new-right']]]);
         assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_threshold_ms==='10' && p.operator_note==='keep';}));
         assert.equal(rows.at(-1).consumed,false);
+        const outbound=(await pool.query("SELECT segment->>'tags' AS tags FROM history_replica_outbox WHERE machine=$1 ORDER BY id",[machine])).rows;
+        assert.deepEqual(outbound,rows.map(({tags})=>{return {tags};}));
         assert.equal((await store.work(machine)).items.length,0);
         assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'2');
     });
@@ -509,6 +517,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0012__external_history_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0014__history_correction_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0016__history_retention_grants.sql', import.meta.url),'utf8'));
+        await pool.query('GRANT SELECT, INSERT, UPDATE ON segment_timeline_revisions TO supervisor_sink');
         const client=await pool.connect();
         try {
             await client.query('SET ROLE supervisor_sink');

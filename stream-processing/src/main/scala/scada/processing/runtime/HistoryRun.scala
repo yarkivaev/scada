@@ -7,7 +7,7 @@ import io.circe.Json
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import scada.processing.infra.config.{AliasMapping, AppConfig, CheckpointApiConfig}
-import scada.processing.infra.stomp.{ClassifyQueue, StompSender}
+import scada.processing.infra.stomp.ClassifyQueue
 import scala.concurrent.duration.*
 
 /**
@@ -16,7 +16,7 @@ import scala.concurrent.duration.*
  * lease generation. A missing generation does not publish.
  *
  * {{{
- * HistoryRun.gated(config, machine, aliases, sender, api)
+ * HistoryRun.gated(config, machine, aliases, api)
  * }}}
  */
 final class HistoryRun(profile: RuntimeProfile, writer: Option[TimelineWriter],
@@ -25,45 +25,45 @@ final class HistoryRun(profile: RuntimeProfile, writer: Option[TimelineWriter],
   private given Logger[IO] = Slf4jLogger.getLogger[IO]
 
   /** Retries until this process is the sole classifier. */
-  def gated(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig, observationMs: Long = 0L, segmentEndMs: Option[Long] = None): Stream[IO, Unit] =
+  def gated(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], api: CheckpointApiConfig, observationMs: Long = 0L, segmentEndMs: Option[Long] = None): Stream[IO, Unit] =
     if !config.leaseHeld then Stream.never[IO]
     else
       val leader = ObservationLead.leading(config.writerRole, config.leaseUrl)
       config.leaseUrl match
         case None if machine.mode.isDefined && !ObservationLead.ready(observationMs, segmentEndMs, leader) =>
-          Stream.exec(Logger[IO].info(s"classifier waiting for telemetry on ${machine.id.raw}")) ++ Stream.sleep_[IO](5.seconds) ++ gated(config, machine, aliases, sender, api, observationMs, segmentEndMs)
+          Stream.exec(Logger[IO].info(s"classifier waiting for telemetry on ${machine.id.raw}")) ++ Stream.sleep_[IO](5.seconds) ++ gated(config, machine, aliases, api, observationMs, segmentEndMs)
         case None =>
-          follow(config, machine, aliases, sender, api, observationMs, segmentEndMs)
+          follow(config, machine, aliases, api, observationMs, segmentEndMs)
             .concurrently(decisions(config, machine)).handleErrorWith(error =>
-              retry(error) ++ gated(config, machine, aliases, sender, api, observationMs, segmentEndMs))
+              retry(error) ++ gated(config, machine, aliases, api, observationMs, segmentEndMs))
         case Some(url) =>
-          once(url, config, machine, aliases, sender, api).handleErrorWith(retry) ++
-            Stream.eval(IO.unit).flatMap(_ => gated(config, machine, aliases, sender, api, observationMs, segmentEndMs))
+          once(url, config, machine, aliases, api).handleErrorWith(retry) ++
+            Stream.eval(IO.unit).flatMap(_ => gated(config, machine, aliases, api, observationMs, segmentEndMs))
 
   private def retry(error: Throwable): Stream[IO, Unit] =
     Stream.exec(Logger[IO].warn(error)("Classification interrupted; waiting for unconfirmed input")) ++
       Stream.sleep_[IO](1.second)
 
-  private def once(url: String, config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig): Stream[IO, Unit] =
+  private def once(url: String, config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], api: CheckpointApiConfig): Stream[IO, Unit] =
     Stream.resource(WriterLease.open(url, machine.id.raw)).flatMap: hold =>
       if !hold.held then Stream.exec(Logger[IO].info(s"classifier lease denied for ${machine.id.raw}")) ++ Stream.sleep_[IO](5.seconds)
       else Stream.resource(observe(machine.id.raw, hold.generation)) >> Stream.eval(hold.seed(machine.id.raw)).flatMap: (end, rows) =>
         val grant = hold.generation.map(value => LeaseGrant(true, value))
-        if machine.mode.isDefined then follow(config, machine, aliases, sender, api, end.getOrElse(0L), end, grant).concurrently(decisions(config, machine))
+        if machine.mode.isDefined then follow(config, machine, aliases, api, end.getOrElse(0L), end, grant).concurrently(decisions(config, machine))
         else
           val database = hold.generation.map(token =>
             WorkerDatabase(doobie.Transactor.fromConnection[IO](hold.connection, None), token))
           amqp(config, machine, aliases, rows, end, grant, database, Some((from, until) => hold.phasesBetween(machine.id.raw, from, until)))
 
-  private def follow(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig, observationMs: Long, segmentEndMs: Option[Long], grant: Option[LeaseGrant] = None): Stream[IO, Unit] =
+  private def follow(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], api: CheckpointApiConfig, observationMs: Long, segmentEndMs: Option[Long], grant: Option[LeaseGrant] = None): Stream[IO, Unit] =
     if machine.mode.isEmpty then amqp(config, machine, aliases, Vector.empty, segmentEndMs, grant)
     else if !ObservationLead.ready(observationMs, segmentEndMs, ObservationLead.leading(config.writerRole, config.leaseUrl)) then
       Stream.exec(Logger[IO].info(s"classifier waiting for telemetry on ${machine.id.raw}")) ++ Stream.sleep_[IO](5.seconds)
-    else custom(config, machine, aliases, sender, api, observationMs, segmentEndMs, grant)
+    else custom(config, machine, aliases, api, grant)
 
-  private def custom(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig, observationMs: Long, segmentEndMs: Option[Long], grant: Option[LeaseGrant] = None): Stream[IO, Unit] =
-    val announce = HistoryBus.lead(sender, config, machine.id, observationMs, segmentEndMs, grant)
-    profile.history(machine, aliases, api, announce, grant.filter(_.held).map(_.generation),
+  private def custom(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], api: CheckpointApiConfig, grant: Option[LeaseGrant]): Stream[IO, Unit] =
+    val replication = HistoryReplication.forWriter(config, grant)
+    profile.history(machine, aliases, api, replication, grant.filter(_.held).map(_.generation),
       HistoryInput.rabbit(config.connectivity.rabbitmq))
 
   private def amqp(config: AppConfig, machine: scada.processing.core.MachineConfig,

@@ -26,13 +26,14 @@ describe('history receiver with runtime-only migration verification', function()
             return new Promise((resolve) => { verified = resolve; });
         };
         sink.historyTelemetry.start = async () => { events.push('history'); };
+        sink.historyReplicaRelay.start = () => { events.push('replica relay'); };
         try {
             const running = sink.run({ start() { events.push('http'); } });
             await querying;
             assert.deepEqual(events, []);
             verified(await applied());
             await running;
-            assert.deepEqual(events, ['history', 'http']);
+            assert.deepEqual(events, ['history', 'replica relay', 'http']);
         } finally { await sink.pool.end(); }
     });
 
@@ -41,6 +42,7 @@ describe('history receiver with runtime-only migration verification', function()
         const events = [];
         sink.pool.query = async () => { return { rows: [] }; };
         sink.historyTelemetry.start = async () => { events.push('history'); };
+        sink.historyReplicaRelay.start = () => { events.push('replica relay'); };
         try {
             await assert.rejects(sink.run({ start() { events.push('http'); } }), /Missing database migrations/u);
             assert.deepEqual(events, []);

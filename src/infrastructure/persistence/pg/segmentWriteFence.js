@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { enableHistoryReplicaCapture } from './historyReplicaOutbox.js';
 
 function conflict(writeCode, message) {
     return Object.assign(new Error(message), {statusCode: 409, writeCode, permanent: true});
@@ -75,12 +76,20 @@ export default async function writeFencedSegment(client, machine, input, body, a
 }
 
 export function historyWriteFence(client,machine,{base,workId,segments},apply) {
-    if (!base || !Object.hasOwn(base,'fence')) { return apply(); }
+    if (!base || !Object.hasOwn(base,'fence')) {
+        if (base?.replication) { throw new TypeError('History replication requires a write fence'); }
+        return apply();
+    }
     const {fence,...context} = base;
     if (typeof context.revision !== 'string' || !context.revision) {
         throw new TypeError('History context revision required');
     }
-    return writeFencedSegment(client,machine,fence,{workId,segments,context},apply);
+    return writeFencedSegment(client,machine,fence,{workId,segments,context},async () => {
+        if (context.replication) {
+            await enableHistoryReplicaCapture(client, machine, fence, context.replication);
+        }
+        return apply();
+    });
 }
 
 export async function segmentRevision(client, machine) {
