@@ -24,7 +24,7 @@ trait RuntimeProfile:
       checkpoint: Option[Checkpoint], seeding: Option[Seeding], outputs: Option[OutputScope], database: Option[WorkerDatabase]): Option[Stream[IO, Unit]] = None
   def decisions(config: AppConfig, machine: MachineConfig, segments: Segments[IO]): Stream[IO, Unit] = Stream.empty
   def history(machine: MachineConfig, aliases: List[AliasMapping], api: CheckpointApiConfig,
-      announce: Vector[Json] => IO[Unit], generation: Option[Long]): Stream[IO, Unit] =
+      announce: Vector[Json] => IO[Unit], generation: Option[Long], input: HistoryInput): Stream[IO, Unit] =
     Stream.raiseError[IO](IllegalArgumentException(s"Unsupported history mode for ${machine.id.raw}"))
 
 object RuntimeProfile:

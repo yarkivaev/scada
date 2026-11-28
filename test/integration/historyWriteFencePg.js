@@ -109,7 +109,7 @@ describe('fenced segment recipient on Postgres', function() {
         assert.equal(row.options,null);
     });
 
-    it('keeps a history result after its work claim advances and rejects an operator race', async function() {
+    it('keeps a history result after its work claim advances and rejects live and operator races', async function() {
         const machine = randomUUID();
         const id = randomUUID();
         const token = randomUUID();
@@ -121,9 +121,14 @@ describe('fenced segment recipient on Postgres', function() {
         const item = {name:'running',start_time:new Date(time),end_time:new Date(time+1000),duration:1};
         const fence = {outputId:'history-output'};
         const claim = {...first.context,workToken:token,revision:first.revision,fence};
-        await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','running',$2,$3,1,$4)",
-            [machine,item.start_time,item.end_time,'["operator"]']);
+        const {live} = segmentRecipient(url,pool,{});
+        const {revision} = await live.revision(machine);
+        await live.apply({machine,type:'segment',name:'running',start:time,end:time+1000,duration:1,
+            fence:{outputId:'live-output',revision}});
         await assert.rejects(store.commit(machine,id,[item],claim),{writeCode:'REVISION_CONFLICT'});
+        const afterLive = await store.context(machine,time,time+1000,0);
+        await pool.query('UPDATE segments SET tags=$2 WHERE machine=$1',[machine,'["operator"]']);
+        await assert.rejects(store.commit(machine,id,[item],{...claim,revision:afterLive.revision}),{writeCode:'REVISION_CONFLICT'});
         const current = await store.context(machine,time,time+1000,0);
         const verified = {...current.context,workToken:token,revision:current.revision,fence};
         assert.deepEqual(await store.commit(machine,id,[item],verified),{applied:true});

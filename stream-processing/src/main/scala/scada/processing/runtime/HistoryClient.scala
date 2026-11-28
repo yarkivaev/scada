@@ -27,4 +27,13 @@ final class HistoryClient(config: CheckpointApiConfig):
           json.hcursor.downField("error").get[String]("code").toOption.orElse(json.hcursor.get[String]("code").toOption))
         IO.raiseError(HistoryHttpError(path, response.statusCode(), code))
       else IO.fromEither(decoded.left.map(error=>RuntimeException(error.message)))
+  /** Retry a lost commit response with the same fenced body and receipt identity. */
+  def commitHistory(body: Json): IO[Json] =
+    def attempt(retries: Int): IO[Json] =
+      request("POST", "/v1/history/commit", body).handleErrorWith:
+        case error: HistoryHttpError if error.status < 500 => IO.raiseError(error)
+        case error if retries == 0 => IO.raiseError(error)
+        case _ => IO.sleep(200.millis) *> attempt(retries - 1)
+    attempt(2)
+
   def retry[A](action: IO[A]): IO[A] = action.handleErrorWith(_=>IO.sleep(2.seconds) *> retry(action))

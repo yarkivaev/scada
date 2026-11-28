@@ -10,9 +10,9 @@
 
 ## Stream processing
 
-The [Scala stream processing](../../stream-processing/README.md) turns machine readings into timeline segments. Stream Worker evaluates configured rules and restores progress. Replay computes historical results against a fixed set of inputs. Plants supply the rules and can plug in a specialized live processor or historical classifier.
+The [Scala stream processing](../../stream-processing/README.md) turns machine readings into timeline segments. Stream Worker evaluates configured rules and restores progress. Historical pages enter the same Worker as ordered RabbitMQ inputs. Plants supply the rules and can plug in a specialized live processor or historical classifier.
 
-A replay can compute sections of the same timeline in parallel when their starting states are known. See [Stream processing modules](../../stream-processing/README.md#stream-processing-modules).
+See [Recalculate history](../../stream-processing/README.md#recalculate-history) for how a page resumes and how its result is accepted.
 
 ## State sink
 

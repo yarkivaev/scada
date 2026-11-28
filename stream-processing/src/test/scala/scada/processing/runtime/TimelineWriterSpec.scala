@@ -14,7 +14,7 @@ import scada.processing.infra.config.CheckpointApiConfig
 import scada.processing.infra.stomp.{StompFrame, StompSender}
 
 final class TimelineWriterSpec extends CatsEffectSuite:
-  private def endpoint(applied: ConcurrentLinkedQueue[Json]): Resource[IO, HistoryClient] =
+  private def endpoint(applied: ConcurrentLinkedQueue[Json], committedRevision: Int => Int = count => 42 + count): Resource[IO, HistoryClient] =
     Resource.make(IO.blocking {
       val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
       server.createContext("/v1/history", exchange => {
@@ -24,7 +24,7 @@ final class TimelineWriterSpec extends CatsEffectSuite:
             val json = parse(new String(exchange.getRequestBody.readAllBytes(), UTF_8)).toOption.get
             applied.add(json)
           val response = if get then """{"revision":"42"}"""
-                         else s"""{"applied":true,"revision":"${42 + applied.size()}"}"""
+                         else s"""{"applied":true,"revision":"${committedRevision(applied.size())}"}"""
           val bytes = response.getBytes(UTF_8)
           exchange.sendResponseHeaders(200, bytes.length)
           exchange.getResponseBody.write(bytes)
@@ -66,3 +66,18 @@ final class TimelineWriterSpec extends CatsEffectSuite:
         assertNotEquals(ids.head, ids(1))
         assertEquals(broadcasts.map(_.hcursor.get[String]("committedOutputId").toOption.get), ids)
         assert(broadcasts.forall(!_.hcursor.downField("fence").succeeded))
+
+
+  test("a receipt from an earlier revision never rewinds the current write fence"):
+    val applied = new ConcurrentLinkedQueue[Json]()
+    val payload = Json.obj("machine" -> Json.fromString("machine"))
+    endpoint(applied, count => if count == 1 then 12 else 43).use: client =>
+      for
+        scope <- OutputScope.create
+        writer <- TimelineWriter.create(client, _ => IO.pure(None), scope, None)
+        _ <- writer.atRevision("machine")(
+          writer.applyMessage("machine", payload, "old", None, None) *>
+            writer.applyMessage("machine", payload, "next", None, None))
+      yield
+        assertEquals(applied.iterator().asScala.toList.map(_.hcursor.downField("fence").get[String]("revision")),
+          List(Right("42"), Right("42")))

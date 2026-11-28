@@ -32,8 +32,17 @@ final class HistoryRun(profile: RuntimeProfile, writer: Option[TimelineWriter],
       config.leaseUrl match
         case None if machine.mode.isDefined && !ObservationLead.ready(observationMs, segmentEndMs, leader) =>
           Stream.exec(Logger[IO].info(s"classifier waiting for telemetry on ${machine.id.raw}")) ++ Stream.sleep_[IO](5.seconds) ++ gated(config, machine, aliases, sender, api, observationMs, segmentEndMs)
-        case None => follow(config, machine, aliases, sender, api, observationMs, segmentEndMs).concurrently(decisions(config, machine))
-        case Some(url) => once(url, config, machine, aliases, sender, api) ++ Stream.eval(IO.unit).flatMap(_ => gated(config, machine, aliases, sender, api, observationMs, segmentEndMs))
+        case None =>
+          follow(config, machine, aliases, sender, api, observationMs, segmentEndMs)
+            .concurrently(decisions(config, machine)).handleErrorWith(error =>
+              retry(error) ++ gated(config, machine, aliases, sender, api, observationMs, segmentEndMs))
+        case Some(url) =>
+          once(url, config, machine, aliases, sender, api).handleErrorWith(retry) ++
+            Stream.eval(IO.unit).flatMap(_ => gated(config, machine, aliases, sender, api, observationMs, segmentEndMs))
+
+  private def retry(error: Throwable): Stream[IO, Unit] =
+    Stream.exec(Logger[IO].warn(error)("Classification interrupted; waiting for unconfirmed input")) ++
+      Stream.sleep_[IO](1.second)
 
   private def once(url: String, config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig): Stream[IO, Unit] =
     Stream.resource(WriterLease.open(url, machine.id.raw)).flatMap: hold =>
@@ -44,7 +53,7 @@ final class HistoryRun(profile: RuntimeProfile, writer: Option[TimelineWriter],
         else
           val database = hold.generation.map(token =>
             WorkerDatabase(doobie.Transactor.fromConnection[IO](hold.connection, None), token))
-          amqp(config, machine, aliases, rows, end, grant, database)
+          amqp(config, machine, aliases, rows, end, grant, database, Some((from, until) => hold.phasesBetween(machine.id.raw, from, until)))
 
   private def follow(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig, observationMs: Long, segmentEndMs: Option[Long], grant: Option[LeaseGrant] = None): Stream[IO, Unit] =
     if machine.mode.isEmpty then amqp(config, machine, aliases, Vector.empty, segmentEndMs, grant)
@@ -54,23 +63,28 @@ final class HistoryRun(profile: RuntimeProfile, writer: Option[TimelineWriter],
 
   private def custom(config: AppConfig, machine: scada.processing.core.MachineConfig, aliases: List[AliasMapping], sender: Option[StompSender], api: CheckpointApiConfig, observationMs: Long, segmentEndMs: Option[Long], grant: Option[LeaseGrant] = None): Stream[IO, Unit] =
     val announce = HistoryBus.lead(sender, config, machine.id, observationMs, segmentEndMs, grant)
-    profile.history(machine, aliases, api, announce, grant.filter(_.held).map(_.generation))
+    profile.history(machine, aliases, api, announce, grant.filter(_.held).map(_.generation),
+      HistoryInput.rabbit(config.connectivity.rabbitmq))
 
   private def amqp(config: AppConfig, machine: scada.processing.core.MachineConfig,
       aliases: List[AliasMapping], seed: Vector[Json], segmentEndMs: Option[Long],
-      grant: Option[LeaseGrant], database: Option[WorkerDatabase] = None): Stream[IO, Unit] =
+      grant: Option[LeaseGrant], database: Option[WorkerDatabase] = None, readStored: Option[(Long, Long) => IO[Vector[Json]]] = None): Stream[IO, Unit] =
     val leader = ObservationLead.leading(config.writerRole, config.leaseUrl)
     val queue = s"scada.classify.${machine.id.raw}"
     val input = ClassifyQueue(config.connectivity.rabbitmq, queue, aliases).subscribeDurable
     val write = writer.getOrElse(throw IllegalStateException("Historical classification requires a timeline writer"))
     val owner = grant.filter(_.held).map(_.generation)
-    val ports = ClassifyPorts(_ => IO.unit, (rows, historical) =>
-      ClassifyBus.publish(segmentEndMs, leader, historical)(rows): approved =>
-        approved.traverse_ { row =>
+    val ports = ClassifyPorts(_ => IO.unit, (rows, _) =>
+        rows.traverse_ { row =>
           val message = if row.hcursor.get[String]("type").contains("split-family") then row else HistoryBus.message(machine.id, row)
           write.applyMessage(machine.id.raw, message, TimelineWriter.identity(None, message), owner,
             config.connectivity.rabbitmq.destinations.segments)
-        }
+        },
+      timeline = (from, until) => write.readRevision(machine.id.raw).flatMap: revision =>
+        readStored.fold(IO.pure(seed))(_(from, until)).map(rows => Some(TimelineSnapshot(revision, rows))),
+      atRevision = (revision, action) => revision.fold(write.atRevision(machine.id.raw)(action))(
+        expected => write.atExpectedRevision(machine.id.raw, expected)(action)),
+      admit = (rows, historical) => ClassifyBus.allowed(segmentEndMs, leader, historical)(rows)
     )
     Stream.eval(Logger[IO].info(s"consuming AMQP classify queue $queue")) >> Stream.eval(ClassifyStreams.open(machine, seed, ports, segmentEndMs, database)).flatMap(_.consumeDurable(input))
 
@@ -78,8 +92,10 @@ object ClassifyBus:
   def publish(segmentEndMs: Option[Long], leader: Boolean, historical: Boolean = false)(rows: Vector[Json])(
       write: Vector[Json] => IO[Unit]
   ): IO[Unit] =
-    if historical || ObservationLead.ready(horizon(rows), segmentEndMs, leader) then write(rows)
-    else IO.unit
+    IO.whenA(allowed(segmentEndMs, leader, historical)(rows))(write(rows))
+
+  def allowed(segmentEndMs: Option[Long], leader: Boolean, historical: Boolean)(rows: Vector[Json]): Boolean =
+    historical || ObservationLead.ready(horizon(rows), segmentEndMs, leader)
 
   private def horizon(rows: Vector[Json]): Long =
     val ends = rows.flatMap: row =>

@@ -54,7 +54,7 @@ For standby readiness, shared writer leases and commit guarantees, see [High ava
 A plant application creates `ProcessingApplication` with its `RuntimeProfile`.
 The profile can load a plant-specific machine mode, select a live stream or
 history worker, and define segment annotation and publication policies.
-The engine supplies the shared execution, replay, writer leases, and transport.
+The engine supplies the shared execution, writer leases and transport.
 
 A plant build pins the SCADA npm package and compiles its processing sources
 with the plant profile. The package includes the exact JARs pinned by version
@@ -69,7 +69,7 @@ and SHA-256 in the two lock files. Both libraries publish independently.
 | `io.yarkivaev.streamworker.Processor` | Computes the next state and ordered outputs from configuration, state and one event. All time used by a processor comes from the input. |
 | `io.yarkivaev.streamworker.StreamWorker` | Reads an ordered source supplied by the caller, atomically saves the position, state and pending outputs, and retries unconfirmed outputs on restart. |
 | `io.yarkivaev.segmentation` | Evaluates segment and tag rules and computes interval transitions. Live and history adapters pass their input and boundary policy to the library. |
-| `scada.stream.replay.Replay` | Recalculates a fixed input snapshot and returns a proposal tied to a timeline revision. It can process sections in parallel where compatible starting states exist, then verifies the states at each boundary. |
+| `HistoryInput` | Feeds an ordered history page from RabbitMQ to the same Stream Worker entry point. |
 
 Durable source adapters assign stable positions to records and combine upstream
 streams into a reproducible order before passing them to the worker. Timer
@@ -83,7 +83,24 @@ coordinator supplies a higher ownership token. Set
 `SCADA_STREAM_WORKER_TEST_JDBC` to a local test database and apply
 `db/migrations/E0018__stream_worker_checkpoint.sql` to run its integration
 test with `sbt 'testOnly *ClassifyCheckpointSpec'`. The generic store has its own integration test in the Stream Worker repository. A stopped worker can
-resume after an explicit state migration to a new rules version. The
-processor works on a supplied sequence. Historical jobs read and stage a
-snapshot outside the worker, then run it through Replay and submit the result
-with the snapshot's original context revision.
+resume after an explicit state migration to a new rules version.
+
+## Recalculate history
+
+The archive adapter prepares a bounded page and its initial state. It sends
+positioned batches to a RabbitMQ queue scoped to that page. An end marker
+completes the input. Stream Worker invokes the configured processor for each
+sample. The processor receives its time and state as input.
+
+The history work claim remains outstanding until the state API accepts the
+result against its original context revision. If the worker or broker fails
+mid-page, the adapter fetches the outstanding claim and submits the page again.
+Committed pages, checkpoints and operator changes remain durable at the state
+API. The per-page RabbitMQ queue is transient.
+
+The AMQP classifier already receives readings from RabbitMQ. Its stateful
+processor computes both current and late classifications from that input.
+Before preparing a write, it reads the timeline revision and, under a lease,
+refreshes the stored segments in the affected range. Its pending output keeps
+the prepared wire messages and expected revision across a restart. An
+explicit revision conflict makes the next attempt read the range again.
