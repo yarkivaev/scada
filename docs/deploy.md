@@ -10,6 +10,26 @@ A **release** is one Helm install of `charts/scada` into one cluster. `releases(
 
 The chart passes extra machine settings through to the plant process.
 
+## Deployment commands
+
+The `@yarkivaev/scada/deployment` entry point exposes document loading, plan
+composition and execution without loading the collector runtime. Applications
+provide a registry of module ports. A command document selects a registry key
+and declares its supported actions.
+
+```yaml
+cell:
+  plugin: industrial-cell
+  plan: true
+  deploy: true
+```
+
+Pass the command mapping and the application registry to `deploymentCommands`.
+The returned function accepts the command name, the declared action and its
+options. A module can provide a `plan(options)` projection and a
+`deploy(options)` port. Keep installation identifiers, business policies,
+credentials references and domain-specific hooks in the application.
+
 ## System document
 
 A server has four parts. Each part is optional.

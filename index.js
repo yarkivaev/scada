@@ -158,3 +158,4 @@ export { default as prepareKubePrerequisites } from './src/infrastructure/deploy
 export { default as executeKubeSeed } from './src/infrastructure/deploy/executeKubeSeed.js';
 export { default as edgeTelemetryRuntime } from './src/infrastructure/ingest/telemetry/edgeTelemetryRuntime.js';
 export { default as kubeServiceAccount } from './src/infrastructure/management/kubeServiceAccount.js';
+export * from './src/infrastructure/deploy/index.js';

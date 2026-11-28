@@ -1,0 +1,1 @@
+for i in $(seq 1 300); do test -S "/tmp/.X11-unix/X0" && exit 0; sleep 2; done; echo "wait-x11: no socket /tmp/.X11-unix/X0 after $(( 300 * 2 ))s"; ls -la /tmp/.X11-unix 2>&1 || ls -la /tmp 2>&1 || true; exit 1

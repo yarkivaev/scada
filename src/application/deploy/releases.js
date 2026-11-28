@@ -94,6 +94,19 @@ function scadaRelease(document, server, profile, edges) {
     return withFlows(withProcess(values, profile, server), owned, routes, buses);
 }
 
+/** Build the release values for a concrete server in an already expanded document. */
+export function releaseFor(expanded, host) {
+    const links = edgesOf(expanded);
+    const profile = profileFor(expanded, host);
+    assertHeld(expanded, links);
+    return frozen({
+        ...(expanded.hmi !== undefined && { hmi: expanded.hmi }),
+        ...(profile.target && { target: profile.target }),
+        apps: passedApps(profile),
+        scada: scadaRelease(expanded, host, profile, links)
+    });
+}
+
 /**
  * Cuts one cluster out of a system document.
  *
@@ -105,14 +118,5 @@ function scadaRelease(document, server, profile, edges) {
  */
 export default function releases(document, cluster) {
     const expanded = expand(document);
-    const host = serverFor(expanded, cluster);
-    const links = edgesOf(expanded);
-    const profile = profileFor(expanded, host);
-    assertHeld(expanded, links);
-    return frozen({
-        ...(expanded.hmi !== undefined && { hmi: expanded.hmi }),
-        ...(profile.target && { target: profile.target }),
-        apps: passedApps(profile),
-        scada: scadaRelease(expanded, host, profile, links)
-    });
+    return releaseFor(expanded, serverFor(expanded, cluster));
 }

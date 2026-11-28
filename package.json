@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.15.0",
+  "version": "2.16.0",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -21,7 +21,8 @@
     "./runtime": "./src/application/runtime/index.js",
     "./streams": "./src/infrastructure/streams/index.js",
     "./control": "./src/application/control/index.js",
-    "./mdmesh": "./src/infrastructure/mdmesh/index.js"
+    "./mdmesh": "./src/infrastructure/mdmesh/index.js",
+    "./deployment": "./src/infrastructure/deploy/index.js"
   },
   "bin": {
     "modbus-to-mqtt": "./src/bin/modbus-to-mqtt.js",
