@@ -1,9 +1,12 @@
+import { setImmediate as yieldTurn } from 'node:timers/promises';
 import deliverySpool from '../../../src/infrastructure/persistence/runtime/deliverySpool.js';
 import deliveryQueue from '../../../src/application/runtime/deliveryQueue.js';
 const directory=process.argv[2];
 if(process.argv[3]==='buffered') {
     const queue=deliveryQueue(directory,{maxBytes:100000,groupCommit:{maxDelayMs:60000},factory(){throw new Error('offline');}});
     await queue.open();
+    // Start a sparse group after the startup barrier has finished running.
+    await yieldTurn();
     void queue.accept({eventId:'a'},[{id:'one',type:'amqp'}]);void queue.accept({eventId:'b'},[{id:'one',type:'amqp'}]);
     process.send('buffered');
 } else {

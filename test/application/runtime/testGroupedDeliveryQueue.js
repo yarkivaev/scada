@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import createQueue from '../../../src/application/runtime/deliveryQueue.js';
+import deliverySpool from '../../../src/infrastructure/persistence/runtime/deliverySpool.js';
 const destinations=[{id:'one',type:'amqp'}];
 function gate(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
 const pause=ms=>{return new Promise(resolve=>{setTimeout(resolve,ms);});};
@@ -14,16 +15,28 @@ function transactions(){
 }
 describe('grouped node delivery queue',()=>{
     let directory;const owned=[];
-    function queue(options={}){const value=createQueue(directory,{maxBytes:100000,factory(){return {async write(){}};},...options});owned.push(value);return value;}
+    function queue(options={}, inProcess=false){
+        const config={maxBytes:100000,factory(){return {async write(){}};},...options};
+        const spool=inProcess ? deliverySpool(directory,config) : undefined;
+        const value=createQueue(directory,config,spool);owned.push(value);return value;
+    }
     beforeEach(async()=>{directory=await mkdtemp(path.join(os.tmpdir(),'grouped-queue-'));});
     afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));await rm(directory,{recursive:true,force:true});});
+    it('opens, persists and acknowledges delivery without a SQLite transaction in the collector process',async()=>{
+        const observed=transactions();
+        try{
+            const item=queue();await item.open();await item.accept({eventId:'worker-owned'},destinations);
+            assert.deepEqual(await item.drain(),{delivered:1,failed:0});
+            await item.close();assert.equal(observed.count(),0);
+        }finally{observed.restore();}
+    });
     it('coalesces concurrent accept calls into one actual SQLite outer commit',async()=>{
-        const item=queue();await item.open();const observed=transactions();
+        const item=queue({},true);await item.open();const observed=transactions();
         try{await Promise.all(['a','b','c'].map(eventId=>{return item.accept({eventId},destinations);}));assert.equal(observed.count(),1);assert.equal(item.status().pending,3);}
         finally{observed.restore();}
     });
     it('groups confirmed receipts rather than committing once per recipient',async()=>{
-        const item=queue();await item.open();await Promise.all(['a','b','c'].map(eventId=>{return item.accept({eventId},destinations);}));
+        const item=queue({},true);await item.open();await Promise.all(['a','b','c'].map(eventId=>{return item.accept({eventId},destinations);}));
         const observed=transactions();try{assert.deepEqual(await item.drain(),{delivered:3,failed:0});assert.equal(observed.count(),2);assert.equal(item.status().pending,0);}finally{observed.restore();}
     });
     it('flushes accepted sparse groups on close and freezes event buffers and recipients',async()=>{
