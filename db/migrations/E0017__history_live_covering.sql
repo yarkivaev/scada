@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION history_apply_correction(p_work UUID,p_machine TEXT,p
 RETURNS INTEGER LANGUAGE plpgsql AS $$
 DECLARE w history_work%ROWTYPE; item history_corrections%ROWTYPE; owner history_annotations%ROWTYPE;
     tail segments%ROWTYPE; lo TIMESTAMPTZ; hi TIMESTAMPTZ; a TIMESTAMPTZ; b TIMESTAMPTZ;
-    incoming JSONB; inherited JSONB; endpoint_cut BOOLEAN; inserted INTEGER := 0; keys TEXT[] := ARRAY['casting','cadence_rule','cadence_threshold_ms','casting_detected_at','source_interrupted'];
+    incoming JSONB; inherited JSONB; endpoint_cut BOOLEAN; inserted INTEGER := 0; keys TEXT[] := ARRAY[]::TEXT[];
 BEGIN
     SELECT * INTO STRICT w FROM history_work WHERE id=p_work AND machine=p_machine;
     IF p_converged THEN

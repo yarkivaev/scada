@@ -19,7 +19,7 @@ async function writeCorrections(client,machine,work,segments) {
     }
 }
 /** Staged results stay invisible until their finite dependency has completed or converged. */
-export default async function historyCorrection(client,machine,work,segments,{base,context,timeScale}) {
+export default async function historyCorrection(client,machine,work,segments,{base,context,timeScale,processorProperties=[]}) {
     if(!context?.context.classifierKey || !base.workId || base.workId!==work.id){throw new TypeError('Claimed classifier context required for staged correction');}
     if(context.items.length && !base.checkpoint){throw new TypeError('Classifier checkpoint required for a nonempty correction page');}
     await writeCorrections(client,machine,work,segments);
@@ -29,6 +29,9 @@ export default async function historyCorrection(client,machine,work,segments,{ba
     const matches=await saveCheckpoint(client,machine,base.checkpoint,context,work);
     const converged=matches && await canConverge(client,machine,work,new Date(Math.round(context.page.until/timeScale)));
     const finished=context.page.next===null || converged;
-    if(finished){await client.query('SELECT history_apply_correction($1,$2,$3,$4)',[work.id,machine,timeScale,converged]);}
+    if (finished) {
+        await client.query('SELECT history_apply_correction($1,$2,$3,$4,$5::text[])',
+            [work.id,machine,timeScale,converged,processorProperties]);
+    }
     return finished?{next:null}:context.page;
 }

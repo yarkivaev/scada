@@ -214,19 +214,19 @@ describe('declared placement priority', () => {
         assert.equal(result.home.assignments.some((row) => { return row.taskId === 'calc'; }), false);
     });
     it('returns a single preferred copy to the restored home', () => {
-        const spec = { adapter: 'sokol-awgs', requireCheckpoint: true };
+        const spec = { adapter: 'custom-reader', requireCheckpoint: true };
         const input = { version: 'v1', nodes: [{ id: 'edge-2', capacity: 10 }, { id: 'edge-1', capacity: 10 }], tasks: [
-            { taskId: 'awgs', spec, copies: 1, preference: ['edge-2', 'edge-1'], eligibleNodes: ['edge-2', 'edge-1'] }
+            { taskId: 'batch-reader', spec, copies: 1, preference: ['edge-2', 'edge-1'], eligibleNodes: ['edge-2', 'edge-1'] }
         ] };
         const current = {
-            'edge-1': { generation: 4, assignments: [{ taskId: 'awgs', generation: 4, assignedAt: 1, specVersion: 1, spec }] },
+            'edge-1': { generation: 4, assignments: [{ taskId: 'batch-reader', generation: 4, assignedAt: 1, specVersion: 1, spec }] },
             'edge-2': { generation: 4, assignments: [] }
         };
         const result = schedule(input, [
-            report('edge-1', 40000, [{ taskId: 'awgs', generation: 4, state: 'running', lastRead: 40000 }]),
+            report('edge-1', 40000, [{ taskId: 'batch-reader', generation: 4, state: 'running', lastRead: 40000 }]),
             report('edge-2', 40000)
         ], current, { now: 40000, replacementDelayMs: 30000 });
-        assert.deepEqual(['edge-1', 'edge-2'].filter((id) => { return result[id].assignments.some((row) => { return row.taskId === 'awgs'; }); }),
+        assert.deepEqual(['edge-1', 'edge-2'].filter((id) => { return result[id].assignments.some((row) => { return row.taskId === 'batch-reader'; }); }),
             ['edge-2'], 'restored home left the only poller on the cache');
     });
     it('does not pull a single copy off the node that already stores the sensor', () => {

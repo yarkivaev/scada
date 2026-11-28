@@ -33,7 +33,7 @@ An unexpected MQTT publisher close/offline/error retires the session and notifie
 
 ## Central backup freshness
 
-Silent Modbus backup sources use `MX210/<device>` freshness identities. AMQP telemetry tracks `<source-family>/<device>`, so cooling for a device cannot hide missing MX210 electrical samples. Measurement topic paths are unchanged. Custom freshness callbacks must pass the source’s full identity to `seen()`.
+AMQP telemetry tracks `<source-family>/<device>` freshness identities independently. Samples from one source family cannot hide missing samples from another. Measurement topic paths are unchanged. Custom freshness callbacks must pass the source’s full identity to `seen()`.
 
 ---
 

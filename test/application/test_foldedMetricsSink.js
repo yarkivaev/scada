@@ -12,7 +12,7 @@ describe('foldedMetricsSink', function() {
         const written = [];
         const queries = [];
         const device = `tlc-${Math.random().toString(36).slice(2, 6)}`;
-        const key = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const key = `axis_${Math.random().toString(36).slice(2, 8)}`;
         const sink = foldedMetricsSink(
             {
                 write(rows) {
@@ -26,7 +26,7 @@ describe('foldedMetricsSink', function() {
                     return { rows: [] };
                 }
             },
-            { [device]: 'cm8' }
+            { [device]: 'line-8' }
         );
         await sink.write([{
             topic: `OPCUA/${device}/GET/${key}/VALUE`,

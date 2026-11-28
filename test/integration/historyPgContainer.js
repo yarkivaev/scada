@@ -53,31 +53,32 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0021__history_replica_outbox.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/V0016__timeline_replica_positions.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0023__timeline_replica_changes.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0025__history_processor_properties.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('does not conflict a classifier claim after unstarted same-bucket work grows',async()=>{
         const machine=`grow-ж-${Math.random().toString(36).slice(2,8)}`;
         const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000])});
-        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'classifier-v1');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time]);
         const original=(await store.work(machine)).items[0];
         const records=[{topic:`${machine}/power`,ts:time+1000,value:1}];
         await store.prepare(records);await store.complete(records);
-        const snapshot=await store.context(machine,original.from,original.until,0,{classifierKey:'casting',workId:original.id,workToken:original.token});
-        const result=await store.commit(machine,original.id,[],{...snapshot.context,revision:snapshot.revision,workToken:original.token,replace:true,checkpoint:{key:'casting',at:snapshot.items.at(-1).time,state:{count:1}}});
+        const snapshot=await store.context(machine,original.from,original.until,0,{classifierKey:'classifier-v1',workId:original.id,workToken:original.token});
+        const result=await store.commit(machine,original.id,[],{...snapshot.context,revision:snapshot.revision,workToken:original.token,replace:true,checkpoint:{key:'classifier-v1',at:snapshot.items.at(-1).time,state:{count:1}}});
         assert.equal(result.applied,true,'grown unstarted work still conflicted its fetched classifier claim');
     });
     it('pins a finite classifier generation while same-bucket appends get their own work',async()=>{
         const machine='finite-appends';const time=Math.floor(Date.now()/30000)*30000-60000;let offsets=[0,1000,5000];
         const store=historyPg(pool,{observations:()=>{return stagedSource(time,offsets)();}});
-        await store.configure(machine,[{topic:'finite/appends',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'finite/appends',channel:'power'}],30000,'classifier-v1');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time]);
         const original=(await store.work(machine)).items[0];
-        const snapshot=await store.context(machine,original.from,original.until,0,{classifierKey:'casting',workId:original.id,workToken:original.token});
+        const snapshot=await store.context(machine,original.from,original.until,0,{classifierKey:'classifier-v1',workId:original.id,workToken:original.token});
         const records=[{topic:'finite/appends',ts:time+10000,value:1}];
         await store.prepare(records);offsets=[...offsets,10000];await store.complete(records);
-        await store.commit(machine,original.id,[],{...snapshot.context,revision:snapshot.revision,workToken:original.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
+        await store.commit(machine,original.id,[],{...snapshot.context,revision:snapshot.revision,workToken:original.token,replace:true,checkpoint:{key:'classifier-v1',at:time+1000,state:{count:2}}});
         const remaining=(await store.work(machine)).items;
         assert.equal(remaining.find(item=>{return item.id===original.id;}).end,time+5000);
         assert(remaining.some(item=>{return item.id!==original.id && item.until===time+10000;}));
@@ -85,14 +86,14 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     it('keeps prepared admission eligibility and registered unstarted work across a long outage',async()=>{
         const machine='aged-admission';const time=Math.floor(Date.now()/30000)*30000-60000;let clock=time+29*86400000;
         const store=historyPg(pool,{now:()=>{return clock;},observations:stagedSource(time,[0])});
-        await store.configure(machine,[{topic:'aged/admission',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'aged/admission',channel:'power'}],30000,'classifier-v1');
         const records=[{topic:'aged/admission',ts:time,value:1}];await store.prepare(records);
         clock+=3*86400000;await store.complete(records);
         const work=(await store.work(machine)).items[0];assert(work,'prepared input lost its correction eligibility');
         clock+=86400000;
-        const snapshot=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const snapshot=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         assert.equal(snapshot.available,true);
-        await store.commit(machine,work.id,[],{...snapshot.context,revision:snapshot.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time,state:{count:1}}});
+        await store.commit(machine,work.id,[],{...snapshot.context,revision:snapshot.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time,state:{count:1}}});
         assert.equal((await store.work(machine)).items.length,0);
     });
     it('classifies external raw history without copying it into PostgreSQL and fences changed external context', async () => {
@@ -145,11 +146,11 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const time=Math.floor(Date.now()/30000)*30000-60000;
         const records=[{topic:`${machine}/power`,ts:time,value:1.25}];
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000])});
-        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'classifier-v1');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+1000]);
         const work=(await store.work(machine)).items[0];
         await store.prepare(records);
-        const snapshot=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const snapshot=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         const result=await store.commit(machine,work.id,[],{from:work.from,until:work.until,cursor:work.cursor,end:work.end,workToken:work.token});
         assert.equal(snapshot.available===false && result.applied===false && (await pool.query('SELECT 1 FROM history_work WHERE id=$1',[work.id])).rowCount===1,true,
             'an open telemetry admission still conflicted a classifier claim');
@@ -167,19 +168,19 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const store=historyPg(pool,{observations:external});
         await pool.query('DELETE FROM history_work WHERE machine=$1',[machine]);
         await pool.query('DELETE FROM history_classifiers WHERE machine=$1',[machine]);
-        await store.configure(machine,[{topic:'checkpoint/power',channel:'power'}],30000,'casting-v1');
+        await store.configure(machine,[{topic:'checkpoint/power',channel:'power'}],30000,'classifier-v1');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time+2000]);
         const work=(await store.work(machine)).items[0];
-        const first=await store.context(machine,work.from,work.until,0,{classifierKey:'casting-v1'});
-        assert.equal(first.context.classifierKey,'casting-v1');
+        const first=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1'});
+        assert.equal(first.context.classifierKey,'classifier-v1');
         assert.equal(first.page.from,time);
-        await store.commit(machine,work.id,[],{...first.context,revision:first.revision,workToken:work.token,checkpoint:{key:'casting-v1',at:time+1000,state:{count:2}}});
+        await store.commit(machine,work.id,[],{...first.context,revision:first.revision,workToken:work.token,checkpoint:{key:'classifier-v1',at:time+1000,state:{count:2}}});
         const restarted=historyPg(pool,{observations:external});
         const next=(await restarted.work(machine)).items[0];
-        const continuation=await restarted.context(machine,next.from,next.until,0,{cursor:next.cursor,end:next.end,classifierKey:'casting-v1'});
+        const continuation=await restarted.context(machine,next.from,next.until,0,{cursor:next.cursor,end:next.end,classifierKey:'classifier-v1'});
         assert.deepEqual(continuation.classifierSeed,{at:time+1000,state:{count:2}});
-        await restarted.configure(machine,[{topic:'checkpoint/power',channel:'power'}],30000,'casting-v2');
-        await assert.rejects(restarted.commit(machine,next.id,[],{...continuation.context,revision:continuation.revision,workToken:next.token,checkpoint:{key:'casting-v1',at:time+3000,state:{count:4}}}),/classifier|claim/u);
+        await restarted.configure(machine,[{topic:'checkpoint/power',channel:'power'}],30000,'classifier-v2');
+        await assert.rejects(restarted.commit(machine,next.id,[],{...continuation.context,revision:continuation.revision,workToken:next.token,checkpoint:{key:'classifier-v1',at:time+3000,state:{count:4}}}),/classifier|claim/u);
         assert((await restarted.work(machine)).items.length>0);
     });
     it('invalidates late-data checkpoints and retires bounded replay only at an equal classifier state', async () => {
@@ -192,23 +193,23 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};}
         };};
         const store=historyPg(pool,{observations:source});
-        await store.configure(machine,[{topic:'convergence/power',channel:'power'}],30000,'casting');
-        await pool.query('INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES($1,$2,$3,$4),($1,$2,$5,$6)',[machine,'casting',time+1000,{count:2},time+3000,{count:4}]);
+        await store.configure(machine,[{topic:'convergence/power',channel:'power'}],30000,'classifier-v1');
+        await pool.query('INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES($1,$2,$3,$4),($1,$2,$5,$6)',[machine,'classifier-v1',time+1000,{count:2},time+3000,{count:4}]);
         const records=[{topic:'convergence/power',ts:time+1000,value:99}];
         await store.prepare(records);await store.complete(records);
         assert((await pool.query('SELECT valid FROM history_checkpoints WHERE machine=$1',[machine])).rows.every(row=>{return row.valid===false;}));
         let work=(await store.work(machine)).items[0];
-        let page=await store.context(machine,work.from,work.until,0,{classifierKey:'casting'});
+        let page=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1'});
         assert.equal(page.classifierSeed,null);
-        await assert.rejects(store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'casting',at:time,state:{count:3}}}),/checkpoint/u);
+        await assert.rejects(store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'classifier-v1',at:time,state:{count:3}}}),/checkpoint/u);
         assert.equal((await store.work(machine)).items[0].token,work.token);
-        await store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'casting',at:time+1000,state:{count:3}}});
+        await store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'classifier-v1',at:time+1000,state:{count:3}}});
         work=(await store.work(machine)).items[0];
-        page=await store.context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'casting'});
+        page=await store.context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'classifier-v1'});
         assert.deepEqual(page.classifierSeed,{at:time+1000,state:{count:3}});
         assert.equal(page.page.until,time+3000);
         assert.equal(page.page.end,time+6000);
-        await store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'casting',at:time+3000,state:{count:4}}});
+        await store.commit(machine,work.id,[],{...page.context,revision:page.revision,workToken:work.token,checkpoint:{key:'classifier-v1',at:time+3000,state:{count:4}}});
         assert.equal((await store.work(machine)).items.length,0);
     });
     it('refuses external completion without its durable admission barrier', async () => {
@@ -236,7 +237,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const machine='cross-work-rewind';const time=Math.floor(Date.now()/30000)*30000-60000;
         const source=()=>{return {async registered(){}};};
         const store=historyPg(pool,{observations:source});
-        await store.configure(machine,[{topic:'cross-work/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'cross-work/power',channel:'power'}],30000,'classifier-v1');
         const old=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms,cursor_ms,end_ms) VALUES(gen_random_uuid(),$1,$2,$3,$3,$4) RETURNING id,token',[machine,time,time+1000,time+9000]);
         const record={topic:'cross-work/power',ts:time+500,value:9};
         await store.prepare([record]);await store.complete([record]);
@@ -247,7 +248,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     it('keeps valid paged classifier progress when new admissions only append beyond its cursor', async () => {
         const machine='append-keeps-progress';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:()=>{return {async registered(){}};}});
-        await store.configure(machine,[{topic:'append-progress/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'append-progress/power',channel:'power'}],30000,'classifier-v1');
         const old=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms,cursor_ms,end_ms) VALUES(gen_random_uuid(),$1,$2,$3,$3,$4) RETURNING id,token',[machine,time,time+1000,time+9000]);
         const record={topic:'append-progress/power',ts:time+5000,value:9};
         await store.prepare([record]);await store.complete([record]);
@@ -255,36 +256,38 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(current.cursor,time+1000);
         assert.equal(current.token,old.rows[0].token);
     });
-    it('publishes a complete staged casting correction to the outbox with the latest operator cuts and labels', async () => {
-        const machine='staged-casting';const time=Math.floor(Date.now()/30000)*30000-60000;
+    it('publishes a complete staged correction to the outbox with the latest operator cuts and labels', async () => {
+        const machine='staged-classifier';const time=Math.floor(Date.now()/30000)*30000-60000;
         const points=[0,1000,5000].map(offset=>{return {eventId:`staged${offset}`,channel:'power',time:time+offset,value:offset};});
         const source=()=>{return {async registered(){},async start(){return time;},async seed(){return null;},async boundary(){return time+5000;},
             async page(id,left,end){const remaining=points.filter(p=>{return p.time>=left && p.time<=end;});return {from:left,until:remaining.length>2?remaining[1].time:end,next:remaining[2]?.time ?? null,end};},
             async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};}
         };};
-        const store=historyPg(pool,{observations:source});
+        const store=historyPg(pool,{observations:source,processorProperties:['model_threshold','retired_model_flag']});
         const replication={exchange:'scada.segments',routingKey:'',protocol:'transactional-history-outbox-v2'};
-        await store.configure(machine,[{topic:'staged/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'staged/power',channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties,resolved) VALUES($1,'phase','on',$2,$3,3,$5,$7,true),($1,'phase','on',$3,$4,2,$6,$7,true)",
-            [machine,new Date(time),new Date(time+3000),new Date(time+5000),'["left"]','["right"]','{"cadence_threshold_ms":"99","operator_note":"keep"}']);
+            [machine,new Date(time),new Date(time+3000),new Date(time+5000),'["left"]','["right"]','{"model_threshold":"99","retired_model_flag":"old","operator_note":"keep"}']);
         const initial=(await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
         const inserted=await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING id',[machine,time,time+5000]);
         let work=(await store.work(machine)).items.find(row=>{return row.id===inserted.rows[0].id;});
-        let context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
-        const first={kind:'phase',name:'on',start_time:new Date(time+1000),end_time:new Date(time+1000),duration:0,tags:[],properties:{casting:'true',cadence_threshold_ms:'10'}};
-        await store.commit(machine,work.id,[first],{...context.context,revision:context.revision,workToken:work.token,replace:true,replication,fence:{outputId:work.token},checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
+        let context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
+        const first={kind:'phase',name:'on',start_time:new Date(time+1000),end_time:new Date(time+1000),duration:0,tags:[],properties:{model_threshold:'10',operator_note:'classifier suggestion'}};
+        await store.commit(machine,work.id,[first],{...context.context,revision:context.revision,workToken:work.token,replace:true,replication,fence:{outputId:work.token},checkpoint:{key:'classifier-v1',at:time+1000,state:{count:2}}});
         assert.deepEqual((await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows,initial);
         assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'0');
         assert.equal((await pool.query('SELECT count(*) FROM history_replica_outbox WHERE machine=$1',[machine])).rows[0].count,'0');
         await pool.query('UPDATE segments SET consumed=false,tags=$3 WHERE machine=$1 AND start_time=$2',[machine,new Date(time+3000),'["new-right"]']);
         const continuingId=work.id;
         work=(await store.work(machine)).items.find(row=>{return row.id===continuingId;});
-        context=await historyPg(pool,{observations:source}).context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'casting',workId:work.id,workToken:work.token});
+        context=await historyPg(pool,{observations:source}).context(machine,work.from,work.until,0,{cursor:work.cursor,end:work.end,classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         assert.deepEqual(context.classifierSeed,{at:time+1000,state:{count:2}});
-        await store.commit(machine,work.id,[{...first,end_time:new Date(time+5000),duration:4}],{...context.context,revision:context.revision,workToken:work.token,replace:true,replication,fence:{outputId:work.token},checkpoint:{key:'casting',at:time+5000,state:{count:3}}});
+        await store.commit(machine,work.id,[{...first,end_time:new Date(time+5000),duration:4}],{...context.context,revision:context.revision,workToken:work.token,replace:true,replication,fence:{outputId:work.token},checkpoint:{key:'classifier-v1',at:time+5000,state:{count:3}}});
         const rows=(await pool.query('SELECT start_time,end_time,tags,properties,consumed FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
         assert.deepEqual(rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[1000,3000,['left']],[3000,5000,['new-right']]]);
-        assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_threshold_ms==='10' && p.operator_note==='keep';}));
+        rows.forEach(row => {
+            assert.deepEqual(JSON.parse(row.properties), { model_threshold: '10', operator_note: 'keep' });
+        });
         assert.equal(rows.at(-1).consumed,false);
         const outbound=(await pool.query("SELECT segment->>'tags' AS tags FROM history_replica_outbox WHERE machine=$1 AND segment ? 'name' ORDER BY (segment->>'start_time')::timestamptz",[machine])).rows;
         assert.deepEqual(outbound,rows.map(({tags})=>{return {tags};}));
@@ -296,79 +299,79 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
     it('converges staged replay without manufacturing a page cut or losing the unprocessed user tail', async () => {
         const machine='staged-convergence';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,2000,3000,4000,5000,6000])});
-        await store.configure(machine,[{topic:'staged-convergence/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'staged-convergence/power',channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','on',$2,$3,3,$5),($1,'phase','on',$3,$4,3,$6)",
             [machine,new Date(time),new Date(time+3000),new Date(time+6000),'["left"]','["right"]']);
-        await pool.query('INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES($1,$2,$3,$4)',[machine,'casting',time+1000,{count:2}]);
+        await pool.query('INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES($1,$2,$3,$4)',[machine,'classifier-v1',time+1000,{count:2}]);
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$2)',[machine,time]);
         const work=(await store.work(machine)).items[0];
-        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         assert.equal(context.page.until,time+1000);assert.equal(context.page.end,time+6000);
-        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time),end_time:new Date(time+1000),duration:0,tags:[],properties:{casting:'true'}}],
-            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}});
+        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time),end_time:new Date(time+1000),duration:0,tags:[],properties:{classifier_flag:'true'}}],
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time+1000,state:{count:2}}});
         assert.equal((await store.work(machine)).items.length,0);
         assert.deepEqual((await pool.query('SELECT start_time,end_time,tags FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[0,3000,['left']],[3000,6000,['right']]]);
     });
-    it('removes obsolete automatic phases when the corrected casting history has no confirmed island', async () => {
+    it('removes obsolete automatic phases when the corrected classifier history has no confirmed island', async () => {
         const machine='staged-empty';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,5000])});
-        await store.configure(machine,[{topic:'staged-empty/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'staged-empty/power',channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags) VALUES($1,'phase','on',$2,$3,0,$4)",[machine,new Date(time),new Date(time+5000),JSON.stringify(['keep'])]);
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
         const work=(await store.work(machine)).items[0];
-        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
-        await store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{last:null}}});
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
+        await store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time+5000,state:{last:null}}});
         assert.equal((await pool.query('SELECT count(*) FROM segments WHERE machine=$1',[machine])).rows[0].count,'0');
         assert.equal((await pool.query('SELECT tags FROM history_annotations WHERE machine=$1',[machine])).rows[0].tags,'["keep"]');
     });
     it('keeps a real user cut at the last singleton without leaving the preceding slice pending', async () => {
         const machine='staged-final-cut';const time=Math.floor(Date.now()/30000)*30000-60000;
-        const store=historyPg(pool,{observations:stagedSource(time,[0,5000])});
-        await store.configure(machine,[{topic:'staged-final-cut/power',channel:'power'}],30000,'casting');
+        const store=historyPg(pool,{observations:stagedSource(time,[0,5000]),processorProperties:['model_state']});
+        await store.configure(machine,[{topic:'staged-final-cut/power',channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties) VALUES($1,'phase','on',$2,$3,5,$4,$6),($1,'phase','on',$3,$3,0,$5,$6)",
-            [machine,new Date(time),new Date(time+5000),'["left"]','["singleton"]','{"cadence_rule":"old","note":"keep"}']);
+            [machine,new Date(time),new Date(time+5000),'["left"]','["singleton"]','{"model_state":"old","note":"keep"}']);
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
         const work=(await store.work(machine)).items[0];
-        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
-        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time),end_time:new Date(time+5000),duration:0,tags:[],properties:{casting:'true',cadence_rule:'fresh'}}],
-            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{count:2}}});
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
+        await store.commit(machine,work.id,[{name:'on',start_time:new Date(time),end_time:new Date(time+5000),duration:0,tags:[],properties:{classifier_flag:'true',model_state:'fresh'}}],
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time+5000,state:{count:2}}});
         const rows=(await pool.query('SELECT start_time,duration,tags,properties FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
         assert.deepEqual(rows.map(row=>{return [row.start_time.getTime()-time,row.duration,JSON.parse(row.tags)];}),[[0,5,['left']],[5000,0,['singleton']]]);
-        assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_rule==='fresh' && p.note==='keep';}));
+        assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.model_state==='fresh' && p.note==='keep';}));
     });
     it('does not advance staged work when a nonempty page omits its classifier checkpoint', async () => {
         const machine='staged-missing-state';const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time)});
-        await store.configure(machine,[{topic:'staged-missing-state/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'staged-missing-state/power',channel:'power'}],30000,'classifier-v1');
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
         const work=(await store.work(machine)).items[0];
-        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         await assert.rejects(store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,replace:true}),/checkpoint/u);
         assert.equal((await store.work(machine)).items[0].cursor,null);
     });
     it('discards an obsolete staged generation after a late point rewinds its processed prefix', async () => {
         const machine='staged-rewind';const time=Math.floor(Date.now()/30000)*30000-60000;let changed=false;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000],offset=>{return changed && offset===0?99:offset;})});
-        await store.configure(machine,[{topic:'staged-rewind/power',channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:'staged-rewind/power',channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','on',$2,$3,0)",[machine,new Date(time),new Date(time+5000)]);
         const inserted=(await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING id',[machine,time,time+5000])).rows[0];
         let work=(await store.work(machine)).items.find(row=>{return row.id===inserted.id;});
-        let context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
-        const oldClaim={...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{count:2}}};
+        let context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
+        const oldClaim={...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time+1000,state:{count:2}}};
         await store.commit(machine,work.id,[{name:'on',start_time:new Date(time+1000),end_time:new Date(time+1000),duration:0,tags:[]}],oldClaim);
         const records=[{topic:'staged-rewind/power',ts:time,value:99}];
         await store.prepare(records);changed=true;await store.complete(records);
         await assert.rejects(store.commit(machine,inserted.id,[],oldClaim),/claim/u);
         work=(await store.work(machine)).items.find(row=>{return row.id===inserted.id;});
         assert.equal(work.cursor,null);
-        context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         assert.equal(context.classifierSeed,null);
         await store.commit(machine,work.id,[{name:'off',start_time:new Date(time),end_time:new Date(time+1000),duration:0,tags:[]}],
-            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+1000,state:{mode:'off',count:2}}});
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time+1000,state:{mode:'off',count:2}}});
         work=(await store.work(machine)).items.find(row=>{return row.id===inserted.id;});
-        context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token,cursor:work.cursor,end:work.end});
+        context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token,cursor:work.cursor,end:work.end});
         await store.commit(machine,work.id,[{name:'off',start_time:new Date(time),end_time:new Date(time+5000),duration:0,tags:[]}],
-            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'casting',at:time+5000,state:{mode:'off',count:3}}});
+            {...context.context,revision:context.revision,workToken:work.token,replace:true,checkpoint:{key:'classifier-v1',at:time+5000,state:{mode:'off',count:3}}});
         const rows=(await pool.query('SELECT name,start_time,end_time FROM segments WHERE machine=$1 ORDER BY start_time',[machine])).rows;
         assert.deepEqual(rows.map(row=>{return [row.name,row.start_time.getTime()-time,row.end_time.getTime()-time];}),[['off',0,5000]]);
         assert.equal((await pool.query('SELECT count(*) FROM history_corrections WHERE machine=$1',[machine])).rows[0].count,'0');
@@ -436,9 +439,9 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
 
     it('creates historical work atomically when persisted telemetry arrives without supervisor', async () => {
         const store = historyPg(pool);
-        await store.configure('offline', [{topic:'MX210/icht-1/GET/AI3/VALUE',channel:'power'}]);
+        await store.configure('offline', [{topic:'analog/drive-1/GET/AI3/VALUE',channel:'power'}]);
         const time=Math.floor(Date.now()/30000)*30000-150000;
-        await pool.query('INSERT INTO metrics(topic,ts,value) VALUES($1,$2,$3)', ['MX210/icht-1/GET/AI3/VALUE',new Date(time),5]);
+        await pool.query('INSERT INTO metrics(topic,ts,value) VALUES($1,$2,$3)', ['analog/drive-1/GET/AI3/VALUE',new Date(time),5]);
         assert.equal((await store.work('offline')).items.length,1);
         assert.equal((await store.context('offline',time,time)).items[0].value,5);
     });
@@ -520,6 +523,9 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/E0008__metric_receipts_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0012__external_history_grants.sql', import.meta.url),'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0014__history_correction_grants.sql', import.meta.url),'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0026__history_processor_properties_grants.sql', import.meta.url),'utf8'));
+        assert.equal((await pool.query(`SELECT has_function_privilege(
+            'supervisor_sink', 'history_apply_correction(uuid,text,integer,boolean,text[])', 'EXECUTE') AS allowed`)).rows[0].allowed, true);
         await pool.query(await readFile(new URL('../../db/migrations/E0016__history_retention_grants.sql', import.meta.url),'utf8'));
         await pool.query('GRANT SELECT, INSERT, UPDATE ON segment_timeline_revisions TO supervisor_sink');
         const client=await pool.connect();
@@ -530,8 +536,8 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             await client.query("INSERT INTO history_topics(machine,topic,channel) VALUES('role','role/topic','value')");
             await client.query("INSERT INTO history_admissions(event_id,topic,time_ms) VALUES('role-event','role/topic',1)");
             await assert.rejects(historyPg(client,{observations:()=>{return {};}}).context('role',1,1),/admission/u);
-            await client.query("INSERT INTO history_classifiers(machine,classifier_key) VALUES('role','casting')");
-            await client.query("INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES('role','casting',1,'{}')");
+            await client.query("INSERT INTO history_classifiers(machine,classifier_key) VALUES('role','classifier-v1')");
+            await client.query("INSERT INTO history_checkpoints(machine,classifier_key,time_ms,state) VALUES('role','classifier-v1',1,'{}')");
             await client.query("UPDATE history_checkpoints SET valid=false WHERE machine='role'");
             await client.query("DELETE FROM history_admissions WHERE event_id='role-event'");
             const rolePool={query:client.query.bind(client),async connect(){return {query:client.query.bind(client),release(){}};}};
@@ -541,7 +547,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             const at=Date.now();
             const staged=(await client.query("INSERT INTO history_work(id,machine,from_ms,until_ms,correction_from,correction_until) VALUES(gen_random_uuid(),'role-stage',$1,$2,$1,$2) RETURNING id,generation",[at,at+1000])).rows[0];
             await client.query("INSERT INTO history_corrections(work_id,generation,machine,kind,name,start_time,end_time,duration) VALUES($1,$2,'role-stage','phase','on',$3,$4,1)",[staged.id,staged.generation,new Date(at),new Date(at+1000)]);
-            await client.query("SELECT history_apply_correction($1,'role-stage',1,false)",[staged.id]);
+            await client.query("SELECT history_apply_correction($1,'role-stage',1,false,$2::text[])",[staged.id,[]]);
             assert.equal((await client.query("SELECT count(*) FROM segments WHERE machine='role-stage'")).rows[0].count,'1');
             await client.query('DELETE FROM history_work WHERE id=$1',[staged.id]);
         } finally { await client.query('RESET ROLE'); client.release(); }
@@ -563,12 +569,12 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const machine=`env-ж-${Math.random().toString(36).slice(2,8)}`;
         const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000])});
-        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,0)",
             [machine,new Date(time-8_124_283),new Date(Date.now()+5_741)]);
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
         const work=(await store.work(machine)).items[0];
-        await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         const stored=Number((await pool.query('SELECT end_ms FROM history_work WHERE id=$1',[work.id])).rows[0].end_ms);
         assert.equal(stored,time+5000,'classifier work still absorbed a live covering heartbeat');
     });
@@ -576,14 +582,14 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const machine=`hb-ж-${Math.random().toString(36).slice(2,8)}`;
         const time=Math.floor(Date.now()/30000)*30000-60000;
         const store=historyPg(pool,{observations:stagedSource(time,[0,1000,5000])});
-        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'casting');
+        await store.configure(machine,[{topic:`${machine}/power`,channel:'power'}],30000,'classifier-v1');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration) VALUES($1,'phase','off',$2,$3,0)",
             [machine,new Date(time-8_124_283),new Date(time+5000)]);
         await pool.query('INSERT INTO history_work(id,machine,from_ms,until_ms) VALUES(gen_random_uuid(),$1,$2,$3)',[machine,time,time+5000]);
         const work=(await store.work(machine)).items[0];
-        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'casting',workId:work.id,workToken:work.token});
+        const context=await store.context(machine,work.from,work.until,0,{classifierKey:'classifier-v1',workId:work.id,workToken:work.token});
         await pool.query('UPDATE segments SET end_time=$2,updated_at=clock_timestamp() WHERE machine=$1 AND duration=0',[machine,new Date(time+9000)]);
-        const result=await store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,checkpoint:{key:'casting',at:context.items.at(-1).time,state:{count:1}}});
+        const result=await store.commit(machine,work.id,[],{...context.context,revision:context.revision,workToken:work.token,checkpoint:{key:'classifier-v1',at:context.items.at(-1).time,state:{count:1}}});
         assert.equal(result.applied,true,'a live covering heartbeat still conflicted a closed history page');
     });
 
@@ -791,7 +797,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(off.rows[0]?.name,'heat');
     });
 
-    it('withholds the furnace bucket that is still receiving observations', async () => {
+    it('withholds the machine bucket that is still receiving observations', async () => {
         const machine='открытый-бакет';
         const store=historyPg(pool);
         await store.configure(machine,[{topic:'открытый/бакет',channel:'power'}],30000);
@@ -803,10 +809,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             {eventId:`открытый-${open}`,channel:'power',time:open,value:4.5}
         ]);
         const offered=(await store.work(machine)).items.some((item)=>{return item.until>=Math.floor(now/30000)*30000;});
-        assert.equal(offered,false,'open furnace bucket was handed to the worker');
+        assert.equal(offered,false,'open machine bucket was handed to the worker');
     });
 
-    it('does not offer the just-closed furnace bucket that can still receive observations', async () => {
+    it('does not offer the just-closed machine bucket that can still receive observations', async () => {
         const machine='только-что-закрытый';
         const store=historyPg(pool);
         await store.configure(machine,[{topic:'только-что/закрытый',channel:'power'}],30000);
@@ -817,7 +823,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.equal(offered,false,'work still offered the just-closed bucket');
     });
 
-    it('offers a furnace bucket once its window has closed', async () => {
+    it('offers a machine bucket once its window has closed', async () => {
         const machine='закрытый-бакет';
         const store=historyPg(pool);
         await store.configure(machine,[{topic:'закрытый/бакет',channel:'power'}],30000);
@@ -825,10 +831,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         const closed=Math.floor(now/30000)*30000-60000+800;
         await store.accept(machine,[{eventId:`закрытый-${closed}`,channel:'power',time:closed,value:8.5}]);
         const offered=(await store.work(machine)).items.some((item)=>{return item.until===closed;});
-        assert.equal(offered,true,'closed furnace bucket was withheld');
+        assert.equal(offered,true,'closed machine bucket was withheld');
     });
 
-    it('does not fold the still-open furnace bucket into a closed page', async () => {
+    it('does not fold the still-open machine bucket into a closed page', async () => {
         const machine='граница-страницы';
         const store=historyPg(pool);
         await store.configure(machine,[{topic:'граница/страницы',channel:'power'}],30000);

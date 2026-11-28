@@ -38,7 +38,7 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 240000);
         assert.throws(function() {
             checkSplit({ name: 'on', start_time: start, end_time: end, duration: 240 }, [
-                piece(start, end, 'шлак')
+                piece(start, end, 'этап_б')
             ]);
         }, RangeError, 'a non-off parent was split');
     });
@@ -57,8 +57,8 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 240000);
         assert.throws(function() {
             checkSplit(parent(start, end, 240), [
-                piece(earlier, start, 'шлак'),
-                piece(start, end, 'шихта')
+                piece(earlier, start, 'этап_б'),
+                piece(start, end, 'шлинияа')
             ]);
         }, RangeError, 'a piece before the parent start was accepted');
     });
@@ -70,8 +70,8 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 360000);
         assert.throws(function() {
             checkSplit(parent(start, end, 360), [
-                piece(start, cut, 'шлак'),
-                piece(overlap, end, 'шихта')
+                piece(start, cut, 'этап_б'),
+                piece(overlap, end, 'шлинияа')
             ]);
         }, RangeError, 'an overlapping split was accepted');
     });
@@ -83,8 +83,8 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 360000);
         assert.throws(function() {
             checkSplit(parent(start, end, 360), [
-                piece(start, cut, 'шлак'),
-                piece(later, end, 'шихта')
+                piece(start, cut, 'этап_б'),
+                piece(later, end, 'шлинияа')
             ]);
         }, RangeError, 'a one millisecond gap was accepted');
     });
@@ -94,8 +94,8 @@ describe('checkSplit adversarial bounds', function() {
         const cut = new Date(start.getTime() + 59999);
         const end = new Date(start.getTime() + 240000);
         const ordered = checkSplit(parent(start, end, 240), [
-            piece(start, cut, 'шлак'),
-            piece(cut, end, 'шихта')
+            piece(start, cut, 'этап_б'),
+            piece(cut, end, 'шлинияа')
         ]);
         assert.strictEqual(ordered[0].end.getTime() - start.getTime(), 59999, 'a 59999 millisecond piece was refused');
     });
@@ -105,7 +105,7 @@ describe('checkSplit adversarial bounds', function() {
         const cut = new Date(start.getTime() + 60000);
         const end = new Date(start.getTime() + 240000);
         const ordered = checkSplit(parent(start, end, 240), [
-            piece(start, cut, 'шлак'),
+            piece(start, cut, 'этап_б'),
             piece(cut, end, '')
         ]);
         assert.strictEqual(ordered[0].end.getTime() - ordered[0].start.getTime(), 60000, 'a 60 second piece was refused');
@@ -117,8 +117,8 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 360000);
         assert.throws(function() {
             checkSplit(parent(start, end, 360), [
-                piece(start, cut, 'шлак', true),
-                piece(cut, end, 'шихта')
+                piece(start, cut, 'этап_б', true),
+                piece(cut, end, 'шлинияа')
             ]);
         }, RangeError, 'an open middle piece was accepted on a closed off');
     });
@@ -129,7 +129,7 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 360000);
         assert.throws(function() {
             checkSplit(parent(start, end, 360), [
-                piece(start, cut, 'шлак'),
+                piece(start, cut, 'этап_б'),
                 piece(cut, end, '', true)
             ]);
         }, RangeError, 'an open tail was accepted on a closed off');
@@ -142,8 +142,8 @@ describe('checkSplit adversarial bounds', function() {
         const past = new Date(end.getTime() + 60000);
         assert.throws(function() {
             checkSplit(parent(start, end, 360), [
-                piece(start, cut, 'шлак'),
-                piece(cut, past, 'шихта')
+                piece(start, cut, 'этап_б'),
+                piece(cut, past, 'шлинияа')
             ]);
         }, RangeError, 'a tail past the closed off was accepted');
     });
@@ -155,8 +155,8 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 360000);
         assert.throws(function() {
             checkSplit(parent(start, end, undefined), [
-                piece(start, cut, 'шлак'),
-                piece(cut, early, 'шихта')
+                piece(start, cut, 'этап_б'),
+                piece(cut, early, 'шлинияа')
             ]);
         }, RangeError, 'a missing duration skipped closed cover');
     });
@@ -168,8 +168,8 @@ describe('checkSplit adversarial bounds', function() {
         const end = new Date(start.getTime() + 360000);
         assert.throws(function() {
             checkSplit(parent(start, end, null), [
-                piece(start, cut, 'шлак'),
-                piece(cut, early, 'шихта')
+                piece(start, cut, 'этап_б'),
+                piece(cut, early, 'шлинияа')
             ]);
         }, RangeError, 'null duration skipped closed cover');
     });
@@ -180,7 +180,7 @@ describe('checkSplit adversarial bounds', function() {
         const tip = new Date(cut.getTime() + 1);
         const end = new Date(start.getTime() + 360000);
         const ordered = checkSplit(parent(start, end, 0), [
-            piece(start, cut, 'шлак'),
+            piece(start, cut, 'этап_б'),
             piece(cut, tip, '', true)
         ]);
         assert.strictEqual(ordered[1].open, true, 'a short open tail was refused on a pending off');
@@ -190,9 +190,9 @@ describe('checkSplit adversarial bounds', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 120000);
         const end = new Date(start.getTime() + 360000);
-        const rows = splitRows('ичт-π', checkSplit(parent(start, end, 360), [
+        const rows = splitRows('линия-π', checkSplit(parent(start, end, 360), [
             piece(cut, end, ''),
-            piece(start, cut, 'шлак')
+            piece(start, cut, 'этап_б')
         ]));
         assert.strictEqual(
             JSON.parse(rows[1].properties).split_of,
@@ -208,7 +208,7 @@ describe('replaceSplit adversarial delete', function() {
         const stale = new Date(start.getTime() + 90000);
         const cut = new Date(start.getTime() + 120000);
         const end = new Date(start.getTime() + 360000);
-        const machine = `ичт-${Math.floor(Math.random() * 8000 + 2000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 8000 + 2000)}`;
         const other = `печь-${Math.floor(Math.random() * 8000 + 2000)}`;
         const origin = String(start.getTime());
         const calls = [];
@@ -220,7 +220,7 @@ describe('replaceSplit adversarial delete', function() {
             release() {}
         };
         const pieces = splitRows(machine, checkSplit(parent(start, end, 360), [
-            piece(start, cut, 'шлак'),
+            piece(start, cut, 'этап_б'),
             piece(cut, end, '')
         ]));
         await replaceSplit({

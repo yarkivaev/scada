@@ -6,7 +6,7 @@ describe('coverageOverlay', function() {
         const from = '2024-11-02T03:04:05.137Z';
         const mid = '2024-11-02T03:04:25.137Z';
         const to = '2024-11-02T03:04:45.137Z';
-        const first = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const first = `этап_б-α-${Math.floor(Math.random() * 90)}`;
         const second = `простой-β-${Math.floor(Math.random() * 90)}`;
         const spans = coverageOverlay([{
             from,

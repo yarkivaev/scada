@@ -1,5 +1,5 @@
-import assert from 'assert';
-import foldCastingPhases from '../../../../src/infrastructure/ingest/sinks/foldCastingPhases.js';
+import assert from 'node:assert/strict';
+import repairPhaseOverlaps from '../../../../src/infrastructure/ingest/sinks/repairPhaseOverlaps.js';
 
 function phase(machine, name, start, end, tags) {
     return {
@@ -31,13 +31,6 @@ function fakePool(rowsByMachine, failures) {
     const pool = {
         seen,
         written,
-        async query(sql, params) {
-            seen.push({ sql, params });
-            if (/SELECT DISTINCT machine/u.test(sql)) {
-                return { rows: Object.keys(rowsByMachine).map((machine) => { return { machine }; }) };
-            }
-            return { rows: [], rowCount: 0 };
-        },
         async connect() {
             const stored = new Map(Object.entries(rowsByMachine).map(([machine, rows]) => {
                 return [machine, rows.map((row) => { return { ...row }; })];
@@ -83,10 +76,10 @@ function fakePool(rowsByMachine, failures) {
     return pool;
 }
 
-describe('foldCastingPhases', function () {
-    it('clips a covering empty off around later ons on a casting machine', async function () {
+describe('repairPhaseOverlaps', function () {
+    it('clips a covering empty off around later ons', async function () {
         const origin = 1_704_000_000_000 + Math.floor(Math.random() * 1e8);
-        const machine = 'cm7';
+        const machine = 'line-7';
         const pool = fakePool({
             [machine]: [
                 phase(machine, 'off', origin, origin + 20_000, []),
@@ -94,7 +87,7 @@ describe('foldCastingPhases', function () {
                 phase(machine, 'on', origin + 12_000, origin + 15_000, [])
             ]
         });
-        await foldCastingPhases(pool);
+        await repairPhaseOverlaps(pool, [machine]);
         const upserted = pool.written.map((item) => {
             return {
                 start_time: item.params[3],
@@ -107,12 +100,12 @@ describe('foldCastingPhases', function () {
             return upserted.slice(i + 1).some((right) => { return overlap(left, right); });
         });
         assert.equal(names.includes('on') && names.includes('off') && crossed === false, true,
-            'casting repair still left ons inside the covering off');
+            'phase repair still left ons inside the covering off');
     });
 
-    it('does not reopen a completed last casting span as live', async function () {
+    it('does not reopen a completed last span as live', async function () {
         const origin = 1_704_300_000_000 + Math.floor(Math.random() * 1e8);
-        const machine = `cm${1 + Math.floor(Math.random() * 8)}`;
+        const machine = `line-${1 + Math.floor(Math.random() * 8)}`;
         const pool = fakePool({
             [machine]: [
                 phase(machine, 'off', origin, origin + 20_000, []),
@@ -120,41 +113,38 @@ describe('foldCastingPhases', function () {
                 phase(machine, 'on', origin + 12_000, origin + 15_000, [])
             ]
         });
-        await foldCastingPhases(pool);
+        await repairPhaseOverlaps(pool, [machine]);
         const live = pool.written.some((item) => { return item.params[5] === 0; });
-        assert.equal(live, false, 'casting repair still reopened the last completed span');
+        assert.equal(live, false, 'phase repair still reopened the last completed span');
     });
 
-    it('does not read or write icht furnaces', async function () {
-        const origin = 1_704_100_000_000 + Math.floor(Math.random() * 1e8);
+    it('repairs only configured machines and skips authoritative tracks', async function () {
+        const origin = 1_704_100_000_000;
         const pool = fakePool({
-            icht1: [phase('icht1', 'off', origin, origin + 8_000, [])]
+            target: [phase('target', 'off', origin, origin + 8_000, [])],
+            anchored: [phase('anchored', 'off', origin, origin + 8_000, [])],
+            unrelated: [phase('unrelated', 'off', origin, origin + 8_000, [])]
         });
-        pool.query = async function query(sql, params) {
-            pool.seen.push({ sql, params });
-            if (/SELECT DISTINCT machine/u.test(sql)) {
-                assert.match(sql, /LIKE 'cm%'/u, 'casting repair still selected furnaces outside cm*');
-                return { rows: [] };
-            }
-            return { rows: [], rowCount: 0 };
-        };
-        await foldCastingPhases(pool);
-        const touched = pool.seen.some((item) => {
-            return JSON.stringify(item.params ?? []).includes('icht1') || /icht1/u.test(item.sql);
-        });
-        assert.equal(touched, false, 'casting repair still touched an icht furnace');
+        await repairPhaseOverlaps(pool, ['target', 'anchored'], ['anchored']);
+        assert.deepEqual(pool.written.map(({ params }) => { return params[0]; }), ['target']);
     });
 
-    it('retries a deadlock while folding a casting machine', async function () {
+    it('leaves stored timelines alone when the application selects no machines', async function () {
+        const pool = fakePool({ unrelated: [] });
+        await repairPhaseOverlaps(pool);
+        assert.deepEqual(pool.seen, []);
+    });
+
+    it('retries a deadlock while repairing phases', async function () {
         const origin = 1_704_200_000_000 + Math.floor(Math.random() * 1e8);
-        const machine = `cm${1 + Math.floor(Math.random() * 8)}`;
+        const machine = `line-${1 + Math.floor(Math.random() * 8)}`;
         const pool = fakePool({
             [machine]: [
                 phase(machine, 'off', origin, origin + 12_000, []),
                 phase(machine, 'on', origin + 3_000, origin + 6_000, [])
             ]
         }, 2);
-        await foldCastingPhases(pool);
-        assert.equal(pool.written.length > 0, true, 'casting repair still aborted after a deadlock');
+        await repairPhaseOverlaps(pool, [machine]);
+        assert.equal(pool.written.length > 0, true, 'phase repair still aborted after a deadlock');
     });
 });

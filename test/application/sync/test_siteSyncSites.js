@@ -5,11 +5,11 @@ describe('siteSyncSites', function() {
     it('keeps SYNC_SITES ahead of EDGE_SITES for the same id', function() {
         const token = `\u00e9${Math.random().toString(36).slice(2)}`;
         const sites = siteSyncSites({
-            SYNC_SITES: JSON.stringify([{ id: 'edge-icht-1', url: `http://sync-${token}/api/v1` }]),
+            SYNC_SITES: JSON.stringify([{ id: 'edge-drive-1', url: `http://sync-${token}/api/v1` }]),
             EDGE_SITES: JSON.stringify([{
-                id: 'edge-icht-1',
+                id: 'edge-drive-1',
                 baseUrl: 'http://edge/api/v1',
-                machines: ['icht1']
+                machines: ['drive1']
             }])
         });
         assert.strictEqual(
@@ -24,10 +24,10 @@ describe('siteSyncSites', function() {
         const sites = siteSyncSites({
             EDGE_SITES: JSON.stringify([{
                 baseUrl: `http://${host}:30300/api/v1`,
-                machines: ['icht3']
+                machines: ['drive3']
             }])
         });
-        assert.strictEqual(sites[0].id, 'icht3', 'siteSyncSites did not derive id from machines');
+        assert.strictEqual(sites[0].id, 'drive3', 'siteSyncSites did not derive id from machines');
     });
 
     it('adds central from CENTRAL_PLANT_URL', function() {

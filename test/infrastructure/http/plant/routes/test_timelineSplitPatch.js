@@ -79,7 +79,7 @@ function buildScene(decorateTimeline) {
         clock: virtualClock(() => {
             return new Date();
         }),
-        timelineOperator: { provider, requireOperator: true, defaultUser: 'hmi-kiosk' },
+        timelineOperator: { provider, requireOperator: true, defaultUser: 'example-workstation' },
         decorateTimeline
     });
     return { api, machineId, captured };
@@ -100,13 +100,13 @@ describe('timeline PATCH splits', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 120000);
         const end = new Date(start.getTime() + 360000);
-        scene.captured.row = { name: 'off', options: ['шлак', 'шихта'], tags: [] };
+        scene.captured.row = { name: 'off', options: ['этап_б', 'шлинияа'], tags: [] };
         await patch(scene, {
             start: start.toISOString(),
             operatorId: 3,
             splits: [
                 { start, end: cut, tag: '' },
-                { start: cut, end, tag: 'шлак' }
+                { start: cut, end, tag: 'этап_б' }
             ]
         });
         assert.deepStrictEqual(scene.captured.map((row) => {
@@ -119,13 +119,13 @@ describe('timeline PATCH splits', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 120000);
         const end = new Date(start.getTime() + 360000);
-        scene.captured.row = { name: 'off', options: ['шлак', 'шихта'], tags: [] };
+        scene.captured.row = { name: 'off', options: ['этап_б', 'шлинияа'], tags: [] };
         const res = await patch(scene, {
             start: start.toISOString(),
             operatorId: 3,
             splits: [
                 { start, end: cut, tag: '' },
-                { start: cut, end, tag: 'шлак' }
+                { start: cut, end, tag: 'этап_б' }
             ]
         });
         assert.strictEqual(res.statusCode, 200, 'PATCH rejected an empty split tag while another piece was tagged');
@@ -136,7 +136,7 @@ describe('timeline PATCH splits', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 120000);
         const end = new Date(start.getTime() + 360000);
-        scene.captured.row = { name: 'off', options: ['шлак'], tags: [] };
+        scene.captured.row = { name: 'off', options: ['этап_б'], tags: [] };
         const res = await patch(scene, {
             start: start.toISOString(),
             operatorId: 3,
@@ -152,22 +152,22 @@ describe('timeline PATCH splits', function() {
         const scene = buildScene(function (_machineId, rows) {
             return rows.map(function (row, index) {
                 const prior = rows.slice(0, index).some(function (earlier) {
-                    return Array.isArray(earlier.tags) && earlier.tags.includes('lining_inspection');
+                    return Array.isArray(earlier.tags) && earlier.tags.includes('maintenance_check');
                 });
-                const options = prior ? ['charge_loading', 'lining_inspection'] : ['lining_inspection'];
+                const options = prior ? ['needs_review', 'maintenance_check'] : ['maintenance_check'];
                 return { ...row, options };
             });
         });
         const start = new Date('2026-10-22T08:11:07.413Z');
         const cut = new Date(start.getTime() + 17000);
         const end = new Date(start.getTime() + 64000);
-        scene.captured.row = { name: 'off', options: ['lining_inspection'], tags: [] };
+        scene.captured.row = { name: 'off', options: ['maintenance_check'], tags: [] };
         const res = await patch(scene, {
             start: start.toISOString(),
             operatorId: 3,
             splits: [
-                { start, end: cut, tag: 'lining_inspection' },
-                { start: cut, end, tag: 'charge_loading' }
+                { start, end: cut, tag: 'maintenance_check' },
+                { start: cut, end, tag: 'needs_review' }
             ]
         });
         assert.strictEqual(res.statusCode, 200, 'PATCH rejected charge loading after lining inspection in the same split');
@@ -177,22 +177,22 @@ describe('timeline PATCH splits', function() {
         const scene = buildScene(function (_machineId, rows) {
             return rows.map(function (row, index) {
                 const prior = rows.slice(0, index).some(function (earlier) {
-                    return Array.isArray(earlier.tags) && earlier.tags.includes('lining_inspection');
+                    return Array.isArray(earlier.tags) && earlier.tags.includes('maintenance_check');
                 });
-                const options = prior ? ['charge_loading', 'lining_inspection'] : ['lining_inspection'];
+                const options = prior ? ['needs_review', 'maintenance_check'] : ['maintenance_check'];
                 return { ...row, options };
             });
         });
         const start = new Date('2026-10-22T09:04:41.907Z');
         const cut = new Date(start.getTime() + 23000);
         const end = new Date(start.getTime() + 81000);
-        scene.captured.row = { name: 'off', options: ['lining_inspection'], tags: [] };
+        scene.captured.row = { name: 'off', options: ['maintenance_check'], tags: [] };
         const res = await patch(scene, {
             start: start.toISOString(),
             operatorId: 3,
             splits: [
                 { start, end: cut, tag: '' },
-                { start: cut, end, tag: 'charge_loading' }
+                { start: cut, end, tag: 'needs_review' }
             ]
         });
         assert.strictEqual(res.statusCode, 400, 'PATCH accepted charge loading before lining inspection');

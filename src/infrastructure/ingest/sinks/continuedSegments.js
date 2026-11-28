@@ -7,17 +7,18 @@ function pointed(record) {
     return { ...record, end_time: record.start_time };
 }
 
-function behind(record, prior) {
-    return record.duration === 0 && Boolean(prior) && prior.name !== record.name
+function behind(record, prior, preserveCoverage) {
+    return (preserveCoverage || record.duration === 0) && Boolean(prior) && prior.name !== record.name
         && Date.parse(record.start_time) < Date.parse(prior.start_time);
 }
 
-function placed(record, prior, apply) {
-    if (behind(record, prior)) {
+function placed(record, prior, apply, preserveCoverage) {
+    if (behind(record, prior, preserveCoverage)) {
         const start = new Date(prior.end_time).toISOString();
         return { ...record, start_time: start, end_time: start, duration: 0 };
     }
-    return pointed(apply(record, prior));
+    const row = apply(record, prior);
+    return preserveCoverage ? row : pointed(row);
 }
 
 /**
@@ -69,7 +70,7 @@ async function reopenContinuation(client, record, prior, next) {
  *   const sink = continuedSegments(segmentSink, pool, 30);
  *   await sink.write([record], client);
  */
-export default function continuedSegments(inner, pool, budgetSeconds) {
+export default function continuedSegments(inner, pool, budgetSeconds, { preserveCoverage = false, isAuthoritative = () => { return false; } } = {}) {
     const apply = segmentContinue(budgetSeconds);
     return {
         async write(records, client) {
@@ -81,8 +82,8 @@ export default function continuedSegments(inner, pool, budgetSeconds) {
                     seen.set(key, await latest(runner, record));
                 }
                 const previous = seen.get(key);
-                const row = placed(record, previous, apply);
-                await reopenContinuation(client, record, previous, row);
+                const row = isAuthoritative(record) ? record : placed(record, previous, apply, preserveCoverage);
+                if (!preserveCoverage) { await reopenContinuation(client, record, previous, row); }
                 seen.set(key, row);
                 rows.push(row);
                 return { rows, seen };

@@ -10,7 +10,7 @@ export default function timelineOperatorFromEnv(catalog, env, config) {
     const options = {
         provider: catalog.provider,
         requireOperator: env.REQUIRE_OPERATOR === 'true',
-        defaultUser: env.HMI_OPERATOR_USER || 'hmi-kiosk'
+        defaultUser: env.HMI_OPERATOR_USER
     };
     if (config && config.anonymousUsers) {
         options.anonymousUsers = config.anonymousUsers;

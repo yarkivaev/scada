@@ -3,7 +3,7 @@ import checkpointStateMemory from '../../../../src/infrastructure/persistence/me
 
 describe('checkpointStateMemory cyclePrior', function() {
     it('returns rows until a reset tag and not older ones', async function() {
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const reset = `якорь-${Math.floor(Math.random() * 9000 + 1000)}`;
         const store = {
             segments: [
@@ -13,7 +13,7 @@ describe('checkpointStateMemory cyclePrior', function() {
                     start_time: '2026-08-20T10:00:00.000Z',
                     end_time: '2026-08-20T10:10:00.000Z',
                     duration: 600,
-                    tags: JSON.stringify(['to_ladle']),
+                    tags: JSON.stringify(['inspection']),
                     options: null,
                     properties: null
                 },
@@ -46,7 +46,7 @@ describe('checkpointStateMemory cyclePrior', function() {
             items.map((item) => {
                 return item.tags;
             }),
-            [[reset], ['to_ladle']],
+            [[reset], ['inspection']],
             'cyclePrior walked past the reset tag'
         );
     });

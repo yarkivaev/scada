@@ -62,10 +62,7 @@ export function readDeploymentConfig(env) {
         postgres: env.POSTGRES_URL,
         postgresAdmin: env.POSTGRES_ADMIN_URL,
         migrationsMode: migrationMode(env.SUPERVISOR_MIGRATIONS),
-        apiPort: parseInt(
-            env.STATE_HTTP_PORT || env.INTERNAL_API_PORT || '8081',
-            10
-        ),
+        apiPort: parseInt(env.STATE_HTTP_PORT || env.INTERNAL_API_PORT || '8081', 10),
         apiToken: env.STATE_HTTP_TOKEN || env.INTERNAL_API_TOKEN,
         sinkDbProfile: env.SINK_DB_PROFILE === 'central' ? 'central' : 'edge',
         retentionEnabled: env.RETENTION_ENABLED === 'true',
@@ -75,6 +72,7 @@ export function readDeploymentConfig(env) {
         pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
             acceptReplicaSegments: env.SINK_DB_PROFILE === 'central' || env.SEGMENT_REPLICA_WRITES === 'true',
+            phaseRepairMachines: env.SEGMENT_PHASE_REPAIR_MACHINES === undefined ? undefined : JSON.parse(env.SEGMENT_PHASE_REPAIR_MACHINES),
             phaseAnchors: phaseAnchors(env.CONTIGUOUS_PHASE_ANCHORS),
             repairHistoryOnStart: historyRepair(env.SEGMENT_REPAIR_HISTORY_ON_START),
             transactions: segmentTransactionConfig(env, dbPoolMax),
@@ -133,11 +131,12 @@ async function prepareDatabase(cfg, pool) {
 export default function supervisorSink(env = process.env, options = {}) {
     const cfg = readDeploymentConfig(env);
     const health = ingestHealth(options);
-    cfg.pipeline.onFatal = (error) => { health.fail(error); };
+    Object.assign(cfg.pipeline, options.segmentPolicy, { onFatal(error) { health.fail(error); } });
     if (cfg.pipeline.transactions.enabled) { cfg.pipeline.onBatch = segmentBatchStats(cfg.pipeline.transactions.statsIntervalMs); }
     const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres, max: cfg.dbPoolMax }));
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
-    const data = stateDataFromPool(pool, { metricsEnabled, historyRetentionDays: Number(env.HISTORY_RETENTION_DAYS ?? 30) });
+    const data = stateDataFromPool(pool, { metricsEnabled, historyRetentionDays: Number(env.HISTORY_RETENTION_DAYS ?? 30),
+        historyPolicy: options.historyPolicy, checkpointPolicy: options.checkpointPolicy });
     let recipient;
     function segments() {
         recipient ??= segmentRecipient(cfg.postgres,pool,cfg.pipeline);

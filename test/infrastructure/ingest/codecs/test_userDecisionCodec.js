@@ -7,7 +7,7 @@ describe('userDecisionCodec', function() {
         const received = [];
         const collector = { accept: (r) => { received.push(r); return Promise.resolve(); } };
         const codec = userDecisionCodec(collector);
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const payload = JSON.stringify({ machine, start: 1700000000, user: 'operator1' });
         await codec.accept({ destination: '/exchange/scada.user_decisions', payload });
         assert.strictEqual(received[0].machine, machine, 'machine field was not extracted');

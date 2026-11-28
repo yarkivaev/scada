@@ -2,7 +2,7 @@
  * Maps plant API JSON into local persistence rows for site sync.
  *
  * @example
- *   segmentRow('icht1', { name: 'on', start: '2026-01-01T00:00:00.000Z', end: '...', duration: 60 });
+ *   segmentRow('drive1', { name: 'on', start: '2026-01-01T00:00:00.000Z', end: '...', duration: 60 });
  */
 
 /**

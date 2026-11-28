@@ -164,7 +164,7 @@ describe('machineClient', function() {
 
     it('fetches segments with kinds query params', async function() {
         let fetchedUrl;
-        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const kind = `axis_${Math.random().toString(36).slice(2, 8)}`;
         const fakeFetch = async (url) => {
             fetchedUrl = url;
             return { ok: true, json: async () => {return { items: [] }} };

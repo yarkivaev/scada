@@ -1,0 +1,4 @@
+[
+  { "id": "parent", "label": "Parent", "parent": null },
+  { "id": "leaf", "label": "Leaf", "parent": "parent" }
+]

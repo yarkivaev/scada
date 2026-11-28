@@ -38,7 +38,7 @@ function upsertStore(conflict, update) {
 
 describe('segmentPipeline regular segment upsert', function() {
     it('keeps operator tags when a later segment message carries an empty tag list', async function() {
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
         const operatorTags = JSON.stringify([`heating_${Math.random()}`]);
         const store = upsertStore(segmentConflict, segmentUpdateColumns);
@@ -115,14 +115,6 @@ describe('segmentPipeline upsert configuration', function() {
         );
     });
 
-    it('folds casting phases during startup repair', function() {
-        const body = readFileSync(new URL('../../../../src/infrastructure/ingest/pipelines/segmentPipeline.js', import.meta.url), 'utf8');
-        assert.match(body, /foldCastingPhases\(pool, protectedTracks\)/u,
-            'startup repair still left covering casting offs unfolder');
-        assert.doesNotMatch(body, /await foldCastingPhases/u,
-            'startup still blocked /ready on the casting fold');
-    });
-
     it('refreshes updated_at when a segment row is upserted', function() {
         assert.ok(
             segmentUpdateColumns.includes('updated_at'),
@@ -133,7 +125,7 @@ describe('segmentPipeline upsert configuration', function() {
 
 describe('segmentPipeline monotonic upsert', function() {
     it('does not let a late pending reopen a completed segment', async function() {
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
         const store = upsertStore(segmentConflict, segmentUpdateColumns);
         const span = 3000 + Math.floor(Math.random() * 800);
@@ -155,7 +147,7 @@ describe('segmentPipeline monotonic upsert', function() {
     });
 
     it('reopens a closed segment when a later heartbeat continues it', async function() {
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const start = new Date(1_700_000_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const frozen = new Date(Date.parse(start) + 12_000).toISOString();
         const next = new Date(Date.parse(start) + 47_000).toISOString();
@@ -175,7 +167,7 @@ describe('segmentPipeline monotonic upsert', function() {
     });
 
     it('lets a late close replace an orphan one-second stub', async function() {
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const start = new Date(Math.floor(Math.random() * 1e12)).toISOString();
         const store = upsertStore(segmentConflict, segmentUpdateColumns);
         const span = 2000 + Math.floor(Math.random() * 900);

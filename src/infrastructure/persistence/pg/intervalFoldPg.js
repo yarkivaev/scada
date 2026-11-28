@@ -6,7 +6,7 @@
  *
  * @example
  *   const port = intervalFoldPg(pool);
- *   const open = await port.open('cm8', 'ladle_moving');
+ *   const open = await port.open('line-8', 'axis_moving');
  */
 export default function intervalFoldPg(pool) {
     return {

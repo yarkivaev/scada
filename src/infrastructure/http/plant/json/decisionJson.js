@@ -22,7 +22,7 @@ function body(raw) {
  *   decisionJson({
  *     username: 'Elena Volkov', operatorId: 2,
  *     decidedAt: new Date('2024-06-01T12:05:00.000Z'),
- *     payload: '{"tags":["charge_loading"]}'
+ *     payload: '{"tags":["needs_review"]}'
  *   });
  */
 export default function decisionJson(row) {

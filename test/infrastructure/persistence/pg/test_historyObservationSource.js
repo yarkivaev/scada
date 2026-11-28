@@ -29,7 +29,7 @@ describe('historical context with external observations', function() {
     });
     it('exports the supported staged history protocol for runtime capability checks',function(){assert.equal(scada.historyProtocol,'stateful-correction-v1');});
     it('does not advertise a stateful classifier protocol on the legacy PostgreSQL observation path', async function() {
-        await assert.rejects(async()=>{await scada.historyPg(pool).configure('machine',[{topic:'a',channel:'power'}],30000,'casting');},/stateful|external/u);
+        await assert.rejects(async()=>{await scada.historyPg(pool).configure('machine',[{topic:'a',channel:'power'}],30000,'fixture-classifier');},/stateful|external/u);
     });
     it('does not conflict a classifier claim while a telemetry admission is still open', async function() {
         const connection={
@@ -43,7 +43,7 @@ describe('historical context with external observations', function() {
         };
         const db={async connect(){return connection;},async query(...args){return connection.query(...args);}};
         const store=scada.historyPg(db,{observations:()=>{return {};},now:()=>{return 0;}});
-        const snapshot=await store.context('см-α',1000,2000,0,{classifierKey:'casting',workId:'w1',workToken:'t1'});
+        const snapshot=await store.context('см-α',1000,2000,0,{classifierKey:'fixture-classifier',workId:'w1',workToken:'t1'});
         const result=await store.commit('см-α','w1',[],{from:1000,until:2000,workToken:'t1'});
         assert.equal(snapshot.available===false && result.applied===false,true,'an open telemetry admission still conflicted a classifier claim');
     });

@@ -3,8 +3,8 @@ import { measurementRows, operationRow, segmentRow } from '../../../src/applicat
 
 describe('siteSyncRows', function() {
     it('maps external_key onto the operations key', function() {
-        const key = `bath:icht3:\u00e9${Math.random().toString(36).slice(2)}`;
-        const row = operationRow('icht3', {
+        const key = `bath:drive3:\u00e9${Math.random().toString(36).slice(2)}`;
+        const row = operationRow('drive3', {
             external_key: key,
             occurred_at: '2026-09-10T10:29:19.000Z',
             kind: 'bath',
@@ -15,7 +15,7 @@ describe('siteSyncRows', function() {
 
     it('maps segment start onto start_time', function() {
         const start = `2026-09-11T0${Math.floor(Math.random() * 9)}:03:28.000Z`;
-        const row = segmentRow('icht1', {
+        const row = segmentRow('drive1', {
             name: 'off',
             start,
             end: '2026-09-11T00:14:14.000Z',
@@ -26,7 +26,7 @@ describe('siteSyncRows', function() {
     });
 
     it('skips a series whose topic dest is empty', function() {
-        const rows = measurementRows('icht1', {
+        const rows = measurementRows('drive1', {
             items: [
                 { key: 'bath', values: [{ timestamp: '2026-09-11T00:00:00.000Z', value: 12 }] },
                 { key: 'voltage', values: [{ timestamp: '2026-09-11T00:00:00.000Z', value: 380 }] }
@@ -47,7 +47,7 @@ describe('siteSyncRows', function() {
     it('rethrows when topic rejects a key', function() {
         let thrown = false;
         try {
-            measurementRows('icht1', {
+            measurementRows('drive1', {
                 items: [{ key: `ghost-${Math.random().toString(36).slice(2)}`, values: [{ timestamp: 't', value: 1 }] }]
             }, () => {
                 throw new Error('measurement topic unknown key');

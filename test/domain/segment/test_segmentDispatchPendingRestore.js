@@ -29,7 +29,7 @@ describe('segmentDispatch pending restore', function() {
         const sink = upsertSink();
         const closer = { close() { return Promise.resolve(); } };
         const route = segmentDispatch(sink, { accept() { return Promise.resolve(); } }, upsertSink(), closer);
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_000_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const mid = new Date(Date.parse(start) + 45_000).toISOString();
         const span = 40 + Math.floor(Math.random() * 20);
@@ -47,7 +47,7 @@ describe('segmentDispatch pending restore', function() {
         const sink = upsertSink();
         const closer = { close() { return Promise.resolve(); } };
         const route = segmentDispatch(sink, { accept() { return Promise.resolve(); } }, upsertSink(), closer);
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_100_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const mid = new Date(Date.parse(start) + 20_000).toISOString();
         await route.accept({

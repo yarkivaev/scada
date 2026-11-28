@@ -5,7 +5,7 @@ function startOf(row) {
     return new Date(row.start_time).getTime();
 }
 
-function pinLive(rows) {
+function pinLive(rows, preserveCoverage) {
     if (!rows.length) {
         return rows;
     }
@@ -15,7 +15,7 @@ function pinLive(rows) {
     return ordered.map((row, i, all) => {
         const copy = { ...row };
         if (i === all.length - 1) {
-            if (copy.duration === 0) {
+            if (!preserveCoverage && copy.duration === 0) {
                 copy.end_time = copy.start_time;
             }
             return copy;
@@ -74,10 +74,10 @@ function foldRows(rows) {
     }, Promise.resolve([]));
 }
 
-async function foldMachine(runner, machine) {
+async function foldMachine(runner, machine, preserveCoverage) {
     await runner.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`history:${machine}`]);
     const stored = await loadPhases(runner, machine);
-    const folded = pinLive(await foldRows(stored));
+    const folded = pinLive(await foldRows(stored), preserveCoverage);
     const kept = new Set(folded.map(startOf));
     await dropStarts(runner, machine, stored.filter((row) => {
         return !kept.has(startOf(row));
@@ -88,15 +88,15 @@ async function foldMachine(runner, machine) {
     }, Promise.resolve());
 }
 
-async function foldOwned(pool, machine) {
+async function foldOwned(pool, machine, preserveCoverage) {
     if (typeof pool.connect !== 'function') {
-        await foldMachine(pool, machine);
+        await foldMachine(pool, machine, preserveCoverage);
         return;
     }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        await foldMachine(client, machine);
+        await foldMachine(client, machine, preserveCoverage);
         await client.query('COMMIT');
     } catch (error) {
         await client.query('ROLLBACK');
@@ -106,9 +106,9 @@ async function foldOwned(pool, machine) {
     }
 }
 
-async function foldOwnedRetry(pool, machine, attempt) {
+async function foldOwnedRetry(pool, machine, attempt, preserveCoverage) {
     try {
-        await foldOwned(pool, machine);
+        await foldOwned(pool, machine, preserveCoverage);
     } catch (error) {
         if (error?.code !== '40P01' || attempt >= 7) {
             throw error;
@@ -116,32 +116,20 @@ async function foldOwnedRetry(pool, machine, attempt) {
         await new Promise((resolve) => {
             setTimeout(resolve, 40 * (attempt + 1));
         });
-        await foldOwnedRetry(pool, machine, attempt + 1);
+        await foldOwnedRetry(pool, machine, attempt + 1, preserveCoverage);
     }
 }
 
-/**
- * Folds overlapping phases on casting machines into a unique timeline.
- *
- * @param {object} pool - pg pool
- * @param {string[]} protectedTracks - driver machines with authoritative phases
- * @returns {Promise<void>}
- *
- * @example
- *   await foldCastingPhases(pool);
- */
-export default async function foldCastingPhases(pool, protectedTracks = []) {
-    const found = await pool.query(
-        `SELECT DISTINCT machine FROM segments WHERE machine LIKE 'cm%' AND kind='phase' AND NOT (machine = ANY($1::text[]))`,
-        [protectedTracks]
-    );
-    await found.rows.reduce(async (prior, row) => {
+/** Repairs overlapping phases on application-selected machines outside authoritative tracks. */
+export default async function repairPhaseOverlaps(pool, machines = [], protectedTracks = [], { preserveCoverage = false } = {}) {
+    const selected = [...new Set(machines)].filter((machine) => { return !protectedTracks.includes(machine); });
+    await selected.reduce(async (prior, machine) => {
         await prior;
         try {
-            await foldOwnedRetry(pool, row.machine, 0);
-            process.stderr.write(`[supervisor-sink] folded casting phases for ${row.machine}\n`);
+            await foldOwnedRetry(pool, machine, 0, preserveCoverage);
+            process.stderr.write(`[supervisor-sink] folded overlapping phases for ${machine}\n`);
         } catch (error) {
-            processingErrorLog('fold_casting_phases', error, { machine: row.machine });
+            processingErrorLog('repair_phase_overlaps', error, { machine });
         }
     }, Promise.resolve());
 }

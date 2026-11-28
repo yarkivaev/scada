@@ -175,7 +175,7 @@ describe('memoryOperations drop', function() {
         const key = `miss-${Math.random().toString(36).slice(2)}`;
         await assert.doesNotReject(
             () => {
-                return port.drop(`icht${Math.floor(Math.random() * 9) + 1}`, key);
+                return port.drop(`drive${Math.floor(Math.random() * 9) + 1}`, key);
             },
             'drop cannot reject when row is already absent'
         );

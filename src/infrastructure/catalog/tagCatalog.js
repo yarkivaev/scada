@@ -1,25 +1,21 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
 /**
- * Loads hierarchical tag catalog entries from disk or embedded JSON.
+ * Loads hierarchical tag catalog entries from a configured JSON file.
  *
- * Prefers TAG_CATALOG_PATH when set so deploy ConfigMaps override the
- * package copy without rebuilding the image.
+ * Uses an empty catalog when TAG_CATALOG_PATH is unset.
  *
  * @example
- *   const catalog = tagCatalog();
- *   catalog.labels().heating;
+ *   const catalog = tagCatalog({ TAG_CATALOG_PATH: '/etc/scada/tag-catalog.json' });
+ *   catalog.labels();
  *
  * @param {object} [env] - environment map, defaults to process.env
- * @returns {object} catalog with entries(), labels(), roots(parent)
+ * @returns {object} catalog with entries(), labels(), children(parent)
  */
 export default function tagCatalog(env) {
     const source = env || process.env;
-    const path = source.TAG_CATALOG_PATH
-        || join(dirname(fileURLToPath(import.meta.url)), 'tag-catalog.json');
-    const raw = JSON.parse(readFileSync(path, 'utf8'));
+    const path = source.TAG_CATALOG_PATH;
+    const raw = path ? JSON.parse(readFileSync(path, 'utf8')) : [];
     if (!Array.isArray(raw)) {
         throw new Error('tag catalog must be a JSON array');
     }

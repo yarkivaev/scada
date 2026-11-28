@@ -52,7 +52,7 @@ export { default as clickhouseMetricsRelation } from './src/infrastructure/persi
 export const centralTelemetryVersion = 4;
 export { default as centralTelemetryPolicy } from './src/infrastructure/ingest/telemetry/centralPolicy.js';
 export { default as clickhouseSensor } from './src/infrastructure/persistence/clickhouse/sensor.js';
-export { default as postgresPool } from './src/infrastructure/persistence/postgresPool.js';
+export { default as postgresPool, holdClient as holdPostgresClient, openPostgresPool } from './src/infrastructure/persistence/postgresPool.js';
 export { metricsSinkFromPool as pgMetricsSink } from './src/infrastructure/persistence/pg/metrics.js';
 export { pgMetricsSensor } from './src/infrastructure/persistence/metricsSensor.js';
 export { default as stompTimeline } from './src/infrastructure/messaging/stomp/timeline.js';
@@ -61,7 +61,7 @@ export { default as machineOwners } from './src/infrastructure/messaging/ownersh
 export { default as httpTimeline } from './src/infrastructure/messaging/ownership/httpTimeline.js';
 export { default as httpOperations } from './src/infrastructure/messaging/ownership/httpOperations.js';
 export { default as ownerTimeline } from './src/infrastructure/messaging/ownership/ownerTimeline.js';
-export { default as stateDataFromPool } from './src/infrastructure/persistence/stateDataFromPool.js';
+export { default as stateDataFromPool, withTelemetryState } from './src/infrastructure/persistence/stateDataFromPool.js';
 export { default as stateDataFromMemory } from './src/infrastructure/persistence/stateDataFromMemory.js';
 export { default as stateDataFake } from './src/infrastructure/persistence/stateDataFromMemory.js';
 export { default as supervisorSink, readDeploymentConfig } from './src/application/supervisorSink.js';
@@ -82,6 +82,9 @@ export { default as activityTracking } from './src/infrastructure/ingest/activit
 export { default as amqpMetricsIngest } from './src/infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 export { default as amqpMqttRelay } from './src/infrastructure/ingest/telemetry/amqpMqttRelay.js';
 export { default as operationSyncIngest } from './src/infrastructure/sync/operationSyncIngest.js';
+export { default as operationEvent } from './src/infrastructure/sync/operationEvent.js';
+export { default as operationAmqp } from './src/infrastructure/sync/operationAmqp.js';
+export { default as publishingOperations } from './src/application/sync/publishingOperations.js';
 export { default as ingestCheckpointMemory, ingestCheckpointPg } from './src/infrastructure/ingest/ingestCheckpoint.js';
 export { default as bindSilentStreams } from './src/application/bindSilentStreams.js';
 export { default as exportQuery } from './src/application/export/exportQuery.js';
@@ -114,6 +117,15 @@ export { default as collectorProcesses } from './src/application/deploy/collecto
 export { default as executeStages } from './src/infrastructure/deploy/executeStages.js';
 
 export { default as historyPg, historyProtocol } from './src/infrastructure/persistence/pg/history.js';
+export { default as clickhouseLocalHistory, clickhouseHistoryComment } from './src/infrastructure/persistence/clickhouse/localHistory.js';
 export { historyReplicaProtocol } from './src/infrastructure/persistence/pg/historyReplicaOutbox.js';
 
 export { historyWriteFence } from './src/infrastructure/persistence/pg/segmentWriteFence.js';
+export { default as telemetryBackfill } from './src/application/telemetry/telemetryBackfill.js';
+export { default as telemetryIngest } from './src/infrastructure/ingest/telemetry/telemetryIngest.js';
+export { default as telemetryReplay } from './src/infrastructure/ingest/telemetry/telemetryReplay.js';
+export { default as clickhouseJsonMetrics } from './src/infrastructure/persistence/clickhouse/jsonMetrics.js';
+export { default as postgresTelemetrySource } from './src/infrastructure/persistence/pg/telemetrySource.js';
+export { default as clickhouseTelemetryTarget, assertClickhouseBackfillMode } from './src/infrastructure/persistence/clickhouse/telemetryTarget.js';
+export { default as clickhouseMetricsState } from './src/infrastructure/persistence/clickhouse/metricsState.js';
+export { default as historyTelemetryMetrics } from './src/infrastructure/ingest/telemetry/historyTelemetryMetrics.js';

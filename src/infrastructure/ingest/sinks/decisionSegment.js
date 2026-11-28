@@ -31,7 +31,7 @@ async function applySplit(pool, machine, start, splits) {
  * @returns {Promise<void>}
  *
  * @example
- *   await applyDecision(pool, 'icht2', '2026-11-17T07:17:09.930Z', '{"tags":["to_ladle"]}');
+ *   await applyDecision(pool, 'drive2', '2026-11-17T07:17:09.930Z', '{"tags":["inspection"]}');
  */
 export async function applyDecision(pool, machine, startTime, payload) {
     const body = JSON.parse(payload);

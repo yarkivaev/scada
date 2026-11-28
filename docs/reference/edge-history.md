@@ -8,7 +8,7 @@ The edge receiver persists raw AMQP telemetry and triggers history processing. T
 
 Set `HISTORY_AMQP_ENABLED=true` on each edge receiver application, with `HISTORY_AMQP_URL` (or `AMQP_URL`), `HISTORY_AMQP_QUEUE` (default `scada.telemetry.history`) and mandatory explicit JSON `HISTORY_AMQP_BINDINGS`. The node-owned PostgreSQL receiver starts after migrations even when movable collector pipelines are external. It consumes persistent AMQP telemetry independently of expiring MQTT sessions, and acknowledges each message only after the PostgreSQL metrics insert and history trigger transaction finish. Automatic MQTT-to-PG ingestion is disabled in this opt-in mode; live supervisor MQTT classification is independent. Payloads must carry their original integer millisecond `ts` and finite numeric `value`; malformed messages do not receive successful acknowledgement.
 
-Producer AMQP descriptors supply `options.queues` and `options.bindings` alongside `options.exchanges`. These are asserted before publishing becomes active, so a receiver that has never connected still has its durable queue. Local history queue declarations use durable true and autoDelete false, with no TTL/overflow discard. A different matching queue, such as a central outbox, is insufficient proof of local delivery. The DSL emits intended local queues/bindings on each recipient descriptor. Grouped Modbus RTU tasks can filter recipient descriptors by `routingKeyPrefix`, so each furnace receives its own measurements directly; no matching recipient is an explicit failure, never silent loss.
+Producer AMQP descriptors supply `options.queues` and `options.bindings` alongside `options.exchanges`. These are asserted before publishing becomes active, so a receiver that has never connected still has its durable queue. Local history queue declarations use durable true and autoDelete false, with no TTL/overflow discard. A different matching queue, such as a central outbox, is insufficient proof of local delivery. The DSL emits intended local queues/bindings on each recipient descriptor. Grouped Modbus RTU tasks can filter recipient descriptors by `routingKeyPrefix`, so each destination receives its own measurements directly; no matching recipient is an explicit failure, never silent loss.
 
 ## Raw telemetry first choice
 
@@ -36,7 +36,7 @@ Configure `HISTORY_REPLICA_AMQP_URL` or `HISTORY_AMQP_URL` for each authority. A
 
 External ingestion must call `prepare(records)` before the synchronous raw write, then `complete(records)` before broker ACK. E0010 records temporary deterministic admission barriers without numeric payloads; no timeout silently discards them. E0011 records classifier identities/checkpoints and machine source/coordinate identity. Pending admissions fence reads and commits. Rebatched retries resolve the same intents; a late point invalidates affected checkpoints and rewinds already processed claims. This is a restart protocol rather than a distributed database transaction.
 
-Stateful external classifiers use public `historyProtocol = stateful-correction-v1`. Configuration returns the same protocol and explicit time scale. Work/context/commit include classifier identity and exact durable claim. E0013 stages computed rows/checkpoints per work generation until finite completion or verified state convergence; finalization atomically applies the correction, re-reads current operator cuts/labels and advances work. Public checkpoints only describe applied timelines. Latest user edits survive long paginated replay, and page boundaries do not become segment cuts. E0012/E0014 grants are administrator-only. Generic PostgreSQL history remains supported and does not claim stateful casting capability.
+Stateful external classifiers use public `historyProtocol = stateful-correction-v1`. Configuration returns the same protocol and explicit time scale. Work/context/commit include classifier identity and exact durable claim. E0013 stages computed rows/checkpoints per work generation until finite completion or verified state convergence; finalization atomically applies the correction, re-reads current operator cuts/labels and advances work. Public checkpoints only describe applied timelines. Latest user edits survive long paginated replay, and page boundaries do not become segment cuts. E0012/E0014 grants are administrator-only. Generic PostgreSQL history remains supported and does not claim stateful correction capability.
 
 The plant application’s deployment DSL supplies ClickHouse source and receiver wiring and coordinates retention. An autonomous raw TTL cannot preserve pending replay dependencies: the coordinator must protect work, admissions and predecessor state before deleting raw rows. The legacy raw PostgreSQL receiver refuses `TELEMETRY_BACKEND=clickhouse` to prevent a competing acknowledgement path.
 
@@ -69,6 +69,11 @@ classes are inferred. A rejected commit leaves both projection and work intact.
 Applicable children carry operator metadata and `consumed`; existing rows keep
 their stored consumed state. This native protocol is separate from the staged
 stateful correction protocol used with external raw observation stores.
+
+Optional startup overlap repair uses the explicit array of machine IDs in
+`SEGMENT_PHASE_REPAIR_MACHINES` or the `phaseRepairMachines` pipeline option.
+Tracks configured with contiguous phase anchors keep authority over their
+timelines. With an empty selection the overlap repair performs no writes.
 
 ---
 

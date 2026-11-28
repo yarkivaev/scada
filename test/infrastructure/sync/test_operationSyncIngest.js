@@ -110,10 +110,10 @@ describe('operationSyncConsumer delete', function() {
         const store = { operations: [] };
         const sink = operationSyncSink(operationStateMemory(store));
         const codec = operationCodec(sink);
-        const key = `bath:icht3:${Math.random().toString(36).slice(2)}`;
+        const key = `bath:drive3:${Math.random().toString(36).slice(2)}`;
         const body = JSON.stringify({
             type: 'deleted',
-            machine: 'icht3',
+            machine: 'drive3',
             occurred_at: '2026-09-10T10:29:19.000Z',
             kind: 'sample',
             external_key: key
@@ -130,10 +130,10 @@ describe('operationSyncConsumer delete', function() {
         const store = { operations: [] };
         const sink = operationSyncSink(plantOperations(operationStateMemory(store)));
         const codec = operationCodec(sink);
-        const key = `bath:icht3:${Math.random().toString(36).slice(2)}`;
+        const key = `bath:drive3:${Math.random().toString(36).slice(2)}`;
         const body = JSON.stringify({
             type: 'deleted',
-            machine: 'icht3',
+            machine: 'drive3',
             occurred_at: '2026-09-10T10:29:19.000Z',
             kind: 'sample',
             external_key: key

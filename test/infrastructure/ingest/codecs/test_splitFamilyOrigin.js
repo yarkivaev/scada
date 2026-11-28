@@ -15,14 +15,14 @@ describe('split-family origin attack', function() {
             destination: '/exchange/scada.segments',
             payload: JSON.stringify({
                 type: 'split-family',
-                machine: 'ичт-π',
+                machine: 'линия-π',
                 origin,
                 pieces: [{
                     name: 'off',
                     start: origin,
                     end: origin + 120000,
                     duration: 120,
-                    tags: ['шлак'],
+                    tags: ['этап_б'],
                     properties: { split_of: String(origin) }
                 }]
             })
@@ -43,14 +43,14 @@ describe('split-family origin attack', function() {
             destination: '/exchange/scada.segments',
             payload: JSON.stringify({
                 type: 'split-family',
-                machine: 'ичт-π',
+                machine: 'линия-π',
                 origin,
                 pieces: [{
                     name: 'off',
                     start: origin,
                     end: origin + 180000,
                     duration: 180,
-                    tags: ['шихта'],
+                    tags: ['шлинияа'],
                     properties: { split_of: String(origin) }
                 }]
             })

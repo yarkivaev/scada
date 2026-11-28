@@ -12,9 +12,9 @@ import historyRoutes from '../../infrastructure/http/edge/routes/history/history
 import spoolHistory from './spoolHistory.js';
 
 /** True when the request was a spool history or checkpoint path. */
-export default function spoolSurface(queue, token) {
+export default function spoolSurface(queue, token, locate) {
     if (!queue) { return null; }
-    const history = spoolHistory(queue);
+    const history = spoolHistory(queue, locate);
     const api = routes([...checkpointRoutes(token ?? null, history), ...historyRoutes(token ?? null, history)]);
     return (request, result) => {
         if (!request.url?.startsWith('/v1/')) { return false; }

@@ -3,7 +3,7 @@ import metricsPlant from '../../src/application/metricsPlant.js';
 
 describe('metricsPlant alerts', function() {
     it('exposes pgAlerts on the plant when a pool exists', async function() {
-        const machine = `ихт-δ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-δ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const listed = [];
         const pool = {
             async query(sql, params) {

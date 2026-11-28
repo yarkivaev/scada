@@ -7,7 +7,7 @@ describe('coverageCursor', function() {
         const from = '2024-11-02T03:04:05.137Z';
         const sample = '2024-11-02T03:05:05.137Z';
         const to = '2024-11-02T03:06:05.137Z';
-        const path = `площадка/ихт-α/${Math.floor(Math.random() * 9000 + 1000)}`;
+        const path = `площадка/линия-α/${Math.floor(Math.random() * 9000 + 1000)}`;
         const pool = {
             async query() {
                 return { rows: [] };

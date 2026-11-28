@@ -141,8 +141,8 @@ describe('checkpointRoutes', function() {
 
     it('returns readings for every repeated topic query key', async function() {
         const from = 1_700_000_000 + Math.floor(Math.random() * 1000);
-        const voltage = `MX210/icht-\u03b1-${10 + Math.floor(Math.random() * 90)}/GET/AI1/VALUE`;
-        const cosphi = `MX210/icht-\u03b1-${10 + Math.floor(Math.random() * 90)}/GET/AI4/VALUE`;
+        const voltage = `MX210/drive-\u03b1-${10 + Math.floor(Math.random() * 90)}/GET/AI1/VALUE`;
+        const cosphi = `MX210/drive-\u03b1-${10 + Math.floor(Math.random() * 90)}/GET/AI4/VALUE`;
         const data = stateDataFake({
             metrics: [
                 { topic: voltage, ts: new Date((from + 1) * 1000), value: 380 + Math.random() },
@@ -192,7 +192,7 @@ describe('checkpointRoutes', function() {
                 end_time: laterEnd,
                 duration: 1411,
                 options: '[]',
-                tags: '["to_ladle"]',
+                tags: '["inspection"]',
                 properties: '{}',
                 resolved: true,
                 consumed: false
@@ -222,7 +222,7 @@ describe('checkpointRoutes', function() {
             (body.items || []).map((item) => {
                 return item.tags;
             }),
-            [[reset], ['to_ladle']],
+            [[reset], ['inspection']],
             'cycle-prior did not stop at the reset tag'
         );
     });

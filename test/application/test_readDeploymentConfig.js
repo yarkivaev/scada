@@ -56,3 +56,9 @@ it('makes startup history repair an explicit boolean while preserving existing d
         assert.throws(()=>{return readDeploymentConfig({SEGMENT_REPAIR_HISTORY_ON_START:value})},/SEGMENT_REPAIR_HISTORY_ON_START/u);
     }
 });
+
+it('activates overlap repair only for explicitly selected machine ids', () => {
+    assert.equal(readDeploymentConfig({}).pipeline.phaseRepairMachines, undefined);
+    const config = readDeploymentConfig({ SEGMENT_PHASE_REPAIR_MACHINES: '["line-a","line-b"]' });
+    assert.deepEqual(config.pipeline.phaseRepairMachines, ['line-a', 'line-b']);
+});

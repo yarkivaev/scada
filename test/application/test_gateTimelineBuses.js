@@ -63,7 +63,7 @@ describe('gateTimelineBuses', function() {
         assert.strictEqual(state.emitted.length, 1, 'latest live off was dropped from the HMI bus');
     });
     it('does not emit a nested heating that fold would drop', async function() {
-        const machine = `icht${Math.floor(Math.random() * 9 + 1)}`;
+        const machine = `drive${Math.floor(Math.random() * 9 + 1)}`;
         const origin = new Date('2026-11-23T16:27:00.000Z');
         const nested = new Date('2026-11-23T16:27:30.000Z');
         const state = busState();

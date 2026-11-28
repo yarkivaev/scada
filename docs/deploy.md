@@ -8,7 +8,7 @@ The **system document** names every machine, server, and app. A plant package su
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
-The chart does not know furnaces or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them.
+The chart passes extra machine settings through to the plant process.
 
 ## System document
 

@@ -56,8 +56,8 @@ describe('historyFold', function () {
     it('does not move an internal split cut', function () {
         const origin = 1_701_800_000_000 + Math.floor(Math.random() * 1e8);
         const key = String(origin);
-        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-α'], { split_of: key });
-        const second = phase('off', stamp(origin, 10_000), stamp(origin, 20_000), ['шлак-α'], { split_of: key });
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['этап_а-α'], { split_of: key });
+        const second = phase('off', stamp(origin, 10_000), stamp(origin, 20_000), ['этап_б-α'], { split_of: key });
         const incoming = [phase('off', stamp(origin, 0), stamp(origin, 30_000), [])];
         const folded = historyFold([first, second], incoming);
         assert.equal(Date.parse(folded[1].start_time), origin + 10_000,
@@ -66,18 +66,18 @@ describe('historyFold', function () {
     it('keeps split piece tags', function () {
         const origin = 1_701_900_000_000 + Math.floor(Math.random() * 1e8);
         const key = String(origin);
-        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-β'], { split_of: key });
-        const second = phase('off', stamp(origin, 10_000), stamp(origin, 20_000), ['шлак-β'], { split_of: key });
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['этап_а-β'], { split_of: key });
+        const second = phase('off', stamp(origin, 10_000), stamp(origin, 20_000), ['этап_б-β'], { split_of: key });
         const folded = historyFold([first, second], [phase('off', stamp(origin, 0), stamp(origin, 30_000), [])]);
         assert.deepEqual(folded.map((row) => { return row.tags; }),
-            [JSON.stringify(['в_ковш-β']), JSON.stringify(['шлак-β'])],
+            [JSON.stringify(['этап_а-β']), JSON.stringify(['этап_б-β'])],
             'a later stream replaced split piece tags');
     });
     it('extends only the last split piece', function () {
         const origin = 1_702_000_000_000 + Math.floor(Math.random() * 1e8);
         const key = String(origin);
-        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-γ'], { split_of: key });
-        const second = phase('off', stamp(origin, 10_000), stamp(origin, 20_000), ['шлак-γ'], { split_of: key });
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['этап_а-γ'], { split_of: key });
+        const second = phase('off', stamp(origin, 10_000), stamp(origin, 20_000), ['этап_б-γ'], { split_of: key });
         const finish = stamp(origin, 30_000);
         const folded = historyFold([first, second], [phase('off', stamp(origin, 0), finish, [])]);
         assert.equal(Date.parse(folded[1].end_time), Date.parse(finish),
@@ -98,9 +98,9 @@ describe('historyFold', function () {
     it('clips an empty covering off around a tagged split', function () {
         const origin = 1_702_200_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', stamp(origin, 0), stamp(origin, 15_000), []);
-        const pour = phase('off', stamp(origin, 700), stamp(origin, 15_000), ['to_ladle'], { split_of: String(origin) });
+        const pour = phase('off', stamp(origin, 700), stamp(origin, 15_000), ['inspection'], { split_of: String(origin) });
         const folded = historyFold([cover], [pour]);
-        const tagged = folded.find((row) => { return row.tags === JSON.stringify(['to_ladle']); });
+        const tagged = folded.find((row) => { return row.tags === JSON.stringify(['inspection']); });
         const start = Math.min(...folded.map((row) => { return Date.parse(row.start_time); }));
         assert.equal(Boolean(tagged) && start === origin, true,
             'an empty covering off stayed over a tagged ladle split');
@@ -115,24 +115,24 @@ describe('historyFold', function () {
     it('clips a heating that overlaps a later off', function () {
         const origin = 1_702_400_000_000 + Math.floor(Math.random() * 1e8);
         const heat = phase('on', stamp(origin, 0), stamp(origin, 20_000), ['heating']);
-        const rest = phase('off', stamp(origin, 10_000), stamp(origin, 15_000), ['to_ladle']);
+        const rest = phase('off', stamp(origin, 10_000), stamp(origin, 15_000), ['inspection']);
         const folded = historyFold([heat], [rest]);
         assert.equal(Date.parse(folded.find((row) => { return row.name === 'on'; }).end_time), origin + 10_000,
             'heating still overlapped the later off');
     });
     it('does not merge two unsplit offs that carry different tags', function () {
         const origin = 1_702_800_000_000 + Math.floor(Math.random() * 1e8);
-        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-δ']);
-        const second = phase('off', stamp(origin, 4_000), stamp(origin, 12_000), ['шлак-δ']);
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['этап_а-δ']);
+        const second = phase('off', stamp(origin, 4_000), stamp(origin, 12_000), ['этап_б-δ']);
         const folded = historyFold([first], [second]);
         const tags = folded.map((row) => { return row.tags; }).sort();
-        assert.deepEqual(tags, [JSON.stringify(['в_ковш-δ']), JSON.stringify(['шлак-δ'])].sort(),
+        assert.deepEqual(tags, [JSON.stringify(['этап_а-δ']), JSON.stringify(['этап_б-δ'])].sort(),
             'different tagged offs collapsed onto one row');
     });
     it('does not leave overlapping offs with different nonempty tags', function () {
         const origin = 1_702_810_000_000 + Math.floor(Math.random() * 1e8);
-        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['в_ковш-ε']);
-        const second = phase('off', stamp(origin, 4_000), stamp(origin, 12_000), ['шлак-ε']);
+        const first = phase('off', stamp(origin, 0), stamp(origin, 10_000), ['этап_а-ε']);
+        const second = phase('off', stamp(origin, 4_000), stamp(origin, 12_000), ['этап_б-ε']);
         const folded = historyFold([first], [second]);
         const crossed = folded.some((left, i) => {
             return folded.slice(i + 1).some((right) => {
@@ -145,7 +145,7 @@ describe('historyFold', function () {
     it('keeps exclusive empty tails beside a nested tagged off', function () {
         const origin = 1_702_820_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', stamp(origin, 0), stamp(origin, 15_000), []);
-        const tagged = phase('off', stamp(origin, 700), stamp(origin, 4_000), ['to_ladle']);
+        const tagged = phase('off', stamp(origin, 700), stamp(origin, 4_000), ['inspection']);
         const folded = historyFold([cover], [tagged]);
         const start = Math.min(...folded.map((row) => { return Date.parse(row.start_time); }));
         const finish = Math.max(...folded.map((row) => { return Date.parse(row.end_time); }));
@@ -201,10 +201,38 @@ describe('historyFold', function () {
     it('does not open a hole in off when heating overlaps it', function () {
         const origin = 1_702_830_000_000 + Math.floor(Math.random() * 1e8);
         const heat = phase('on', stamp(origin, 0), stamp(origin, 20_000), ['heating']);
-        const rest = phase('off', stamp(origin, 10_000), stamp(origin, 15_000), ['to_ladle']);
+        const rest = phase('off', stamp(origin, 10_000), stamp(origin, 15_000), ['inspection']);
         const folded = historyFold([heat], [rest]);
         const off = folded.find((row) => { return row.name === 'off'; });
         assert.equal(Date.parse(off.start_time) === origin + 10_000 && Date.parse(off.end_time) === origin + 15_000,
             true, 'overlapping heating punched a hole in off');
+    });
+});
+
+describe('disjoint covering geometry', function () {
+    it('does not merge a covering off into a distant earlier off', function () {
+        const gap = 3 + Math.floor(Math.random() * 9);
+        const start = Date.parse('2026-11-23T03:45:22.150Z');
+        const closed = {
+            machine: 'line-7',
+            kind: 'phase',
+            name: 'off',
+            start_time: new Date(start).toISOString(),
+            end_time: new Date(start + gap * 3600 * 1000).toISOString(),
+            duration: gap * 3600,
+            tags: '[]',
+            properties: '{}'
+        };
+        const covering = {
+            ...closed,
+            start_time: new Date(start + (gap + 2) * 3600 * 1000).toISOString(),
+            end_time: new Date(start + (gap + 8) * 3600 * 1000).toISOString(),
+            duration: 0
+        };
+        assert.equal(
+            historyFold([closed], [covering]).length,
+            2,
+            'covering still swallowed the distant idle off'
+        );
     });
 });

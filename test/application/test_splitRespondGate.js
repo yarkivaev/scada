@@ -7,7 +7,7 @@ function audit(id) {
 
 describe('shopWithTimeline split gate', function() {
     it('publishes a split whose closed piece is shorter than 60 seconds', async function() {
-        const machine = `ичт-${Math.floor(Math.random() * 8000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 8000 + 1000)}`;
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 30000);
         const end = new Date(start.getTime() + 240000);
@@ -41,8 +41,8 @@ describe('shopWithTimeline split gate', function() {
         try {
             await tl.respond(start.toISOString(), {
                 splits: [
-                    { start, end: cut, tag: 'шлак' },
-                    { start: cut, end, tag: 'шихта' }
+                    { start, end: cut, tag: 'этап_б' },
+                    { start: cut, end, tag: 'шлинияа' }
                 ]
             }, audit(11));
         } catch (error) {

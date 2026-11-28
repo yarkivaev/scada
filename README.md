@@ -18,6 +18,6 @@ For high availability, agents can run collector copies and Stream Worker candida
 
 ## Package boundary
 
-SCADA owns the shared collection and processing engines, storage and APIs. Plant packages such as `sokol-scada` supply the deployment DSL, device mappings, business rules, routes and HMI. See the [package boundary](docs/architecture/package-boundary.md).
+SCADA owns the shared collection and processing engines, storage and APIs. Plant applications supply the deployment DSL, device mappings, business rules, routes and HMI. See the [package boundary](docs/architecture/package-boundary.md).
 
 [MIT license](LICENSE)

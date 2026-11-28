@@ -54,7 +54,7 @@ describe('historyAbsorb', function () {
     it('deletes a stored empty start that fold dropped', async function () {
         const origin = 1_702_840_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', origin + 100, origin + 5_000, []);
-        const tagged = phase('off', origin, origin + 15_000, ['to_ladle'], { split_of: String(origin) });
+        const tagged = phase('off', origin, origin + 15_000, ['inspection'], { split_of: String(origin) });
         const client = fakeClient([cover]);
         await historyAbsorb(client, 'печь-α', [tagged]);
         assert.deepEqual(client.state.deleted, [cover.start_time],

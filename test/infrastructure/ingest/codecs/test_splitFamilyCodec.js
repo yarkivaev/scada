@@ -15,14 +15,14 @@ describe('split-family codec', function() {
             destination: '/exchange/scada.segments',
             payload: JSON.stringify({
                 type: 'split-family',
-                machine: 'ичт-2',
+                machine: 'линия-2',
                 origin,
                 pieces: [{
                     name: 'off',
                     start: origin,
                     end: origin + 120000,
                     duration: 120,
-                    tags: ['шлак'],
+                    tags: ['этап_б'],
                     properties: { split_of: String(origin) }
                 }]
             })

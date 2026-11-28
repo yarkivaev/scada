@@ -138,7 +138,7 @@ export default function contiguousPhases(pool, anchors, dispatch) {
             throw invalid('An anchored phase track cannot change geometry via split-family');
         }
         if (row.type === 'split') {
-            // Casting publishers send a compatibility split before each authoritative segment.
+            // Legacy publishers send a compatibility split before each authoritative segment.
             return Promise.resolve();
         }
         const anchor = anchors.get(row.machine);

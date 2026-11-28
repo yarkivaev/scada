@@ -9,7 +9,7 @@ import { siteById } from './siteSyncSites.js';
  *
  * @example
  *   const sync = siteSync({ sites, queryFor, targets });
- *   await sync.run({ site: 'edge-icht-1', from, to, machines: ['icht1'], kinds: ['segments'] });
+ *   await sync.run({ site: 'edge-drive-1', from, to, machines: ['drive1'], kinds: ['segments'] });
  */
 function pull(query, kind, machine, range) {
     if (kind === 'segments') {

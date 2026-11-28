@@ -48,7 +48,7 @@ describe('userDecisionSink', function() {
     it('binds machine, startTime, username, payload as params in order', async function() {
         const pool = fakePool();
         const sink = userDecisionSink(pool);
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const startTime = `2024-0${Math.floor(Math.random() * 9) + 1}-01T00:00:00.000Z`;
         const username = `operator_${Math.random()}`;
         const payload = JSON.stringify({ tags: [`heating_${Math.random()}`] });
@@ -77,7 +77,7 @@ describe('userDecisionSink segment state', function() {
         const sink = userDecisionSink(pool);
         await sink.accept({ machine: 'печь', startTime: '2026-10-21T12:23:59.167Z',
             username: 'оператор', decidedAt: '2026-10-21T12:24:00.000Z',
-            payload: JSON.stringify({ tags: [tag], properties: { note: 'шлак' } }) });
+            payload: JSON.stringify({ tags: [tag], properties: { note: 'этап_б' } }) });
         const update = pool.queries.find((query) => { return query.sql.includes('UPDATE segments'); });
         assert.equal(update.params[0], JSON.stringify([tag]), 'decision tags were not written onto the segment');
     });
@@ -157,7 +157,7 @@ describe('userDecisionSink domain refusal', function() {
                 user: 'Геннадий Иванов',
                 tags: [],
                 splits: [
-                    { start: start.getTime() / 1000, end: tail.getTime() / 1000, tag: 'to_ladle', open: true }
+                    { start: start.getTime() / 1000, end: tail.getTime() / 1000, tag: 'inspection', open: true }
                 ]
             })
         });

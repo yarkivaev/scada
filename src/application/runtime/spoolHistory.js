@@ -2,42 +2,42 @@
  * HistoryRun and SupervisorSinkCheckpoint view of undelivered collector samples.
  *
  * {{{
- * spoolHistory({ peek() { return []; } }).work('icht2')
+ * spoolHistory({ peek() { return []; } }).work('device-2')
  * }}}
  */
 
 import { nativeTailProtocol } from '../../infrastructure/persistence/pg/historyNativeBounds.js';
 import { randomUUID } from 'node:crypto';
 
-function machineOf(key) {
-    const match = /icht-?(?<n>\d)/iu.exec(String(key).replaceAll('/', '.'));
-    return match ? `icht${match.groups.n}` : null;
+function machineOf(topic) {
+    return topic.split('/')[1] || null;
 }
 function channelOf(key) {
     const parts = String(key).replaceAll('/', '.').split('.');
     return parts.at(-2) ?? key;
 }
-function sample(record) {
+function sample(record, locate) {
     const key = record.routingKey ?? record.topic;
     const raw = record.body ? JSON.parse(Buffer.isBuffer(record.body) ? record.body.toString() : record.body) : record;
     const time = Number(raw.ts ?? raw.time ?? raw.timestamp);
     const value = Number(raw.value);
     if (!key || !Number.isFinite(time) || !Number.isFinite(value)) { return []; }
-    return [{ eventId: record.eventId ?? `${key}:${time}`, channel: channelOf(key), topic: key.replaceAll('.', '/'),
-        time, timestamp: time / 1000, value, machine: machineOf(key) }];
+    const topic = key.replaceAll('.', '/');
+    return [{ eventId: record.eventId ?? `${key}:${time}`, channel: channelOf(key), topic,
+        time, timestamp: time / 1000, value, machine: locate(topic) }];
 }
-function unpack(event) {
+function unpack(event, locate) {
     const payload = event.observation ?? event;
-    if (Array.isArray(payload.records)) { return payload.records.flatMap(sample); }
-    return sample({ ...payload, eventId: payload.eventId ?? event.eventId });
+    if (Array.isArray(payload.records)) { return payload.records.flatMap((record) => { return sample(record, locate); }); }
+    return sample({ ...payload, eventId: payload.eventId ?? event.eventId }, locate);
 }
 
 /** Collector spool as a checkpoint and history receiver. */
-export default function spoolHistory(queue) {
+export default function spoolHistory(queue, locate = machineOf) {
     async function rows() {
         if (!queue?.peek) { return []; }
         const listed = await queue.peek(1000);
-        return listed.flatMap((item) => { return unpack(item.event ?? item); });
+        return listed.flatMap((item) => { return unpack(item.event ?? item, locate); });
     }
     async function owned(machine) {
         return (await rows()).filter((row) => { return row.machine === machine; });

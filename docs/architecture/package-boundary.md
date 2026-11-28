@@ -2,20 +2,20 @@
 
 # Package boundary
 
-SCADA provides factory-agnostic models and ports. Plant packages such as `sokol-scada` own melting and bath logic, chemical-analysis interfaces, HMI labels, `weight_after` fold semantics, and their own sensors and routes.
+SCADA provides factory-agnostic models and ports. Each plant application supplies its own configurations and policies. Use fictional identifiers and deployments in SCADA examples and fixtures.
 
-SCADA treats operation `kind` values as opaque strings and exposes generic ports such as `latestForMachine`, list, upsert and stream. Plant packages define what each kind means.
+SCADA treats operation `kind` values as opaque strings and exposes generic ports such as `latestForMachine`, list, upsert and stream. Plant applications define what each kind means.
 
-| This package (`@yarkivaev/scada`) | Downstream plant package (`sokol-scada`, …) |
-|------------------------|--------------------------|
-| Generic plant, shop, machine, timeline, alerts, operations ports | Melting bath, chem, cycles HMI, site sensors |
-| Empty/injectable alert `translations` | Localized rule messages |
-| Opaque operation `kind` strings | Site kinds (`bath`, `chem`, …) and fold/prefix logic |
-| Collector runtime, device protocol adapters, task lifecycle and portable delivery | Source mappings and adapters for plant-owned systems |
-| Scala transport, segment contract and history protocols | Plant classifier profiles, rules, catalogs and the application image |
-| `plantApi`, `siteServer`, `supervisorSink` | Site bins, routes, `bathSensor`, reports |
-| Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
-| ClickHouse + PG adapters | Plant wiring (`sokolPlant` / `edgePlant`) |
+| This package (`@yarkivaev/scada`) | Downstream plant application |
+|---|---|
+| Generic plant, shop, machine, timeline, alerts, operations ports | Equipment model, business rules and HMI |
+| Injectable alert translations and tag catalogs | Localized messages and tag definitions |
+| Opaque operation kind and processor property names | Operation kinds and classifier policies |
+| Collector runtime, device protocol adapters, task lifecycle and delivery | Source mappings and adapters for plant-owned systems |
+| Scala transport, segment contract and history protocols | Classifier profiles, rules, catalogs and the application image |
+| `plantApi`, `siteServer`, `supervisorSink` | Application entrypoints, routes and reports |
+| Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs and destination adapters |
+| ClickHouse and PostgreSQL adapters | Database and service configuration |
 
 Pin the released SCADA package in each downstream build. A classifier image can pin the engine sources independently of the Node.js application package.
 

@@ -55,7 +55,7 @@ describe('operationSyncSink', function() {
         await assert.doesNotReject(
             () => {
                 return sink.remove({
-                    machine: 'icht3',
+                    machine: 'drive3',
                     occurred_at: new Date('2026-09-10T10:29:19.000Z'),
                     kind: 'sample',
                     key

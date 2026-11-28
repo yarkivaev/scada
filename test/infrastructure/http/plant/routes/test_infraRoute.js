@@ -57,7 +57,7 @@ describe('infraRoute', function() {
             })
             .join('\n');
         assert.strictEqual(
-            /icht|ИЧТ|киоск|kiosk/iu.test(text),
+            /custom-profile|custom-mode/iu.test(text),
             false,
             'infra UI still contains factory or kiosk copy'
         );

@@ -85,7 +85,7 @@ describe('stateRoute', function() {
     it('overlays latest interval values onto matching keys', async function() {
         const ts = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
         const later = new Date(Date.UTC(2026, 0, 1, 12, 0, 20));
-        const kind = 'ladle_moving';
+        const kind = 'axis_moving';
         const scene = buildApi({ [kind]: sensor(0, ts) }, {
             latest: async () => {
                 return [{ kind, name: '1', end_time: later }];

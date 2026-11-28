@@ -16,7 +16,7 @@ describe('checkSplit', function() {
         const end = new Date('2026-10-19T06:47:06.000Z');
         const ordered = checkSplit(parent(start, end, 2690), [
             piece(start, cut, ''),
-            piece(cut, end, 'шлак')
+            piece(cut, end, 'этап_б')
         ]);
         assert.strictEqual(ordered[0].tag, '', 'untagged piece was dropped');
     });
@@ -35,8 +35,8 @@ describe('checkSplit', function() {
         const cut = new Date(start.getTime() + 30000);
         const end = new Date('2026-10-19T06:47:06.000Z');
         const ordered = checkSplit(parent(start, end, 2690), [
-            piece(start, cut, 'шлак'),
-            piece(cut, end, 'шихта')
+            piece(start, cut, 'этап_б'),
+            piece(cut, end, 'шлинияа')
         ]);
         assert.strictEqual(ordered[0].end.getTime() - ordered[0].start.getTime(), 30000, 'a 30 second piece was refused');
     });
@@ -47,7 +47,7 @@ describe('checkSplit', function() {
         const later = new Date('2026-10-19T06:26:00.000Z');
         const end = new Date('2026-10-19T06:47:06.000Z');
         assert.throws(function() {
-            checkSplit(parent(start, end, 2690), [piece(start, cut, 'шлак'), piece(later, end, 'шихта')]);
+            checkSplit(parent(start, end, 2690), [piece(start, cut, 'этап_б'), piece(later, end, 'шлинияа')]);
         }, RangeError, 'gapped split was accepted');
     });
 
@@ -57,7 +57,7 @@ describe('checkSplit', function() {
         const early = new Date('2026-10-19T06:40:00.000Z');
         const end = new Date('2026-10-19T06:47:06.000Z');
         assert.throws(function() {
-            checkSplit(parent(start, end, 2690), [piece(start, cut, 'шлак'), piece(cut, early, 'шихта')]);
+            checkSplit(parent(start, end, 2690), [piece(start, cut, 'этап_б'), piece(cut, early, 'шлинияа')]);
         }, RangeError, 'partial cover of a closed off was accepted');
     });
 
@@ -66,7 +66,7 @@ describe('checkSplit', function() {
         const cut = new Date('2026-10-19T06:25:00.000Z');
         const now = new Date('2026-10-19T06:47:06.000Z');
         const ordered = checkSplit(parent(start, now, 0), [
-            piece(start, cut, 'шлак'),
+            piece(start, cut, 'этап_б'),
             piece(cut, now, '', true)
         ]);
         assert.strictEqual(ordered[1].open, true, 'open tail was closed');
@@ -78,8 +78,8 @@ describe('checkSplit', function() {
         const end = new Date('2026-10-19T06:47:06.000Z');
         assert.throws(function() {
             checkSplit(parent(start, end, 0), [
-                piece(start, cut, 'шлак', true),
-                piece(cut, end, 'шихта')
+                piece(start, cut, 'этап_б', true),
+                piece(cut, end, 'шлинияа')
             ]);
         }, RangeError, 'open middle piece was accepted');
     });
@@ -87,7 +87,7 @@ describe('checkSplit', function() {
     it('stores split_of as the original start in millis', function() {
         const start = new Date('2026-10-19T06:02:18.000Z');
         const end = new Date('2026-10-19T06:47:06.000Z');
-        const rows = splitRows('ичт-2', [piece(start, end, 'шлак')]);
+        const rows = splitRows('линия-2', [piece(start, end, 'этап_б')]);
         assert.strictEqual(JSON.parse(rows[0].properties).split_of, String(start.getTime()), 'split_of was not the parent millis');
     });
 });
@@ -129,11 +129,11 @@ describe('replaceSplit', function() {
         const start = new Date('2026-10-19T06:02:18.000Z');
         const cut = new Date('2026-10-19T06:25:00.000Z');
         const end = new Date('2026-10-19T06:47:06.000Z');
-        const pieces = splitRows('ичт-2', checkSplit(parent(start, end, 2690), [
-            piece(start, cut, 'шлак'),
+        const pieces = splitRows('линия-2', checkSplit(parent(start, end, 2690), [
+            piece(start, cut, 'этап_б'),
             piece(cut, end, '')
         ]));
-        await replaceSplit(pool, { machine: 'ичт-2', origin: start.getTime(), pieces });
+        await replaceSplit(pool, { machine: 'линия-2', origin: start.getTime(), pieces });
         assert.ok(sql.some(function (row) { return row.includes('DELETE FROM segments'); }), 'obsolete pieces were not deleted');
         assert.strictEqual(sql.filter(function (row) { return row.includes('INSERT INTO segments'); }).length, 2, 'both pieces were not upserted');
     });
@@ -148,7 +148,7 @@ describe('replaceSplit', function() {
         };
         let refused = false;
         try {
-            await replaceSplit(pool, { machine: 'ичт-9', origin: 1729321338000, pieces: [] });
+            await replaceSplit(pool, { machine: 'линия-9', origin: 1729321338000, pieces: [] });
         } catch (err) {
             refused = err instanceof RangeError;
         }
@@ -172,10 +172,10 @@ describe('replaceSplit', function() {
         const pool = { connect() { return Promise.resolve(client); } };
         const start = new Date('2026-11-22T13:31:58.231Z');
         const end = new Date('2026-11-22T13:32:58.231Z');
-        const pieces = splitRows('ичт-2', checkSplit(parent(start, end, 60), [
-            piece(start, end, 'шлак')
+        const pieces = splitRows('линия-2', checkSplit(parent(start, end, 60), [
+            piece(start, end, 'этап_б')
         ]));
-        await replaceSplit(pool, { machine: 'ичт-2', origin: start.getTime(), pieces });
+        await replaceSplit(pool, { machine: 'линия-2', origin: start.getTime(), pieces });
         assert.ok(sql.some(function (row) { return row.includes('DELETE FROM segments'); }), 'obsolete pieces were not deleted');
     });
 });
@@ -191,7 +191,7 @@ describe('loadFamily', function() {
                 return { rows: [{ name: 'on', start_time: start, end_time: start, duration: 1, properties: '' }] };
             }
         };
-        const rows = await loadFamily(pool, 'ичт-2', start);
+        const rows = await loadFamily(pool, 'линия-2', start);
         assert.equal(rows.length, 1, 'empty properties text aborted the family read');
     });
 });

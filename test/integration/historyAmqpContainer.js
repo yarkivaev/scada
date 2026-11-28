@@ -25,7 +25,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
     let channel;
     let url;
     const queue = 'scada.telemetry.history';
-    const patterns = ['MX210.icht-1.#'];
+    const patterns = ['MX210.drive-1.#'];
     // Keep all observations past the extra closed-bucket grace before requesting work.
     const time = Math.floor(Date.now() / 30000) * 30000 - 60000;
     before(async () => {
@@ -36,7 +36,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
         for (const name of ['V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql', 'E0007__metric_receipts.sql', 'E0009__history_continuation.sql']) {
             await pool.query(await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8'));
         }
-        await historyPg(pool).configure('icht1', [{ topic: 'MX210/icht-1/GET/AI3/VALUE', channel: 'power' }]);
+        await historyPg(pool).configure('drive1', [{ topic: 'MX210/drive-1/GET/AI3/VALUE', channel: 'power' }]);
         url = `amqp://test:test@${rabbit.getHost()}:${rabbit.getMappedPort(5672)}`;
         connection = await amqp.connect(url); connection.on('error', () => {}); channel = await connection.createChannel(); channel.on('error', () => {});
         await channel.assertExchange('scada.telemetry', 'topic', { durable: true });
@@ -49,7 +49,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
     });
     after(async () => { await receiver?.stop(); await sink?.stop(); await channel?.close().catch(() => {}); await connection?.close().catch(() => {}); await pool?.end(); await rabbit?.stop(); await postgres?.stop(); });
     function publish(offset) {
-        return sink.write([{ exchange: 'scada.telemetry', routingKey: 'MX210.icht-1.GET.AI3.VALUE', body: JSON.stringify({ ts: time + offset, value: 10 + offset }), options: { persistent: true, mandatory: true } }]);
+        return sink.write([{ exchange: 'scada.telemetry', routingKey: 'MX210.drive-1.GET.AI3.VALUE', body: JSON.stringify({ ts: time + offset, value: 10 + offset }), options: { persistent: true, mandatory: true } }]);
     }
     function consumer(database = pool) {
         return historyTelemetry({ HISTORY_AMQP_ENABLED: 'true', HISTORY_AMQP_URL: url, HISTORY_AMQP_QUEUE: queue, HISTORY_AMQP_BINDINGS: JSON.stringify(patterns) }, database);
@@ -66,7 +66,7 @@ describe('Local history durable AMQP integration', function receiverTests() {
         assert.equal((await channel.checkQueue(queue)).messageCount, 1);
         receiver = consumer(); await receiver.start();
         await until(async () => { return (await pool.query('SELECT count(*) AS n FROM history_observations')).rows[0].n === '1'; });
-        assert.equal((await historyPg(pool).work('icht1')).items.length, 1);
+        assert.equal((await historyPg(pool).work('drive1')).items.length, 1);
         await receiver.stop(); receiver = null;
         await publish(1);
         assert.equal((await channel.checkQueue(queue)).messageCount, 1);

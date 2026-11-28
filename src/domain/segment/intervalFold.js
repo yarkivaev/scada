@@ -6,7 +6,7 @@
  *
  * @example
  *   const fold = intervalFold(port);
- *   await fold.accept({ machine: 'cm8', kind: 'ladle_moving', value: 1, ts: Date.now() });
+ *   await fold.accept({ machine: 'line-8', kind: 'axis_moving', value: 1, ts: Date.now() });
  */
 export default function intervalFold(port) {
     return {

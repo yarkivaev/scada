@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`@yarkivaev/scada` is factory-agnostic. Plant/Sokol melting domain (bath, chem, HMI, `weight_after` fold) belongs in `sokol-scada`, not here.
+`@yarkivaev/scada` is factory-agnostic. Supply plant-specific identifiers, runtime policy, deployment settings, and business rules through the application. Use fictional installations and identifiers in examples and tests.
 
 Opaque operation kinds and generic ports (`latestForMachine`, list/upsert/stream) are fine. See `README.md` § Package boundary and `CLAUDE.md`.
 

@@ -52,10 +52,10 @@ describe('syncRoute', function() {
         ], { requestTimeoutMs: 1000 });
         const res = mockRes();
         await api.handle(mockReq(JSON.stringify({
-            site: 'edge-icht-1',
+            site: 'edge-drive-1',
             from: '2026-09-10T00:00:00.000Z',
             to: '2026-09-12T00:00:00.000Z',
-            machines: ['icht1'],
+            machines: ['drive1'],
             kinds: ['segments']
         })), res);
         const body = JSON.parse(res.body);
@@ -77,7 +77,7 @@ describe('syncRoute', function() {
         }, `tok-${Math.random().toString(36).slice(2)}`));
         const res = mockRes();
         await api.handle(mockReq(JSON.stringify({
-            site: 'edge-icht-1',
+            site: 'edge-drive-1',
             from: '2026-09-10T00:00:00.000Z',
             to: '2026-09-12T00:00:00.000Z'
         })), res);

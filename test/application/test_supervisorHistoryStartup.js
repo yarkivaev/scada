@@ -5,7 +5,7 @@ import supervisorSink from '../../src/application/supervisorSink.js';
 function receiver() {
     return supervisorSink({ SUPERVISOR_MIGRATIONS: 'verify', SINK_PIPELINES: 'false',
         HISTORY_AMQP_ENABLED: 'true', HISTORY_AMQP_URL: 'amqp://unused.invalid',
-        HISTORY_AMQP_BINDINGS: '["MX210.icht-1.#"]' });
+        HISTORY_AMQP_BINDINGS: '["MX210.drive-1.#"]' });
 }
 async function applied() {
     const files = await fs.readdir('db/migrations');

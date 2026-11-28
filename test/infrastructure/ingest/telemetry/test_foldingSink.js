@@ -6,12 +6,12 @@ describe('foldingSink', function() {
         const written = [];
         const folded = [];
         const key = `blow_${Math.random().toString(36).slice(2, 8)}`;
-        const record = { topic: `OPCUA/tlc-cm8/GET/${key}/VALUE`, value: 1, ts: Date.now() };
+        const record = { topic: `OPCUA/tlc-line-8/GET/${key}/VALUE`, value: 1, ts: Date.now() };
         const sink = foldingSink(
             { write(rows) { written.push(...rows); return Promise.resolve(); } },
             { accept(sample) { folded.push(sample); return Promise.resolve(); } },
             (row) => {
-                return { machine: 'cm8', kind: key, value: row.value, ts: row.ts };
+                return { machine: 'line-8', kind: key, value: row.value, ts: row.ts };
             }
         );
         await sink.write([record]);

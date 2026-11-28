@@ -133,7 +133,7 @@ it('records lastAccept when an assigned modbus reports a read', async () => {
         return { start() { ctx.report({ state: 'running', read: 1 }); }, stop() {} };
     } }]]);
     const runtime = createRuntime({ registry });
-    await runtime.apply({ taskId: `icht-${Math.floor(Math.random() * 1e6)}`, specVersion: 1, generation: 1, spec: { adapter: 'modbus' } });
+    await runtime.apply({ taskId: `drive-${Math.floor(Math.random() * 1e6)}`, specVersion: 1, generation: 1, spec: { adapter: 'modbus' } });
     const [task] = runtime.status().tasks;
     await runtime.stop();
     assert.equal(typeof task.lastAccept, 'number', 'assigned modbus did not record lastAccept');
@@ -147,7 +147,7 @@ it('gives adapters the control cursor from runtime options', async () => {
         return { start() {}, stop() {} };
     } }]]);
     const runtime = createRuntime({ registry, cursor });
-    await runtime.apply({ taskId: 'sokol-awgs:cm1', specVersion: 1, generation: 1, spec: { adapter: 'test' } });
+    await runtime.apply({ taskId: 'custom-reader:line-1', specVersion: 1, generation: 1, spec: { adapter: 'test' } });
     assert.equal(seen, cursor, 'adapter did not receive the control cursor');
     await runtime.stop();
 });

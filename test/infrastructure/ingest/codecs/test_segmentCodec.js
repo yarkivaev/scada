@@ -14,7 +14,7 @@ describe('segmentCodec', function() {
             const duration = index < 64 ? 1 : 0;
             return { name: index % 2 === 0 ? 'on' : 'off', start, end: start + duration * 1000, duration };
         });
-        const payload = { type: 'phase-transition', machine: 'cm1', pieces };
+        const payload = { type: 'phase-transition', machine: 'line-1', pieces };
         assert.strictEqual(decodeSegment({ payload: JSON.stringify(payload) }).pieces.length, 65);
         pieces[16].end -= 1;
         assert.throws(() => { return decodeSegment({ payload: JSON.stringify(payload) }); }, /close adjacent phases/u);
@@ -58,7 +58,7 @@ describe('segmentCodec', function() {
                 start: '2026-09-30T13:29:00.000Z',
                 end: '2026-09-30T13:35:00.000Z',
                 duration: 360,
-                tags: ['lining_inspection']
+                tags: ['maintenance_check']
             })
         });
         assert.strictEqual(written[0] && written[0].type, 'segment', 'typeless segment body was not stored');
@@ -160,7 +160,7 @@ describe('segmentCodec', function() {
             start: 1700000000000,
             end: 1700003600000,
             duration: 3600,
-            tags: ['charge_loading'],
+            tags: ['needs_review'],
             properties
         });
         await codec.accept({ destination: '/exchange/scada.segments', payload });
@@ -177,7 +177,7 @@ describe('segmentCodec', function() {
             start: 1700000000000,
             end: 1700003600000,
             duration: 3600,
-            options: ['charge_loading', 'lining_inspection']
+            options: ['needs_review', 'maintenance_check']
         });
         await codec.accept({ destination: '/exchange/scada.segments', payload });
         assert.strictEqual(received[0].resolved, false, 'should set resolved to false when options present');
@@ -249,7 +249,7 @@ describe('segmentCodec', function() {
         const received = [];
         const collector = { accept: (record) => { return received.push(record); } };
         const codec = segmentCodec(collector);
-        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const kind = `axis_${Math.random().toString(36).slice(2, 8)}`;
         const payload = JSON.stringify({
             machine: `m${Math.floor(Math.random() * 9000 + 1000)}`,
             name: '1',

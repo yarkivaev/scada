@@ -7,27 +7,27 @@ const origin = '2026-11-26T14:10:12.840Z';
 describe('contiguous phase configuration', function () {
     it('requires a certified UTC origin for each protected machine', function () {
         assert.deepEqual(phaseAnchors(undefined), new Map());
-        assert.deepEqual(phaseAnchors(JSON.stringify({ cm8: origin })), new Map([['cm8', origin]]));
-        assert.throws(() => {return phaseAnchors('{"cm8":"2026-11-26"}')}, /Invalid contiguous phase anchor/u);
+        assert.deepEqual(phaseAnchors(JSON.stringify({ 'line-8': origin })), new Map([['line-8', origin]]));
+        assert.throws(() => {return phaseAnchors('{"line-8":"2026-11-26"}')}, /Invalid contiguous phase anchor/u);
     });
 
     it('keeps unrelated dispatch routing and refuses a geometry-changing split on a protected track', async function () {
         const calls = [];
         const existing = { accept(row, client) { calls.push([row, client]); } };
-        const route = contiguousPhases({}, phaseAnchors(JSON.stringify({ cm8: origin })), existing);
+        const route = contiguousPhases({}, phaseAnchors(JSON.stringify({ 'line-8': origin })), existing);
         await route.accept({ type: 'segment', machine: 'furnace' }, 'client');
-        await route.accept({ type: 'retag', machine: 'cm8' }, 'client');
+        await route.accept({ type: 'retag', machine: 'line-8' }, 'client');
         assert.equal(calls.length, 2);
-        await route.accept({ type: 'split', machine: 'cm8' });
+        await route.accept({ type: 'split', machine: 'line-8' });
         assert.equal(calls.length, 2);
-        assert.throws(() => { return route.accept({ type: 'split-family', machine: 'cm8' }); }, { permanent: true });
+        assert.throws(() => { return route.accept({ type: 'split-family', machine: 'line-8' }); }, { permanent: true });
     });
 
     it('does not manufacture a close for the protected current tail on consumer silence', async function () {
         const calls = [];
         const pool = { query(query, args) { calls.push([query, args]); } };
-        await closeSilentOpen(pool, ['cm8']).close(30);
+        await closeSilentOpen(pool, ['line-8']).close(30);
         assert.match(calls[0][0], /NOT \(machine = ANY\(\$2::text\[\]\)\)/u);
-        assert.deepEqual(calls[0][1], [30, ['cm8']]);
+        assert.deepEqual(calls[0][1], [30, ['line-8']]);
     });
 });

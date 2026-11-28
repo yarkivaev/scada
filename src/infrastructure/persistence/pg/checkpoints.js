@@ -52,9 +52,32 @@ function replayCursor(pool, machineId) {
     });
 }
 
-function pendingSegments(pool) {
+const coveredSegmentsQuery = `WITH open AS (
+            SELECT machine, name,
+                   EXTRACT(EPOCH FROM start_time) AS start,
+                   EXTRACT(EPOCH FROM end_time) AS "end"
+            FROM segments
+            WHERE duration = 0
+        ),
+        covered AS (
+            SELECT DISTINCT ON (machine) machine, name,
+                   EXTRACT(EPOCH FROM end_time) AS start,
+                   EXTRACT(EPOCH FROM end_time) AS "end"
+            FROM segments
+            WHERE duration > 0
+              AND NOT EXISTS (
+                    SELECT 1 FROM segments AS live
+                    WHERE live.machine = segments.machine AND live.duration = 0
+              )
+            ORDER BY machine, start_time DESC
+        )
+        SELECT machine, name, start, "end" FROM open
+        UNION ALL
+        SELECT machine, name, start, "end" FROM covered`;
+
+function pendingSegments(pool, includeClosedTail) {
     return pool.query(
-        `SELECT machine, name,
+        includeClosedTail ? coveredSegmentsQuery : `SELECT machine, name,
                 EXTRACT(EPOCH FROM start_time) AS start,
                 EXTRACT(EPOCH FROM end_time) AS end
          FROM segments
@@ -71,7 +94,7 @@ function pendingSegments(pool) {
     });
 }
 
-function readings(pool, topics, from) {
+function readings(pool, topics, from, limit) {
     if (topics.length === 0) {
         return Promise.resolve([]);
     }
@@ -82,8 +105,8 @@ function readings(pool, topics, from) {
         `SELECT topic, EXTRACT(EPOCH FROM ts) AS ts, value
          FROM metrics
          WHERE topic IN (${placeholders}) AND ts > to_timestamp($${topics.length + 1})
-         ORDER BY ts ASC`,
-        [...topics, from]
+         ORDER BY ts ASC${limit === undefined ? '' : ` LIMIT $${topics.length + 2}`}`,
+        [...topics, from, ...(limit === undefined ? [] : [limit])]
     ).then((result) => {
         return result.rows.map((row) => {
             return {
@@ -95,19 +118,22 @@ function readings(pool, topics, from) {
     });
 }
 
-export default function checkpointStatePg(pool, metricsEnabled = true) {
+export default function checkpointStatePg(pool, metricsEnabled = true, { includeClosedTail = false, readingsLimit, cyclePriorAllKinds = false } = {}) {
+    if (readingsLimit !== undefined && (!Number.isSafeInteger(readingsLimit) || readingsLimit < 1)) {
+        throw new TypeError('Positive checkpoint readingsLimit required');
+    }
     return {
         replayCursor(machineId) {
             return replayCursor(pool, machineId);
         },
         pendingSegments() {
-            return pendingSegments(pool);
+            return pendingSegments(pool, includeClosedTail);
         },
         readings(topics, from) {
             if (!metricsEnabled) {
                 return Promise.resolve([]);
             }
-            return readings(pool, topics, from);
+            return readings(pool, topics, from, readingsLimit);
         },
         segment(machineId, startEpoch) {
             return segmentAt(pool, machineId, startEpoch);
@@ -116,7 +142,7 @@ export default function checkpointStatePg(pool, metricsEnabled = true) {
             return pool.query(
                 `SELECT name, start_time, end_time, duration, tags, options, properties
                  FROM segments
-                 WHERE machine = $1 AND kind = 'phase' AND start_time < $2
+                 WHERE machine = $1${cyclePriorAllKinds ? '' : " AND kind = 'phase'"} AND start_time < $2
                  ORDER BY start_time DESC`,
                 [machineId, new Date(beforeEpoch * 1000)]
             ).then((result) => {

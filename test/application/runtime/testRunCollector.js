@@ -45,7 +45,7 @@ describe('collector manifest entrypoint', () => {
                 seen = ctx.cursor;
                 return { start() {}, stop() {} };
             } }]]),
-            env: { COLLECTOR_MANIFEST: JSON.stringify({ assignments: [{ taskId: 'sokol-awgs:cm1', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }) },
+            env: { COLLECTOR_MANIFEST: JSON.stringify({ assignments: [{ taskId: 'custom-reader:line-1', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] }) },
             argv: [], signals: false, cursor
         });
         await collector.reload();

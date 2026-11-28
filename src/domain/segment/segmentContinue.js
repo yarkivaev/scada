@@ -2,7 +2,7 @@
  * Pulls a later fragment of the same segment back onto the previous row
  * when the uncovered gap is still inside the segmentation continuity budget.
  * An overlapping island that starts before the pending heartbeat end stays
- * one segment instead of a second heating.
+ * one segment instead of starting a second span.
  *
  * @param {number} budgetSeconds - maximum uncovered gap that stays one segment
  * @returns {function} apply(record, prior) -> record

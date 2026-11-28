@@ -73,7 +73,7 @@ async function respondToRequest(gate, timeline, requestId, req, res) {
  * @returns {array} route objects
  *
  * @example
- *   timelineRoute('/api/v1', plant, { provider, requireOperator: true, defaultUser: 'hmi-kiosk' });
+ *   timelineRoute('/api/v1', plant, { provider, requireOperator: true, defaultUser: 'example-workstation' });
  */
 export default function timelineRoute(basePath, plant, operatorOptions, decorate, currentPhase) {
     const gate = timelineOperator(operatorOptions);

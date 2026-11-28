@@ -18,10 +18,10 @@ function memory() {
 }
 
 describe('control store cursors', () => {
-    it('returns the saved AWGS high-water for that task', async () => {
+    it('returns the saved batch-reader high-water for that task', async () => {
         const store = controlStore(memory(), '/scada/control');
         const water = { id: 91, weights: { 'см1': 12 } };
-        await store.cursor.save('sokol-awgs:печь', water);
-        assert.deepEqual(await store.cursor.load('sokol-awgs:печь'), water, 'saved high-water was not the loaded cursor');
+        await store.cursor.save('custom-reader:печь', water);
+        assert.deepEqual(await store.cursor.load('custom-reader:печь'), water, 'saved high-water was not the loaded cursor');
     });
 });
