@@ -33,16 +33,20 @@ export default function spoolProcess(directory, options) {
             serialization: 'advanced', execArgv: [], stdio: ['ignore', 'ignore', 'inherit', 'ipc']
         });
         state.child = child;
+        // An exited child's IPC can still deliver events after its replacement is running.
+        function whileCurrent(handler) {
+            return value => { if (state.child === child) { handler(value); } };
+        }
         state.stopped = new Promise(resolve => {
             function stopped() { unavailable(); state.child = null; resolve(); }
-            child.once('exit', stopped);
-            child.on('error', error => {
+            child.once('exit', whileCurrent(stopped));
+            child.on('error', whileCurrent(error => {
                 unavailable(error);
                 if (!child.pid) { stopped(); }
-            });
+            }));
         });
-        child.once('disconnect', () => { unavailable(); });
-        child.on('message', receive);
+        child.once('disconnect', whileCurrent(() => { unavailable(); }));
+        child.on('message', whileCurrent(receive));
     }
     function call(method, ...args) {
         if (!state.child?.connected) { return Promise.reject(new Error('Delivery spool process disconnected')); }
