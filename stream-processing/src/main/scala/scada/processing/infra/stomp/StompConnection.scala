@@ -4,7 +4,7 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all.*
 import scala.concurrent.duration.*
 import java.io.{BufferedReader, InputStreamReader, OutputStream}
-import java.net.{Socket, SocketTimeoutException}
+import java.net.{InetSocketAddress, Socket, SocketTimeoutException}
 
 /**
  * Raw TCP STOMP connection. Sends and receives [[StompFrame]]s over a
@@ -91,16 +91,26 @@ object StompConnection:
 
   def connect(host: String, port: Int, vhost: String, login: String, passcode: String): IO[StompConnection] =
     IO.blocking:
-      val socket = Socket(host, port)
-      socket.setKeepAlive(true)
-      val output = socket.getOutputStream
-      val reader = BufferedReader(InputStreamReader(socket.getInputStream, "UTF-8"))
-      output.write(StompFrame.connect(vhost, login, passcode).encode)
-      output.flush()
-      val sb = StringBuilder()
-      var ch = reader.read()
-      while ch != -1 && ch != 0 do
-        sb.append(ch.toChar)
-        ch = reader.read()
-      socket.setSoTimeout(readTimeoutMillis)
-      StompConnection(socket, output, reader)
+      val socket = Socket()
+      try
+        socket.connect(InetSocketAddress(host, port), 10000)
+        socket.setSoTimeout(10000)
+        socket.setKeepAlive(true)
+        val output = socket.getOutputStream
+        val reader = BufferedReader(InputStreamReader(socket.getInputStream, "UTF-8"))
+        output.write(StompFrame.connect(vhost, login, passcode).encode)
+        output.flush()
+        val sb = StringBuilder()
+        var ch = reader.read()
+        while ch != -1 && ch != 0 do
+          sb.append(ch.toChar)
+          ch = reader.read()
+        if !StompFrame.decode(sb.toString).exists(_.command == "CONNECTED") then
+          throw IllegalStateException("RabbitMQ did not accept the STOMP connection")
+        socket.setSoTimeout(readTimeoutMillis)
+        StompConnection(socket, output, reader)
+      catch
+        case scala.util.control.NonFatal(error) =>
+          try socket.close()
+          catch case scala.util.control.NonFatal(closeError) => error.addSuppressed(closeError)
+          throw error

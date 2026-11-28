@@ -22,12 +22,13 @@ final class TimelineWriter private (
   def atRevision[A](machine: String)(prepareAndWrite: IO[A]): IO[A] =
     revisionScope.get.flatMap:
       case Some((active, _)) if active == machine => prepareAndWrite
-      case previous =>
-        readRevision(machine).bracket(revision =>
-          revisionScope.set(Some((machine, revision))) *> prepareAndWrite
-        )(_ => revisionScope.set(previous))
+      case _ =>
+        readRevision(machine).flatMap(revision => atExpectedRevision(machine, revision)(prepareAndWrite))
 
-  private def readRevision(machine: String): IO[String] =
+  private[runtime] def atExpectedRevision[A](machine: String, revision: String)(action: IO[A]): IO[A] =
+    revisionScope.get.bracket(_ => revisionScope.set(Some((machine, revision))) *> action)(revisionScope.set)
+
+  private[runtime] def readRevision(machine: String): IO[String] =
     val encoded = URLEncoder.encode(machine, UTF_8)
     api.request("GET", s"/v1/history/live-revision?machine=$encoded")
       .flatMap(value => IO.fromEither(value.hcursor.get[String]("revision")))
@@ -57,7 +58,9 @@ final class TimelineWriter private (
       _ <- IO.raiseUnless(answer.hcursor.get[Boolean]("applied").contains(true))(
         IllegalStateException(s"Timeline sink did not confirm output $outputId"))
       after <- IO.fromEither(answer.hcursor.get[String]("revision"))
-      _ <- revisionScope.set(Some((machine, after)))
+      // An idempotent retry may return the original receipt, whose revision predates this scope.
+      next <- IO(BigInt(revision).max(BigInt(after)).toString)
+      _ <- revisionScope.set(Some((machine, next)))
       _ <- (relay, destination) match
         case (Some(sender), Some(path)) =>
           val committed = payload.deepMerge(Json.obj("committedOutputId" -> outputId.asJson))

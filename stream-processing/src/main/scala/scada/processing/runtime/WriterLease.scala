@@ -13,7 +13,9 @@ import java.sql.{Connection, DriverManager}
  */
 object WriterLease:
   val tailSql: String = "SELECT COALESCE((EXTRACT(EPOCH FROM max(end_time)) * 1000)::bigint, 0) FROM segments WHERE machine = ? AND kind = 'phase'"
-  val listSql: String = "SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed FROM segments WHERE machine = ? AND kind = 'phase' ORDER BY start_time"
+  private val phasesSql = "SELECT kind,name,start_time,end_time,duration,options,tags,properties,resolved,consumed FROM segments WHERE machine = ? AND kind = 'phase'"
+  val listSql: String = phasesSql + " ORDER BY start_time"
+  private[runtime] val rangeSql = phasesSql + " AND start_time <= ? AND end_time >= ? ORDER BY start_time"
   private[runtime] def row(result: java.sql.ResultSet): io.circe.Json =
     import io.circe.Json
     def field(name: String): Json =
@@ -209,10 +211,17 @@ final case class LeaseHold(held: Boolean, connection: Connection, generation: Op
       if rows.next() then rows.getLong(1) else 0L
     finally statement.close()
 
-  private def phases(machine: String): Vector[io.circe.Json] =
-    val statement = connection.prepareStatement(WriterLease.listSql)
+  private[runtime] def phasesBetween(machine: String, from: Long, until: Long): IO[Vector[io.circe.Json]] =
+    IO.blocking(phases(machine, Some((from, until))))
+
+  private def phases(machine: String, range: Option[(Long, Long)] = None): Vector[io.circe.Json] =
+    val statement = connection.prepareStatement(range.fold(WriterLease.listSql)(_ => WriterLease.rangeSql))
     try
       statement.setString(1, machine)
+      range.foreach { (from, until) =>
+        statement.setTimestamp(2, java.sql.Timestamp.from(java.time.Instant.ofEpochMilli(until)))
+        statement.setTimestamp(3, java.sql.Timestamp.from(java.time.Instant.ofEpochMilli(from)))
+      }
       val result = statement.executeQuery()
       val buffer = Vector.newBuilder[io.circe.Json]
       while result.next() do buffer += WriterLease.row(result)

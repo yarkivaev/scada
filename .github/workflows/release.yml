@@ -24,6 +24,18 @@ jobs:
   stream-processing:
     runs-on: ubuntu-latest
     services:
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: history_test
+          RABBITMQ_DEFAULT_PASS: history_test
+        ports:
+          - 61613/tcp
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
       postgres:
         image: postgres:16
         env:
@@ -49,11 +61,15 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       - run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U scada_test < ../db/migrations/E0018__stream_worker_checkpoint.sql
+      - run: docker exec "${{ job.services.rabbitmq.id }}" rabbitmq-plugins enable rabbitmq_stomp
       - run: ./resolve-dependencies.sh
       - run: sbt test assembly
         env:
           PGUSER: scada_test
           PGPASSWORD: scada_test
+          SCADA_HISTORY_TEST_STOMP_PORT: ${{ job.services.rabbitmq.ports['61613'] }}
+          SCADA_HISTORY_TEST_STOMP_LOGIN: history_test
+          SCADA_HISTORY_TEST_STOMP_PASSCODE: history_test
           SCADA_STREAM_WORKER_TEST_JDBC: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports['5432'] }}/scada_test
 
   tag:

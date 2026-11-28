@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.HexFormat
-import scada.stream.replay.{Replay, ReplayFailure, ReplayInput, ReplayManifest, ReplayRange, ReplaySeed}
 import io.yarkivaev.streamworker.{ProcessingError, Processor, StepResult}
 import scada.processing.core.*
 import io.yarkivaev.segmentation.ObservedSegmentation.{Sample, State, segment}
@@ -35,46 +34,29 @@ object LocalHistory:
       continuity: Vector[HistoryRange] = Vector.empty): Vector[HistorySegment] =
     ObservedSegmentation(machine.segments, machine.window, continuity).run(grouped(points), seed)
 
-  private[runtime] final case class Replayed(segments: Vector[HistorySegment], state: Option[HistoryState])
+  private[runtime] final case class Calculated(segments: Vector[HistorySegment], state: Option[HistoryState])
+
+  private given io.circe.Codec.AsObject[Sample] = io.circe.generic.semiauto.deriveCodec
 
   private def grouped(points: Vector[Observation]): Vector[Sample] =
     points.groupBy(_.time).toVector.sortBy(_._1).map: (time, group) =>
       Sample(time, group.map(p => p.channel -> p.value).toMap)
 
-  private def processor(classifier: ObservedSegmentation): Processor[Unit, State, Sample, HistorySegment] =
-    new Processor[Unit, State, Sample, HistorySegment]:
+  private[runtime] def classifyQueued(
+      input: HistoryInput, machine: MachineConfig, points: Vector[Observation],
+      seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty
+  ): IO[Calculated] =
+    val classifier = ObservedSegmentation(machine.segments, machine.window, continuity)
+    val processor = new Processor[Unit, State, Sample, HistorySegment]:
       def step(config: Unit, state: State, sample: Sample)
           : Either[ProcessingError, StepResult[State, HistorySegment]] =
         val result = classifier.step(state, sample)
         Right(StepResult(result.state, result.outputs))
-
-  private[runtime] def replay(
-      machine: MachineConfig, points: Vector[Observation], baseRevision: String, runId: String,
-      seed: Option[HistorySeed] = None, continuity: Vector[HistoryRange] = Vector.empty
-  ): IO[Replayed] = IO.defer:
-    val classifier = ObservedSegmentation(machine.segments, machine.window, continuity)
-    val initial = classifier.initial(seed)
     val samples = grouped(points)
-    def values(readings: Map[String, Double]): Json =
-      Json.obj(readings.toVector.map((key, value) => key -> java.lang.Double.doubleToRawLongBits(value).asJson)*)
-    val input = ReplayInput(digest(Json.fromValues(samples.map(sample => Json.arr(sample.time.asJson, values(sample.values))))), samples)
-    val seedId = digest(Json.fromValues(seed.toVector.map: value =>
-      val interval = value.segment.map(row => Json.arr(row.name.asJson, row.start.asJson, row.end.asJson))
-      Json.arr(value.time.asJson, values(value.values), interval.asJson)
-    ))
-    val rules = machine.segments.map(rule => Json.arr(rule.name.asJson, rule.condition.toString.asJson))
-    val ranges = continuity.map(range => Json.arr(range.from.asJson, range.until.asJson))
-    val rulesVersion = digest(Json.arr("observed-v1".asJson, machine.window.asJson, rules.asJson, ranges.asJson))
-    val timeline = machine.id.raw
-    val start = ReplaySeed(seedId, timeline, rulesVersion, input.id, 0, initial)
-    val manifest = ReplayManifest(timeline, ReplayRange(0, samples.size), rulesVersion, input.id, seedId, baseRevision, runId)
-    def failure(problem: ReplayFailure) = IllegalStateException(s"History page replay failed: $problem")
-    IO.fromEither(Replay.plan(manifest, input, start).leftMap(failure)).flatMap: plan =>
-      Replay.run(plan, (), processor(classifier)).flatMap(result => IO.fromEither(result.leftMap(failure))).map: result =>
-        val terminal = result.terminalState
-        val tail = terminal.segment.map(segment)
-        val state = samples.lastOption.map(last => HistoryState(last.time, terminal.parameters, tail))
-        Replayed(result.outputs.map(_.value) ++ tail, state)
+    input.run(processor, (), classifier.initial(seed), samples).map: result =>
+      val tail = result.state.segment.map(segment)
+      val state = samples.lastOption.map(last => HistoryState(last.time, result.state.parameters, tail))
+      Calculated(result.outputs ++ tail, state)
 
   private def digest(value: Json): String =
     val text = Printer.noSpaces.copy(sortKeys = true).print(value)
@@ -203,6 +185,7 @@ object LocalHistory:
 final class LocalHistory(
     config: CheckpointApiConfig,
     machine: MachineConfig,
+    input: HistoryInput,
     announce: Vector[Json] => IO[Unit] = _ => IO.unit,
     generation: Option[Long] = None
 ):
@@ -270,8 +253,8 @@ final class LocalHistory(
                 from <- row.hcursor.get[Long]("from").toOption
                 until <- row.hcursor.get[Long]("until").toOption
               yield HistoryRange(from,until)
-            LocalHistory.contextRevision(context).flatMap: revision =>
-              LocalHistory.replay(machine, points, revision, id, seed, continuity)
+            LocalHistory.contextRevision(context) *>
+              LocalHistory.classifyQueued(input, machine, points, seed, continuity)
                 .flatTap(result => calculated.set(result.state)).map(_.segments)
         def commit(work: Work, result: Vector[HistorySegment]): IO[Unit] =
           snapshot.get.flatMap: context =>
@@ -283,7 +266,7 @@ final class LocalHistory(
             )).deepMerge(LocalHistory.commitFence(machine.id, id, token, generation))
             val payload = Json.obj("machine" -> Json.fromString(machine.id.raw), "workId" -> Json.fromString(id),
               "segments" -> Json.arr(rows*), "context" -> claim)
-            request("POST", "/v1/history/commit", payload).flatMap: response =>
+            transport.commitHistory(payload).flatMap: response =>
               if response.hcursor.get[Boolean]("applied").contains(true) then announce(rows)
               else calculated.set(None)
         // The receiver owns work retirement. Unavailable context yields no verified proposal.
