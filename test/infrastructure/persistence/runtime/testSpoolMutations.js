@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import {fork} from 'node:child_process';
 import {once} from 'node:events';
 import deliverySpool from '../../../../src/infrastructure/persistence/runtime/deliverySpool.js';
+import openAfterCrash from '../../../helpers/runtime/openAfterCrash.js';
 
 const append=(id,value=id)=>{return {kind:'append',event:{eventId:id,value},recipients:['one','two']};};
 describe('grouped durable spool mutations',()=>{
@@ -48,7 +49,7 @@ describe('grouped durable spool mutations',()=>{
     it('recovers no unaccepted buffered writes after SIGKILL before a sparse group flush',async()=>{
         const child=fork(new URL('../../../helpers/runtime/groupedSpoolChild.js',import.meta.url),[directory,'buffered'],{silent:true});
         try{const [message]=await once(child,'message');assert.equal(message,'buffered');}finally{const exited=once(child,'exit');child.kill('SIGKILL');await exited;}
-        const recovered=spool();await recovered.open();assert.equal(recovered.status().pending,0);
+        const recovered=spool();await openAfterCrash(recovered);assert.equal(recovered.status().pending,0);
     });
     it('recovers every grouped observation and partial receipt after SIGKILL following COMMIT',async()=>{
         const child=fork(new URL('../../../helpers/runtime/groupedSpoolChild.js',import.meta.url),[directory,'committed'],{silent:true});
