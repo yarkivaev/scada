@@ -129,7 +129,7 @@ final class ProcessingApplication(profile: RuntimeProfile):
         val grant = current.get(machine)
         IO.raiseWhen(config.leaseUrl.isDefined && grant.isEmpty)(
           IllegalStateException(s"No active timeline writer for $machine")).as(grant)
-      TimelineWriter.create(HistoryClient(api), owner, outputs, publish)
+      TimelineWriter.create(HistoryClient(api), owner, outputs, publish, config.localHistory, config.writerEpoch)
 
   private def track(owners: Ref[IO, Map[String, Long]])(machine: String, generation: Option[Long]): Resource[IO, Unit] =
     generation.fold(Resource.unit[IO])(value => Resource.make(owners.update(_.updated(machine, value)))(_ =>

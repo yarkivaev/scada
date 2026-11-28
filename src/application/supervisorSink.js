@@ -147,7 +147,8 @@ export default function supervisorSink(env = process.env, options = {}) {
     const replicaRelay = metricsEnabled && state.history && cfg.replicaBroker ? historyReplicaRelay(cfg.replicaBroker, pool) : undefined;
     const dataAccess = metricsEnabled ? {...state,...(replicaRelay && {history:replicaRelay.history(state.history)}),liveSegments:{
         revision(machine) { return segments().live.revision(machine); },
-        apply(input) { return segments().live.apply(input); }
+        apply(input) { return segments().live.apply(input); },
+        ...(replicaRelay && {applyOutbox(input, replication) { return segments().live.applyOutbox(input, replication); }})
     }} : state;
     const localTelemetry = historyTelemetry(env, pool);
     return {

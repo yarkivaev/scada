@@ -1,3 +1,5 @@
+import applyTimelineReplica from '../../persistence/pg/timelineReplica.js';
+import { enableHistoryReplicaCapture, historyReplicaProtocol } from '../../persistence/pg/historyReplicaOutbox.js';
 import { decodeSegmentBody } from '../codecs/segmentCodec.js';
 import writeFencedSegment, {
     activeSegmentLease, checkSegmentRevision, segmentLeaseMatches, segmentRevision, serialSegmentTransaction, storeWriteReceipt, writeReceipt
@@ -48,6 +50,12 @@ async function applyLive(dispatch, record, client, {phaseAnchors,computedPropert
     },Promise.resolve());
 }
 
+async function applyReplicaChange(dispatch, record, client, settings) {
+    if (record.timelineChange) { return applyTimelineReplica(client,record.machine,record.timelineChange); }
+    await applyLive(dispatch, record, client, settings);
+    return true;
+}
+
 async function applyReplica(dispatch, record, client, settings) {
     const receipt = await writeReceipt(client,record.machine,record.committedOutputId,record.body);
     if (receipt) { return receipt; }
@@ -58,9 +66,9 @@ async function applyReplica(dispatch, record, client, settings) {
         ? await segmentLeaseMatches(client,record.machine,undefined)
         : !await activeSegmentLease(client,record.machine);
     if (!eligible) { return {applied:false}; }
-    await applyLive(dispatch, record, client, settings);
+    const applied = await applyReplicaChange(dispatch,record,client,settings);
     const revision = storage.local_revision ? await segmentRevision(client,record.machine) : {};
-    const outcome = {applied:true,...revision};
+    const outcome = {applied,...revision};
     await storeWriteReceipt(client,record.machine,record.committedOutputId,record.body,outcome);
     return outcome;
 }
@@ -69,6 +77,9 @@ function persist(dispatch, record, client, settings) {
     if (record.fence) {
         return writeFencedSegment(client,record.machine,record.fence,record.body,async () => {
             await checkSegmentRevision(client,record.machine,record.fence.revision);
+            if (record.replication) {
+                await enableHistoryReplicaCapture(client,record.machine,record.fence,record.replication);
+            }
             await applyLive(dispatch, record, client, settings);
             return {applied:true,...await segmentRevision(client,record.machine)};
         });
@@ -93,6 +104,13 @@ export default function fencedSegments(pool, dispatch, settings) {
         return client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',[ `history:${record.machine}` ])
             .then(() => {return persist(dispatch,record,client,policy)});
     }
+    async function apply(input, replication) {
+        let record;
+        try { record = decodeSegmentBody(input); }
+        catch (error) { throw new TypeError(error.message); }
+        if (!record.fence) { throw new TypeError('A segment write fence is required'); }
+        return await accept({...record,replication});
+    }
     return {
         dispatch: {
             accept,
@@ -103,12 +121,9 @@ export default function fencedSegments(pool, dispatch, settings) {
         },
         live: {
             revision(machine) { return segmentRevision(pool,machine); },
-            async apply(input) {
-                let record;
-                try { record = decodeSegmentBody(input); }
-                catch (error) { throw new TypeError(error.message); }
-                if (!record.fence) { throw new TypeError('A segment write fence is required'); }
-                return await accept(record);
+            apply(input) { return apply(input); },
+            applyOutbox(input, replication) {
+                return apply(input,{...replication,protocol:historyReplicaProtocol});
             }
         }
     };

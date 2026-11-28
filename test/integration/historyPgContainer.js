@@ -51,6 +51,8 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         await pool.query(await readFile(new URL('../../db/migrations/V0015__segment_write_receipts.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0019__segment_write_fence.sql', import.meta.url), 'utf8'));
         await pool.query(await readFile(new URL('../../db/migrations/E0021__history_replica_outbox.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/V0016__timeline_replica_positions.sql', import.meta.url), 'utf8'));
+        await pool.query(await readFile(new URL('../../db/migrations/E0023__timeline_replica_changes.sql', import.meta.url), 'utf8'));
     });
     after(async () => { await pool?.end(); await container?.stop(); });
     it('does not conflict a classifier claim after unstarted same-bucket work grows',async()=>{
@@ -261,7 +263,7 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
             async read(id,left,right){return {items:points.filter(p=>{return p.time>=left && p.time<=right;}),continuity:[{from:left,until:right}]};}
         };};
         const store=historyPg(pool,{observations:source});
-        const replication={exchange:'scada.segments',routingKey:''};
+        const replication={exchange:'scada.segments',routingKey:'',protocol:'transactional-history-outbox-v2'};
         await store.configure(machine,[{topic:'staged/power',channel:'power'}],30000,'casting');
         await pool.query("INSERT INTO segments(machine,kind,name,start_time,end_time,duration,tags,properties,resolved) VALUES($1,'phase','on',$2,$3,3,$5,$7,true),($1,'phase','on',$3,$4,2,$6,$7,true)",
             [machine,new Date(time),new Date(time+3000),new Date(time+5000),'["left"]','["right"]','{"cadence_threshold_ms":"99","operator_note":"keep"}']);
@@ -284,8 +286,10 @@ describe('Historical telemetry PostgreSQL', function historyTests() {
         assert.deepEqual(rows.map(row=>{return [row.start_time.getTime()-time,row.end_time.getTime()-time,JSON.parse(row.tags)];}),[[1000,3000,['left']],[3000,5000,['new-right']]]);
         assert(rows.every(row=>{const p=JSON.parse(row.properties);return p.cadence_threshold_ms==='10' && p.operator_note==='keep';}));
         assert.equal(rows.at(-1).consumed,false);
-        const outbound=(await pool.query("SELECT segment->>'tags' AS tags FROM history_replica_outbox WHERE machine=$1 ORDER BY id",[machine])).rows;
+        const outbound=(await pool.query("SELECT segment->>'tags' AS tags FROM history_replica_outbox WHERE machine=$1 AND segment ? 'name' ORDER BY (segment->>'start_time')::timestamptz",[machine])).rows;
         assert.deepEqual(outbound,rows.map(({tags})=>{return {tags};}));
+        const deleted = (await pool.query("SELECT (segment->>'start_time')::timestamptz AS start_time FROM history_replica_outbox WHERE machine=$1 AND NOT segment ? 'name'",[machine])).rows;
+        assert.deepEqual(deleted,[{start_time:new Date(time)}]);
         assert.equal((await store.work(machine)).items.length,0);
         assert.equal((await pool.query('SELECT count(*) FROM history_checkpoints WHERE machine=$1',[machine])).rows[0].count,'2');
     });
