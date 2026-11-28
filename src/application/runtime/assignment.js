@@ -7,6 +7,9 @@ function canonical(value) {
     }
     return value;
 }
+export function taskSpecHash(spec) {
+    return createHash('sha256').update(JSON.stringify(canonical(spec))).digest('hex');
+}
 export function identity(input) {
     if (!input || typeof input.taskId !== 'string' || !/^[\w./:-]{1,200}$/u.test(input.taskId)) {
         throw new TypeError('Invalid taskId');
@@ -24,7 +27,7 @@ export default function assignment(input, registry) {
     });
     const adapter = registry.get(spec.adapter);
     if (!adapter) { throw new TypeError('Unknown task adapter'); }
-    const hash = createHash('sha256').update(JSON.stringify(canonical(spec))).digest('hex');
+    const hash = taskSpecHash(spec);
     if (input.specHash && input.specHash !== hash) { throw new TypeError('Invalid specHash'); }
     return { ...input, spec, specHash: hash, adapter };
 }

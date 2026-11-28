@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import rabbitmqDefinitions from '../../../../src/infrastructure/messaging/rabbitmq/definitions.js';
-import reconcileRabbitmq from '../../../../src/infrastructure/messaging/rabbitmq/reconcile.js';
+import reconcileRabbitmq, { reconcileRabbitmqTopology } from '../../../../src/infrastructure/messaging/rabbitmq/reconcile.js';
 
 const vhost = 'unit/test';
 const authorization = `Basic ${Buffer.from('operator:unit-password').toString('base64')}`;
@@ -17,13 +17,15 @@ function fixture() {
     return { exchanges: [], queues: [{ name: 'retained', messages: 17 }],
         bindings: [stale, { ...stale, source: 'other', properties_key: 'foreign' },
             { ...stale, routing_key: 'shared.*', destination_type: 'exchange', properties_key: 'exchange' }],
-        parameters: [{ name: 'retired', value: { 'src-queue': 'retained' } }, { name: 'another', value: {} }] };
+        parameters: [{ name: 'retired', value: { 'src-queue': 'retained' } }, { name: 'another', value: {} }],
+        upstreams: [{ name: 'retired-upstream', value: {} }, { name: 'external-upstream', value: {} }],
+        policies: [{ name: 'retired-policy' }, { name: 'external-policy' }] };
 }
 
 function endpoint(state, writes, method, url, body) {
     const parts = url.slice('/api/'.length).split('/').map(decodeURIComponent);
-    const [kind] = parts;
-    if (kind === 'parameters') { assert.equal(parts.splice(1, 1)[0], 'shovel'); }
+    let [kind] = parts;
+    if (kind === 'parameters' && parts.splice(1, 1)[0] === 'federation-upstream') { kind = 'upstreams'; }
     assert.equal(parts[1], vhost);
     if (method === 'GET') { return state[kind]; }
     writes.push([method, kind, ...parts.slice(2)]);
@@ -79,6 +81,20 @@ describe('RabbitMQ durable definitions and management reconciliation', function(
         writes.length = 0;
         assert.equal(await reconcileRabbitmq(desired, options), 0);
         assert.deepEqual(writes, []);
+    });
+    it('changes only declared and owned federation objects after declaring the underlying topology', async function() {
+        const topology = { ...desired, parameters: [...desired.parameters, { component: 'federation-upstream',
+            name: 'remote', vhost, value: { uri: 'amqp://remote.invalid' } }], policies: [{ name: 'link', vhost,
+            pattern: '^events$', definition: { 'federation-upstream': 'remote' }, 'apply-to': 'exchanges', priority: 1 }] };
+        const managed = { ...options, ownsUpstream: (row) => { return row.name === 'retired-upstream'; },
+            ownsPolicy: (row) => { return row.name === 'retired-policy'; } };
+        assert.equal(await reconcileRabbitmqTopology(topology, managed), 12);
+        assert.deepEqual(writes.slice(-4), [
+            ['PUT', 'upstreams', 'remote'], ['PUT', 'policies', 'link'],
+            ['DELETE', 'upstreams', 'retired-upstream'], ['DELETE', 'policies', 'retired-policy']]);
+        assert.deepEqual(state.upstreams.map(({ name }) => { return name; }), ['external-upstream', 'remote']);
+        assert.deepEqual(state.policies.map(({ name }) => { return name; }), ['external-policy', 'link']);
+        assert.equal(await reconcileRabbitmqTopology(topology, managed), 0);
     });
     it('performs no deletions without a declared ownership policy', async function() {
         const connection = { ...options, ownsBinding: undefined, ownsShovel: undefined };

@@ -314,6 +314,32 @@ phase must run against the migrated state. An ownership conflict stops adoption
 before rollout waits and the afterReady hook. Resolve the field ownership and
 rerun `apply` after the client-side migration has completed.
 A caller can supply prerequisites, rollout resources and an afterReady hook.
+For a single-node storage cutover, `preflightKubeStorage(plan, action)` checks
+the selected node, required Secret keys, live data mounts and the PVC/PV
+identities. It compares the preserved StatefulSets' rendered pod templates
+with the live API through a server dry-run.
+`applyWhenChanged(execute)` can wrap the stage executor so kubectl applies only
+when its diff reports a change.
+
+Use `prepareKubePrerequisites(plan, action)` to create missing resources on
+a verified node. Declare the namespaces, resource order, allowed Secret targets
+and required keys in the plan. An optional `copyFrom` points to an earlier
+Secret declaration and fills only a missing Secret at the destination.
+`executeKubeSeed(plan, execute)` checks the target node and verifies that
+application writers are stopped both before and after bounded exports. The
+application supplies the commands and the allowlist of infrastructure pods
+that can be running during the import.
+
+Use `postgresMaintenancePlan(target, backupId, attempt)` to configure a backup
+against a specific context, namespace, node, pod and claim. Supply the
+PostgreSQL database and image user, backup path, scratch storage class and size,
+and restore-job ownership labels. Pass this plan to
+`operatePostgresMaintenance(plan, action)` for status, backup or verification.
+Backup operation IDs identify immutable, checksummed dumps. A verification job
+uses the running database image digest, mounts the backup read-only and runs
+PostgreSQL in isolated scratch storage. Optional `verificationSql` is trusted
+application configuration and must return one JSON object for the result.
+
 The RabbitMQ definitions builder and management reconciler are exported as
 `@yarkivaev/scada/rabbitmq/definitions` and `@yarkivaev/scada/rabbitmq/reconcile`.
 The caller supplies the vhost, connection settings and ownership policy for

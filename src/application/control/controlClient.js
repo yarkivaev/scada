@@ -71,5 +71,5 @@ export function clientFromEnv(env, prefix = 'CONTROL') {
     for (const [name, key] of [['CA', 'ca'], ['CERT', 'cert'], ['KEY', 'key']]) {
         if (env[`${prefix}_${name}`]) { tls[key] = readFileSync(env[`${prefix}_${name}`]); }
     }
-    return controlClient({ endpoints: (env[`${prefix}_ENDPOINTS`] ?? '').split(',').filter(Boolean), tls, username: env[`${prefix}_USERNAME`], password: env[`${prefix}_PASSWORD`] });
+    return controlClient({ endpoints: (env[`${prefix}_ENDPOINTS`] ?? '').split(',').map((endpoint) => { return endpoint.trim(); }).filter(Boolean), tls, username: env[`${prefix}_USERNAME`], password: env[`${prefix}_PASSWORD`] });
 }

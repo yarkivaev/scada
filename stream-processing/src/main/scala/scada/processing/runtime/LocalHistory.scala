@@ -4,15 +4,13 @@ import io.yarkivaev.segmentation.{HistoryRange, HistorySeed, HistorySegment, His
 import cats.effect.{IO, Ref}
 import cats.syntax.all.*
 import fs2.Stream
-import io.circe.{Json, Printer}
+import io.circe.Json
 import io.circe.parser.parse
 import io.circe.syntax.*
 import io.yarkivaev.temporal.{LocalStreams, Observation, Processing, Work, Worker}
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Instant
-import java.util.HexFormat
 import io.yarkivaev.streamworker.{ProcessingError, Processor, StepResult}
 import scada.processing.core.*
 import io.yarkivaev.segmentation.ObservedSegmentation.{Sample, State, segment}
@@ -58,12 +56,8 @@ object LocalHistory:
       val state = samples.lastOption.map(last => HistoryState(last.time, result.state.parameters, tail))
       Calculated(result.outputs ++ tail, state)
 
-  private def digest(value: Json): String =
-    val text = Printer.noSpaces.copy(sortKeys = true).print(value)
-    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)))
-
   private[runtime] def commitFence(machine: MachineId, workId: String, token: String, generation: Option[Long]): Json =
-    val outputId = digest(Json.arr(machine.raw.asJson, workId.asJson, token.asJson))
+    val outputId = HistoryClient.fingerprint(Json.arr(machine.raw.asJson, workId.asJson, token.asJson))
     val fields = ("outputId" -> outputId.asJson) :: generation.toList.map(current => "generation" -> current.asJson)
     Json.obj("fence" -> Json.obj(fields*))
 

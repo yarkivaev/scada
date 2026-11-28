@@ -67,20 +67,43 @@ async function bindings(api, path, desired, ownsBinding) {
     return missing.length + stale.length;
 }
 
-async function shovels(api, path, desired, ownsShovel) {
-    const current = await api('GET', path);
+async function upsertNamed(api, path, desired, body) {
+    const current = await api('GET', path) || [];
     const changed = desired.filter((item) => {
         const found = current.find((row) => { return row.name === item.name; });
-        return !same(found, { value: item.value });
-    });
-    const stale = current.filter((item) => {
-        return ownsShovel?.(item) && !desired.some((row) => { return row.name === item.name; });
+        return !same(found, body(item));
     });
     await Promise.all(changed.map((item) => {
-        return api('PUT', `${path}/${encodeURIComponent(item.name)}`, { value: item.value });
+        return api('PUT', `${path}/${encodeURIComponent(item.name)}`, body(item));
     }));
+    return { count: changed.length, current };
+}
+
+async function pruneNamed(api, path, current, desired, owns) {
+    const stale = current.filter((item) => {
+        return owns?.(item) && !desired.some((row) => { return row.name === item.name; });
+    });
     await Promise.all(stale.map((item) => { return api('DELETE', `${path}/${encodeURIComponent(item.name)}`); }));
-    return changed.length + stale.length;
+    return stale.length;
+}
+
+function parameter(item) {
+    return { value: item.value };
+}
+
+function policy(item) {
+    return { pattern: item.pattern, definition: item.definition, priority: item.priority, 'apply-to': item['apply-to'] };
+}
+
+function ensureVirtualHost(objects, vhost) {
+    if (objects.some((item) => { return item.vhost !== undefined && item.vhost !== vhost; })) {
+        throw new Error('topology contains a different virtual host');
+    }
+}
+
+async function reconcileShovels(api, path, desired, owns) {
+    const shovels = await upsertNamed(api, path, desired, parameter);
+    return shovels.count + await pruneNamed(api, path, shovels.current, desired, owns);
 }
 
 /** Apply only topology belonging to the selected virtual host. Users and permissions are bootstrap data. */
@@ -90,15 +113,51 @@ export default async function reconcileRabbitmq(desired, options) {
     const api = apiAt(options);
     const host = encodeURIComponent(vhost);
     const objects = [...desired.exchanges, ...desired.queues, ...desired.bindings, ...desired.parameters];
-    if (objects.some((item) => { return item.vhost !== undefined && item.vhost !== vhost; })) {
-        throw new Error('topology contains a different virtual host');
-    }
+    ensureVirtualHost(objects, vhost);
     if (desired.parameters.some((item) => { return item.component !== 'shovel'; })) {
         throw new Error('only shovel parameters can be reconciled');
     }
     const exchanges = await declare(api, `exchanges/${host}`, desired.exchanges);
     const queues = await declare(api, `queues/${host}`, desired.queues);
     const links = await bindings(api, `bindings/${host}`, desired.bindings, ownsBinding);
-    const parameters = await shovels(api, `parameters/shovel/${host}`, desired.parameters, ownsShovel);
+    const parameters = await reconcileShovels(api, `parameters/shovel/${host}`, desired.parameters, ownsShovel);
     return exchanges + queues + links + parameters;
+}
+
+/** Apply only dynamic shovels managed by a caller. */
+export function reconcileRabbitmqShovels(desired, options) {
+    const { vhost, ownsShovel, api = apiAt(options) } = options;
+    if (!vhost) { throw new Error('a virtual host is required'); }
+    ensureVirtualHost(desired, vhost);
+    if (desired.some((item) => { return item.component !== 'shovel'; })) {
+        throw new Error('only shovel parameters can be reconciled');
+    }
+    return reconcileShovels(api, `parameters/shovel/${encodeURIComponent(vhost)}`, desired, ownsShovel);
+}
+
+/** Reconcile federation objects for one vhost. Only owned objects are eligible for deletion. */
+export async function reconcileRabbitmqFederation(desired, options) {
+    const { vhost, ownsUpstream, ownsPolicy } = options;
+    if (!vhost) { throw new Error('a virtual host is required'); }
+    const upstreams = (desired.parameters || []).filter((row) => { return row.component === 'federation-upstream'; });
+    const policies = desired.policies || [];
+    ensureVirtualHost([...upstreams, ...policies], vhost);
+    const host = encodeURIComponent(vhost);
+    const api = apiAt(options);
+    const upstreamPath = `parameters/federation-upstream/${host}`;
+    const policyPath = `policies/${host}`;
+    const links = await upsertNamed(api, upstreamPath, upstreams, parameter);
+    const rules = await upsertNamed(api, policyPath, policies, policy);
+    const dropped = await pruneNamed(api, upstreamPath, links.current, upstreams, ownsUpstream);
+    const retired = await pruneNamed(api, policyPath, rules.current, policies, ownsPolicy);
+    return links.count + rules.count + dropped + retired;
+}
+
+/** Apply queue bindings and shovels before changing federation. */
+export async function reconcileRabbitmqTopology(desired, options) {
+    const parameters = desired.parameters || [];
+    ensureVirtualHost([...parameters, ...(desired.policies || [])], options.vhost);
+    const shovels = parameters.filter((row) => { return row.component === 'shovel'; });
+    const topology = await reconcileRabbitmq({ ...desired, parameters: shovels }, options);
+    return topology + await reconcileRabbitmqFederation(desired, options);
 }

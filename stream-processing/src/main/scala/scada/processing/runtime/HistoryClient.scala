@@ -1,11 +1,14 @@
 package scada.processing.runtime
 
 import cats.effect.IO
-import io.circe.Json
+import io.circe.{Json, Printer}
 import io.circe.parser.parse
 import java.net.URI
 import java.net.http.{HttpClient,HttpRequest,HttpResponse}
 import java.time.Duration
+import java.nio.charset.StandardCharsets.UTF_8
+import java.security.MessageDigest
+import java.util.HexFormat
 import scada.processing.infra.config.{AppConfig, CheckpointApiConfig}
 import scala.concurrent.duration.*
 
@@ -54,3 +57,9 @@ final class HistoryClient(config: CheckpointApiConfig):
     attempt(2)
 
   def retry[A](action: IO[A]): IO[A] = action.handleErrorWith(_=>IO.sleep(2.seconds) *> retry(action))
+
+object HistoryClient:
+  /** Stable fingerprint for classifier configuration and claimed work. */
+  def fingerprint(value: Json): String =
+    val bytes = Printer.noSpaces.copy(sortKeys = true).print(value).getBytes(UTF_8)
+    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
