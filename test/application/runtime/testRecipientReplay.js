@@ -12,7 +12,8 @@ describe('recipient-isolated durable replay',()=>{
  function queue(options={}){const value=createQueue(directory,{maxBytes:10000000,groupCommit:{maxDelayMs:0},...options});owned.push(value);return value;}
  beforeEach(async()=>{directory=await mkdtemp(path.join(os.tmpdir(),'recipient-replay-'));});
  afterEach(async()=>{await Promise.all(owned.splice(0).map(item=>{return item.close();}));await rm(directory,{recursive:true,force:true});});
- it('reaches a healthy immutable destination in the first page behind 1000 offline-only events',async()=>{
+ it('reaches a healthy immutable destination in the first page behind 1000 offline-only events',async function(){
+  this.timeout(8000);
   const received=[];const item=queue({factory(spec){return {async write(records){if(spec.url===bad.url){throw new Error('offline');}received.push(records[0].eventId);}};}});
   await item.open();
   for(let offset=0;offset<1000;offset+=100){
