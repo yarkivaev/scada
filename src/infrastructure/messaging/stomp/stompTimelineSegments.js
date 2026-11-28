@@ -54,7 +54,7 @@ function emitPiece(bus, piece) {
 function consume(raw, buses) {
     const parsed = JSON.parse(raw.payload);
     const bus = buses[parsed.machine];
-    if (!bus || parsed.type === 'phase-transition') {
+    if (!bus || parsed.type === 'phase-transition' || parsed.type === 'segment-delete') {
         return;
     }
     if (parsed.type === 'split-family' && Array.isArray(parsed.pieces)) {

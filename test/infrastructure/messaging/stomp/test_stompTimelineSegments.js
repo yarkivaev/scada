@@ -39,6 +39,17 @@ describe('stompTimelineSegments', function() {
         });
         assert.strictEqual(stomp.ref.events.length, 1, 'segment message was not emitted on timeline bus');
     });
+    it('accepts replica deletions without treating them as new timeline pieces', function() {
+        const stomp = fakeStomp({ collector: null });
+        const bus = { emit() { assert.fail('A tombstone was emitted as a segment'); } };
+        stompTimelineSegments(stomp.factory, { m1: bus });
+        assert.doesNotThrow(() => {
+            stomp.ref.collector.accept({ payload: JSON.stringify({
+                type: 'segment-delete', machine: 'm1', timelineChange: { startTime: '2026-11-28T00:00:00Z', row: null }
+            }) });
+        });
+    });
+
     it('omits tags field when supervisor payload tags are null', function() {
         const stomp = fakeStomp({ collector: null, events: [] });
         const machine = `m${Math.floor(Math.random() * 9000 + 1000)}`;
