@@ -31,15 +31,28 @@ describe('modbusRtuSource', () => {
     assert.strictEqual(typeof source.start, 'function', 'Should expose start method for RTU source');
   });
 
-  it('retries connection on failure', async () => {
-    let logged = false;
-    const log = { error: () => { logged = true; } };
+  it('retries connection on failure', async function () {
+    this.timeout(12000);
+    const failures = [];
+    let repeated;
+    const retried = new Promise(resolve => { repeated = resolve; });
+    const log = { error(message) {
+      failures.push(message);
+      if (failures.length === 2) { repeated(); }
+    } };
     const collector = { accept: () => {} };
     const clk = fakeClock(Math.floor(Math.random() * 10000));
-    const source = modbusRtuSource(`/dev/tty\u044b${Math.random()}`, { baudRate: 9600 }, 4000, 44, 5, collector, clk, log);
-    source.start();
-    await new Promise(resolve => { setTimeout(resolve, 200); });
-    source.stop();
-    assert.strictEqual(logged, true, 'Should log RTU connection failure and retry');
+    const source = modbusRtuSource(`/dev/tty\u044b${Math.random()}`, { baudRate: 9600 }, 4000, 44, 0.05, collector, clk, log);
+    const timer = setTimeout(repeated, 6000);
+    try {
+      await source.start();
+      await retried;
+      assert.strictEqual(failures.length, 2, 'Should retry the failed RTU connection');
+      assert.match(failures[0], /failed, retrying in 0\.05s/u);
+      assert.match(failures[1], /failed, retrying in 0\.1s/u);
+    } finally {
+      clearTimeout(timer);
+      await source.stop();
+    }
   });
 });

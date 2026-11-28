@@ -60,9 +60,10 @@ describe('OPC UA connections', function () {
         second.server.on('request', (request) => {
             if (request.schema.name === 'ReadRequest' && request.nodesToRead.some((node) => { return node.nodeId.toString() === 'ns=1;s=Signal'; })) { reads += 1; }
         });
+        // Keep the usual request and session deadlines while exercising fast reconnect.
         const runtime = connections([config(firstPort, 'a'), config(secondPort, 'b')], (spec, value) => {
             events.push({ device: spec.device, value });
-        }, { retryMs: 100, connectTimeoutMs: 500, requestTimeoutMs: 500 });
+        }, { retryMs: 100 });
         try {
             await runtime.start();
             await runtime.start();
@@ -78,8 +79,7 @@ describe('OPC UA connections', function () {
             await first.server.shutdown(0);
             first = null;
             const before = events.length;
-            await pause(600);
-            assert.ok(events.slice(before).some((event) => { return event.device === 'b' && event.value === 22; }));
+            await until(() => { return events.slice(before).some((event) => { return event.device === 'b' && event.value === 22; }); });
             first = await source(firstPort, 33);
             await until(() => { return events.some((event) => { return event.device === 'a' && event.value === 33; }); });
             await pause(400);

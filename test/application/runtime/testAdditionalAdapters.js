@@ -67,19 +67,23 @@ describe('MQTT PostgreSQL runtime adapter', function () {
         assert.throws(() => { adapter.validate({ ...spec, limits: { maxBytes: 0 } }); }, /positive/u);
     });
     it('writes decoded metrics before ACK, preserves session identity and closes its pool once', async function () {
+        this.timeout(10000);
         const original = { pool: pg.Pool, connect: mqtt.MqttClient.prototype.connect,
             end: mqtt.MqttClient.prototype.end };
         const transport = {};
         const budget = taskBudget({ maxBytes: 256, maxRecords: 1 });
         let connection;
+        let started;
         let release;
+        const writing = new Promise((resolve) => { started = resolve; });
+        const commit = new Promise((resolve) => { release = resolve; });
         let ended = 0;
         let acknowledged = false;
         const writes = [];
         pg.Pool = class {
             constructor(options) { connection = options.connectionString; }
             on() {}
-            async query(sql, values) { writes.push({ sql, values }); await new Promise((resolve) => { release = resolve; }); }
+            async query(sql, values) { writes.push({ sql, values }); started(); await commit; }
             async end() { ended += 1; }
         };
         mqtt.MqttClient.prototype.connect = function () { transport.client = this; return this; };
@@ -94,10 +98,13 @@ describe('MQTT PostgreSQL runtime adapter', function () {
             assert.equal(transport.client.options.clean, false);
             assert.equal(transport.client.options.properties.sessionExpiryInterval, 7200);
             assert.equal(transport.client.options.properties.maximumPacketSize, 256);
-            transport.client.handleMessage({ topic: 'measurements/current', payload: Buffer.from('{"ts":1234,"value":42}') }, (error) => {
-                assert.equal(error, undefined); acknowledged = true;
+            const ack = new Promise((resolve) => {
+                transport.client.handleMessage({ topic: 'measurements/current', payload: Buffer.from('{"ts":1234,"value":42}') }, (error) => {
+                    acknowledged = true;
+                    resolve(error);
+                });
             });
-            await new Promise(setImmediate);
+            await writing;
             assert.equal(acknowledged, false);
             assert.equal(budget.status().records, 1);
             const rejected = await new Promise((resolve) => {
@@ -108,17 +115,20 @@ describe('MQTT PostgreSQL runtime adapter', function () {
             assert.match(writes[0].sql, /INSERT INTO metrics/u);
             assert.deepEqual(writes[0].values, [['measurements/current'], [new Date(1234)], [42]]);
             release();
-            await new Promise(setImmediate);
-            assert.equal(acknowledged, true);
+            assert.equal(await ack, undefined);
             assert.deepEqual(budget.status(), { bytes: 0, records: 0 });
             await task.stop(); await task.stop();
             assert.equal(ended, 1);
         } finally {
-            release?.(); await task?.stop();
-            // Restore the process-wide IO substitute after all pending acceptance settles.
-            // eslint-disable-next-line require-atomic-updates
-            pg.Pool = original.pool;
-            Object.assign(mqtt.MqttClient.prototype, { connect: original.connect, end: original.end });
+            release();
+            try {
+                await task?.stop();
+            } finally {
+                // Restore the process-wide IO substitute after all pending acceptance settles.
+                // eslint-disable-next-line require-atomic-updates
+                pg.Pool = original.pool;
+                Object.assign(mqtt.MqttClient.prototype, { connect: original.connect, end: original.end });
+            }
         }
     });
 });
