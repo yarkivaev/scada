@@ -3,8 +3,9 @@
 The stream processor turns readings into timeline segments. It runs the
 configured segmentation and tagging rules through Stream Worker and resumes
 from checkpoints. The state sink applies timeline outputs in PostgreSQL and
-checks the current owner and timeline revision. RabbitMQ relays committed
-outputs to other receivers. See the [SCADA architecture](../docs/architecture/README.md).
+checks the current owner and timeline revision. With replication v2, fenced
+live writes and historical corrections share a PostgreSQL outbox. The relay
+publishes committed changes and deletions to RabbitMQ. See the [SCADA architecture](../docs/architecture/README.md).
 
 ## Build and run
 
@@ -13,8 +14,7 @@ Use JDK 21. From this directory, run:
 ```sh
 ./resolve-dependencies.sh
 sbt test assembly
-java -jar target/scala-3.5.2/scada-stream-processing.jar --check /path/to/application.conf
-CLASSIFY_GROUP=machine-1 java -jar target/scala-3.5.2/scada-stream-processing.jar /path/to/application.conf
+CLASSIFY_GROUP=machine-1 java -jar target/scala-3.5.2/scada-stream-processing.jar --check application.conf
 ```
 
 The HOCON file supplies machine IDs, segment rules, tag rules, source aliases,
@@ -22,6 +22,45 @@ broker endpoints and the checkpoint API used for timeline output. `CLASSIFY_GROU
 machine IDs owned by the process. An unset or empty group starts no machine streams.
 `--check` validates configuration without starting the runtime.
 `--capabilities` reports the history protocols supported by the entry point.
+
+## Example configuration
+
+Save this live-mode example as `application.conf`. Adjust the broker endpoints,
+aliases and state API for your site. The validation command above runs without
+opening network connections.
+
+```hocon
+mqtt {
+  host = "127.0.0.1"
+  port = 1883
+  client-id = "scada-machine-1"
+}
+rabbitmq {
+  address { host = "127.0.0.1", port = 61613 }
+  vhost = "/"
+  credentials { login = ${?STOMP_LOGIN}, passcode = ${?STOMP_PASSCODE} }
+  destinations {
+    user-decisions = "/exchange/scada.user_decisions"
+    segments = "/exchange/scada.segments"
+  }
+}
+checkpoint-api {
+  base-url = "http://127.0.0.1:8081"
+  token = ${?STATE_HTTP_TOKEN}
+}
+routing.aliases.machine-1 = [{ topic = "equipment/machine-1/power", metric = "power" }]
+machines = [{
+  id = "machine-1"
+  window = 15
+  segments = [
+    { name = "on", condition.above { param = "power", threshold = 5 } },
+    { name = "off", condition.below { param = "power", threshold = 5 } }
+  ]
+}]
+```
+
+Set `STOMP_LOGIN` and `STOMP_PASSCODE` before validating or starting the example.
+With the dependencies running, start the same command without `--check`.
 
 ## Processing and recovery
 
@@ -40,6 +79,8 @@ precedence over the corresponding environment value. Deployments can set
 the URL while keeping machine processing paused during handoff. Set
 `history.role` or `SUPERVISOR_WRITER_ROLE` to `leader` or `standby` when
 the deployment explicitly manages those roles.
+
+When local history and a RabbitMQ segment destination are configured, the worker uses the v2 outbox commit routes for replicated writes. Enable the relay on the state sink and prepare its replica consumers before starting this mode.
 
 The shared classifier supports `preserve-known-suffix-v1` for bounded history.
 A profile with a stateful worker can also advertise `stateful-correction-v1`.

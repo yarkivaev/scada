@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1048 456" width="1048" height="456" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, sans-serif">
   <title id="title">Single SCADA edge site</title>
-  <desc id="desc">An agent reads equipment and publishes to RabbitMQ. The site server consumes MQTT and reads and writes PostgreSQL metrics. Stream Worker reads telemetry and returns classified segments to RabbitMQ over STOMP. The state sink consumes STOMP and writes state to PostgreSQL. Plant clients query the site server.</desc>
+  <desc id="desc">An agent reads equipment and publishes to RabbitMQ. The site server consumes MQTT and reads and writes PostgreSQL metrics. Stream Worker reads telemetry and commits timeline output through the state HTTP API. The state sink also consumes STOMP and writes state to PostgreSQL. Plant clients query the site server.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
       <path d="M0 0l8 4-8 4z" fill="#33313b" />
@@ -55,7 +55,7 @@
     <path d="M6 6.5h1m-1 13h1m5-13h8m-8 13h8" />
   </g>
   <text x="653" y="248.0" font-size="16" font-weight="700" fill="#33313b" text-anchor="start">State sink</text>
-  <text x="653" y="267.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">STOMP / PostgreSQL</text>
+  <text x="653" y="267.0" font-size="13" font-weight="500" fill="#5e5865" text-anchor="start">HTTP / STOMP</text>
   <rect x="854" y="165" width="143" height="70" rx="10" fill="#ffffff" stroke="#e5d8b2" />
   <g transform="translate(867 187.0)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <ellipse cx="13" cy="6" rx="10" ry="4" />
@@ -73,9 +73,9 @@
   <text x="580" y="134" font-size="13" font-weight="650" fill="#5e5865" text-anchor="middle">MQTT</text>
   <text x="572" y="271" font-size="13" font-weight="650" fill="#5e5865" text-anchor="middle">STOMP</text>
   <path d="M457 223V342Q457 353 468 353H601" fill="none" stroke="#33313b" stroke-width="2" marker-end="url(#arrow)" />
-  <path d="M601 387H517Q506 387 506 376V223" fill="none" stroke="#33313b" stroke-width="2" marker-end="url(#arrow)" />
+  <path d="M696 335V285" fill="none" stroke="#33313b" stroke-width="2" marker-end="url(#arrow)" />
   <text x="518" y="340" font-size="13" font-weight="650" fill="#5e5865">Telemetry</text>
-  <text x="475" y="412" font-size="13" font-weight="650" fill="#5e5865">STOMP segments</text>
+  <text x="710" y="313" font-size="13" font-weight="650" fill="#5e5865">HTTP commit</text>
   <rect x="605" y="335" width="184" height="70" rx="10" fill="#ffe8a4" stroke="#eacb78" />
   <g transform="translate(618 357)" fill="none" stroke="#33313b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <rect x="2" y="2" width="22" height="9" rx="2" />
@@ -83,5 +83,5 @@
     <path d="M6 6.5h1m-1 13h1m5-13h8m-8 13h8" />
   </g>
   <text x="653" y="368" font-size="16" font-weight="700" fill="#33313b">Stream Worker</text>
-  <text x="653" y="387" font-size="13" font-weight="500" fill="#5e5865">Classification / replay</text>
+  <text x="653" y="387" font-size="13" font-weight="500" fill="#5e5865">Rules and history</text>
 </svg>

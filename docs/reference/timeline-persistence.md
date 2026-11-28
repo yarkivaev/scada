@@ -2,7 +2,7 @@
 
 # Timeline persistence
 
-The [Stream processing](../../stream-processing/README.md) classifies telemetry and publishes timeline segments. The state sink commits those results before RabbitMQ relays them. The following contracts describe split edits, batching and rejected deliveries.
+[Stream processing](../../stream-processing/README.md) classifies telemetry and submits timeline changes to the state sink. In v2, the sink commits fenced live writes and historical corrections through a shared outbox. See [replication v2](edge-history.md#delivering-committed-segments-to-replicas) for deletions, duplicate delivery and ordering. This page describes segment edits and STOMP ingest.
 
 ## Split family
 

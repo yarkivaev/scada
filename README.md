@@ -14,7 +14,7 @@
 - **Keep plant state local.** An edge site can store its metrics and state in PostgreSQL. A central site can archive selected metrics from multiple edge sites in ClickHouse.
 - **Manage placement separately.** Agents can run from local manifests. An optional `scada-controller` assigns work through etcd, and agents can continue running saved assignments during a control-plane outage.
 
-For high availability, run collector copies on eligible nodes, prepare a standby stream processor and persist historical work so another worker can resume it. See [High availability](docs/architecture/high-availability.md) for the guarantees and their prerequisites.
+For high availability, agents can run collector copies and Stream Worker candidates can share a writer lease. With timeline replication v2, live writes and historical corrections publish committed changes and deletions through a PostgreSQL outbox. See [High availability](docs/architecture/high-availability.md).
 
 ## Package boundary
 

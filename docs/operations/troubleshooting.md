@@ -10,6 +10,7 @@ Use the symptom and recovery steps to locate the component that needs attention.
 | Collector readiness stays negative during startup | Check saved assignment and spool recovery. See [durable delivery](../collect/durable-delivery.md#collector-recovery-and-durable-delivery-references). |
 | Edge assignment changes stop while existing collection continues | Check etcd quorum and per-node credentials. See [edge assignment controller](../collect/edge-controller.md). |
 | Density-sensitive telemetry reads return `SCADA_HISTORY_DENSITY_UNAVAILABLE` | Check whether the range includes sealed compacted history. See [central telemetry](../reference/central-telemetry.md). |
+| Committed timeline changes lag on a replica | Check the authority relay logs for `history_replica_outbox`, the durable RabbitMQ bindings and the replica consumer. See [replication v2](../reference/edge-history.md#delivering-committed-segments-to-replicas). |
 | Segment deliveries retry or enter a dead-letter queue | Check transaction failures and the configured quarantine policy. See [timeline persistence](../reference/timeline-persistence.md). |
 
 ## Collector starts but stays unready

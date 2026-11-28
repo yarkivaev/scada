@@ -27,9 +27,9 @@ The prefixes below are used by the [migration directory](../../db/migrations).
 2. Apply the image's complete shared and selected-profile migration set with an administrative identity in a separate job.
 3. Give the runtime role database `CONNECT`, schema `USAGE`, read access to `public.schema_migrations` and the DML and sequence grants required by the enabled pipelines.
 4. Set `SUPERVISOR_MIGRATIONS=verify` and expose the restricted connection string through `POSTGRES_URL`. Keep the administrative credentials in the bootstrap job.
-5. Start the application and check its startup output. It checks migration records before opening HTTP or starting consumers. A missing table, missing version or insufficient access stops startup.
+5. Start the application and check its startup output. It checks migration records before opening HTTP or starting consumers. Missing migration records or an unreadable migration table stop verification. Verification reads the migration manifest and recorded versions. Validate the tables, functions, runtime grants and sequences separately.
 
-The collector task-state migration is separately opt-in. Verification checks recorded migration versions. Schema checksums and effective DML privileges require separate checks.
+The collector task-state migration is separately opt-in. For timeline replication v2, apply the shared position table and grants in `V0016` and `V0017` on authorities and recipients. Edge authorities also need `E0021` through `E0024` for outbox storage, capture and grants.
 
 ## Configure Helm
 

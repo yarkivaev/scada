@@ -22,7 +22,7 @@ The usual Helm deployment runs the plant API in site-server and the three STOMP 
 
 ## Single edge site
 
-In this example, the collector publishes readings to RabbitMQ. Stream Worker reads the telemetry and publishes segments over STOMP. The site server writes raw metrics, the state sink writes operational state, and plant clients query the local API.
+In this example, the collector publishes readings to RabbitMQ. Stream Worker reads telemetry and submits timeline writes to the state HTTP API. The state sink also accepts segment, decision and alert messages through STOMP. The site server writes raw metrics, the state sink writes operational state, and plant clients query the local API.
 
 ![A collector sends readings through RabbitMQ to Stream Worker. The state sink saves classified segments in PostgreSQL.](diagrams/single-edge-site.svg)
 
@@ -46,7 +46,7 @@ If etcd loses quorum, new placement pauses and running agents can continue using
 
 ![Stream Worker candidates share a writer lease and use durable correction work.](diagrams/replicated-stream-processing.svg)
 
-A deployment can keep Stream Worker candidates on different edge nodes. With a shared PostgreSQL lease, a candidate must acquire the per-machine lock to write. Historical correction resumes from durable work and rejects a stale claim or changed context. See [High availability](high-availability.md) for replica placement, handoff and failure guarantees.
+A deployment can keep Stream Worker candidates on different edge nodes. With a shared PostgreSQL lease, a candidate must acquire the per-machine lock to write. Historical correction resumes from durable work and rejects a stale claim or changed context. With v2 enabled, the same transactional outbox publishes changes and deletions from live writes and corrections. See [High availability](high-availability.md) for replica placement, handoff and failure guarantees.
 
 ## Further reading
 
