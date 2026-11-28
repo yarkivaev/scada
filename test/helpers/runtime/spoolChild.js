@@ -1,5 +1,5 @@
 import deliverySpool from '../../../src/infrastructure/persistence/runtime/deliverySpool.js';
-const spool = deliverySpool(process.argv[2], { maxBytes:1000000 });
+const spool = deliverySpool(process.argv[2], { maxBytes:1000000, walCheckpoint: process.argv[4] === 'managed' ? {} : undefined });
 try {
     await spool.open();
     if (process.argv[3] === 'write') {

@@ -4,13 +4,16 @@ import { pendingFair } from './spoolReplay.js';
 import spoolMutations from './spoolMutations.js';
 import spoolMigration from './spoolMigration.js';
 import spoolLimits from './spoolLimits.js';
+import spoolCheckpoints from './spoolCheckpoints.js';
 
 /* eslint max-lines-per-function: ["error", 100], max-statements: ["error", 25] */
 /** Single owner, bounded cache and indexed reads. Caps count logical JSON bytes, not allocated pages. */
 export default function deliverySpool(directory, options) {
-    const { maxBytes, maxRecords, legacyMigrationMaxBytes } = spoolLimits(options);
+    const { maxBytes, maxRecords, legacyMigrationMaxBytes, walCheckpoint } = spoolLimits(options);
     const state = { db: null, owner: null, ready: false, busy: false, bytes: 0, records: 0 };
+    let maintenance;
     function release() {
+        maintenance?.cancel(); maintenance = undefined;
         state.ready = false;
         try { state.db?.close(); } finally { state.owner?.close(); state.db = null; state.owner = null; }
     }
@@ -24,7 +27,12 @@ export default function deliverySpool(directory, options) {
         try { return await action(); } finally { Object.assign(state, { busy:false }); }
     }
     function commit(action) {
-        try { const result = state.db.transaction(action)(); refresh(); return result; }
+        try {
+            maintenance?.beforeWrite();
+            const result = state.db.transaction(action)();
+            refresh(); maintenance?.schedule();
+            return result;
+        }
         catch (error) { if (error.code?.startsWith('SQLITE_')) { release(); } throw error; }
     }
     function mutateMany(operations) {
@@ -43,6 +51,7 @@ export default function deliverySpool(directory, options) {
                     Object.assign(state, await database(directory));
                     capacity(state.db, maxBytes, maxRecords);
                     await spoolMigration(directory, state.db, { maxBytes, maxRecords, legacyMigrationMaxBytes });
+                    if (walCheckpoint) { maintenance = spoolCheckpoints(state.db, directory, walCheckpoint); maintenance.schedule(); }
                     refresh(); Object.assign(state, { ready:true });
                 } catch (error) { release(); throw error; }
             }, false);
