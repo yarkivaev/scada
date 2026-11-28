@@ -137,7 +137,7 @@ describe('shopWithTimeline owners', function() {
 
 describe('shopWithTimeline postgres confirm', function() {
     it('writes tags to segments before publishing the decision', async function() {
-        const machine = `ихт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2026-08-20T12:29:24.318Z');
         const tag = `возврат-${Math.floor(Math.random() * 90)}`;
         const updates = [];
@@ -157,7 +157,7 @@ describe('shopWithTimeline postgres confirm', function() {
     });
 
     it('publishes a retag envelope to the segments broker', async function() {
-        const machine = `ихт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2026-08-20T09:10:22.885Z');
         const published = [];
         const decisions = { async publish() {} };
@@ -176,7 +176,7 @@ describe('shopWithTimeline postgres confirm', function() {
     });
 
     it('does not publish a decision when the segment row is missing', async function() {
-        const machine = `ихт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 9000 + 1000)}`;
         const published = [];
         const decisions = {
             async publish() {
@@ -186,7 +186,7 @@ describe('shopWithTimeline postgres confirm', function() {
         const tl = shopWithTimeline(machine, { pool: emptyPool(), userDecisions: decisions });
         let failed = false;
         try {
-            await tl.retag(new Date('2026-08-20T11:03:59.381Z'), ['to_ladle'], {}, audit(90));
+            await tl.retag(new Date('2026-08-20T11:03:59.381Z'), ['inspection'], {}, audit(90));
         } catch {
             failed = true;
         }
@@ -198,7 +198,7 @@ describe('shopWithTimeline postgres confirm', function() {
     });
 
     it('publishes a split and deletes the stale family start', async function() {
-        const machine = `ичт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2026-10-19T06:02:18.000Z');
         const cut = new Date('2026-10-19T06:25:00.000Z');
         const end = new Date('2026-10-19T06:47:06.000Z');
@@ -232,7 +232,7 @@ describe('shopWithTimeline postgres confirm', function() {
         });
         await tl.respond(start.toISOString(), {
             splits: [
-                { start, end: cut, tag: 'шлак' },
+                { start, end: cut, tag: 'этап_б' },
                 { start: cut, end, tag: '' }
             ]
         }, audit(41));
@@ -245,7 +245,7 @@ describe('shopWithTimeline postgres confirm', function() {
     });
 
     it('accepts one piece that restores the family bounds rather than the first piece end', async function() {
-        const machine = `ичт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2026-10-19T06:02:18.400Z');
         const cut = new Date('2026-10-19T06:25:00.000Z');
         const end = new Date('2026-10-19T06:47:06.700Z');
@@ -277,13 +277,13 @@ describe('shopWithTimeline postgres confirm', function() {
             }
         });
         await tl.respond(start.toISOString(), {
-            splits: [{ start, end, tag: 'шлак' }]
+            splits: [{ start, end, tag: 'этап_б' }]
         }, audit(43));
         assert.strictEqual(sent[0][0].end.getTime(), end.getTime(), 'one remaining piece was cut down to the first piece');
     });
 
     it('refuses to delete every piece of a split family', async function() {
-        const machine = `ичт-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2026-10-19T06:02:18.400Z');
         const end = new Date('2026-10-19T06:47:06.700Z');
         const sql = [];
@@ -322,9 +322,9 @@ describe('shopWithTimeline postgres confirm', function() {
 
 describe('shopWithTimeline postgres read', function() {
     it('lists persisted rows when a pool exists without userDecisions', async function() {
-        const machine = `ихт-α-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-α-${Math.floor(Math.random() * 9000 + 1000)}`;
         const start = new Date('2024-11-02T03:04:05.137Z');
-        const tag = `шлак-${Math.floor(Math.random() * 90)}`;
+        const tag = `этап_б-${Math.floor(Math.random() * 90)}`;
         const pool = {
             async query() {
                 return {
@@ -361,12 +361,12 @@ describe('shopWithTimeline postgres read', function() {
                 return { rows: [], rowCount: 0 };
             }
         };
-        const tl = shopWithTimeline(`ихт-β-${Math.floor(Math.random() * 9000 + 1000)}`, { pool });
+        const tl = shopWithTimeline(`линия-β-${Math.floor(Math.random() * 9000 + 1000)}`, { pool });
         let failed = false;
         try {
             await tl.retag(
                 new Date('2024-11-02T03:04:05.137Z'),
-                ['шлак'],
+                ['этап_б'],
                 {},
                 { id: 7, displayName: 'оп-7', decidedAt: new Date('2024-11-02T03:04:05.137Z') }
             );

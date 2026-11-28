@@ -19,22 +19,54 @@ function registry(events = []) {
 }
 
 describe('collector recovery startup', function() {
-    it('serves liveness while scanning the spool but keeps readiness false until local recovery', async function() {
+    it('opens the process-local startup probe only after recovery and closes it on shutdown', async function() {
         let entered; let release;
         const opening = new Promise(resolve => { entered = resolve; });
         const gate = new Promise(resolve => { release = resolve; });
-        const port = await freePort();
+        const healthPort = await freePort();
+        const startupPort = await freePort();
+        const url = `http://127.0.0.1:${startupPort}/startup`;
         const startup = runCollector({ registry: registry(), signals: false, argv: [],
-            env: { COLLECTOR_HEALTH_PORT: String(port), COLLECTOR_MANIFEST: '{"assignments":[]}' },
+            env: { COLLECTOR_HEALTH_PORT: String(healthPort), COLLECTOR_STARTUP_PORT: String(startupPort), COLLECTOR_MANIFEST: '{"assignments":[]}' },
             deliveryQueue: { async open() { entered(); await gate; }, async drain() {}, async close() {}, status() { return { ready: true }; } } });
         try {
             await opening;
-            assert.equal((await fetch(`http://127.0.0.1:${port}/live`)).status, 200);
-            assert.equal((await fetch(`http://127.0.0.1:${port}/ready`)).status, 503);
+            assert.equal((await fetch(`http://127.0.0.1:${healthPort}/live`)).status, 200);
+            assert.equal((await fetch(`http://127.0.0.1:${healthPort}/ready`)).status, 503);
+            await assert.rejects(fetch(url));
             release();
             await startup;
-            assert.equal((await fetch(`http://127.0.0.1:${port}/ready`)).status, 200);
+            const probe = await fetch(url);
+            assert.equal(probe.status, 200);
+            assert.deepEqual(await probe.json(), { localRecoveryComplete: true });
+            assert.equal((await fetch(`http://127.0.0.1:${healthPort}/ready`)).status, 200);
         } finally { release(); await (await startup).stop(); }
+        await assert.rejects(fetch(url));
+    });
+
+    it('stops recovered readers when the startup listener cannot bind', async function () {
+        const blocker = createServer();
+        await new Promise(resolve => { blocker.listen(0, '127.0.0.1', resolve); });
+        const events = [];
+        const adapters = registry(events);
+        adapters.get('test').create = () => {
+            return { start() { events.push('reading'); }, stop() { events.push('stopped'); } };
+        };
+        let collector;
+        try {
+            await assert.rejects(async () => {
+                collector = await runCollector({ registry: adapters, signals: false, argv: [], env: {
+                    COLLECTOR_STARTUP_PORT: String(blocker.address().port),
+                    COLLECTOR_MANIFEST: JSON.stringify({ assignments: [
+                        { taskId: 'sensor', generation: 1, specVersion: 1, spec: { adapter: 'test' } }
+                    ] })
+                } });
+            }, { code: 'EADDRINUSE' });
+            assert.deepEqual(events, ['reading', 'stopped']);
+        } finally {
+            await collector?.stop();
+            await new Promise(resolve => { blocker.close(resolve); });
+        }
     });
 
     it('bounds stalled local recovery and prevents a late completion from starting readers after shutdown', async function() {

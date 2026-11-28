@@ -12,7 +12,7 @@ import { applyDecision } from './decisionSegment.js';
  *   sink.accept({ machine: 'm2', startTime: '2024-01-01T00:00:00.000Z',
  *                 username: 'Ivan Petrov', operatorId: 2,
  *                 decidedAt: '2024-01-01T00:01:00.000Z',
- *                 payload: '{"tags":["charge_loading"]}' });
+ *                 payload: '{"tags":["needs_review"]}' });
  *
  * @param {object} pool - pg Pool (or compatible) with query() method
  * @returns {object} Sink with accept() method

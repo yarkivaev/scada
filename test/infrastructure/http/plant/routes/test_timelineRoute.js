@@ -88,7 +88,7 @@ function buildScene(requireOperator, extras) {
         timelineOperator: {
             provider,
             requireOperator,
-            defaultUser: 'hmi-kiosk'
+            defaultUser: 'example-workstation'
         },
         decorateTimeline: extra.decorate
     });
@@ -216,7 +216,7 @@ describe('timelineRoute decorateTimeline', function() {
         const res = mockRes();
         const start = new Date().toISOString();
         await scene.api.handle(
-            mockReq(JSON.stringify({ start, tags: ['to_ladle'], properties: {}, operatorId: 3 }), {
+            mockReq(JSON.stringify({ start, tags: ['inspection'], properties: {}, operatorId: 3 }), {
                 method: 'PATCH',
                 url: `/api/v1/machines/${scene.machineId}/segments`
             }),
@@ -230,7 +230,7 @@ describe('timelineRoute kinds query', function() {
     it('forwards kinds to timeline list', async function() {
         const scene = buildScene(false, { listed: [] });
         const res = mockRes();
-        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const kind = `axis_${Math.random().toString(36).slice(2, 8)}`;
         await scene.api.handle(
             mockReq('', {
                 method: 'GET',

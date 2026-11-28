@@ -30,16 +30,16 @@ describe('siteSync', function() {
         const token = `\u00e9${Math.random().toString(36).slice(2)}`;
         const written = [];
         const store = {
-            machines: [{ id: 'icht1' }, { id: 'icht2' }],
+            machines: [{ id: 'drive1' }, { id: 'drive2' }],
             segments: [
-                { machine: 'icht1', name: token, start: '2026-09-11T00:00:00.000Z' },
-                { machine: 'icht1', name: 'skip', start: '2026-09-01T00:00:00.000Z' },
-                { machine: 'icht2', name: 'other', start: '2026-09-11T00:00:00.000Z' }
+                { machine: 'drive1', name: token, start: '2026-09-11T00:00:00.000Z' },
+                { machine: 'drive1', name: 'skip', start: '2026-09-01T00:00:00.000Z' },
+                { machine: 'drive2', name: 'other', start: '2026-09-11T00:00:00.000Z' }
             ],
-            operations: [{ machine: 'icht1', external_key: token }]
+            operations: [{ machine: 'drive1', external_key: token }]
         };
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1', machines: ['icht1'] }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1', machines: ['drive1'] }],
             queryFor() {
                 return fakeQuery(store);
             },
@@ -58,10 +58,10 @@ describe('siteSync', function() {
             }
         });
         const result = await sync.run({
-            site: 'edge-icht-1',
+            site: 'edge-drive-1',
             from: '2026-09-10T00:00:00.000Z',
             to: '2026-09-12T00:00:00.000Z',
-            machines: ['icht1'],
+            machines: ['drive1'],
             kinds: ['segments']
         });
         assert.strictEqual(
@@ -73,7 +73,7 @@ describe('siteSync', function() {
 
     it('rejects an unknown site', async function() {
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1' }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1' }],
             queryFor() {
                 return fakeQuery({ machines: [], segments: [], operations: [] });
             },
@@ -100,7 +100,7 @@ describe('siteSync', function() {
 
     it('rejects an unknown kind', async function() {
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1' }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1' }],
             queryFor() {
                 return fakeQuery({ machines: [], segments: [], operations: [] });
             },
@@ -115,7 +115,7 @@ describe('siteSync', function() {
         let rejected = false;
         try {
             await sync.run({
-                site: 'edge-icht-1',
+                site: 'edge-drive-1',
                 from: '2026-09-10T00:00:00.000Z',
                 to: '2026-09-12T00:00:00.000Z',
                 kinds: ['cycles']
@@ -131,11 +131,11 @@ describe('siteSync', function() {
         const from = '2026-09-10T00:00:00.000Z';
         const to = '2026-09-12T00:00:00.000Z';
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1' }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1' }],
             queryFor() {
                 return {
                     machines() {
-                        return Promise.resolve({ items: [{ id: 'icht1' }] });
+                        return Promise.resolve({ items: [{ id: 'drive1' }] });
                     },
                     segments(machine, query) {
                         range = query;
@@ -161,10 +161,10 @@ describe('siteSync', function() {
             }
         });
         await sync.run({
-            site: 'edge-icht-1',
+            site: 'edge-drive-1',
             from,
             to,
-            machines: ['icht1'],
+            machines: ['drive1'],
             kinds: ['segments']
         });
         assert.deepStrictEqual(
@@ -178,9 +178,9 @@ describe('siteSync', function() {
         const leftover = `keep-\u00e9${Math.random().toString(36).slice(2)}`;
         const local = [{ name: leftover }];
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1' }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1' }],
             queryFor() {
-                return fakeQuery({ machines: [{ id: 'icht1' }], segments: [], operations: [] });
+                return fakeQuery({ machines: [{ id: 'drive1' }], segments: [], operations: [] });
             },
             targets: {
                 segments: {
@@ -197,10 +197,10 @@ describe('siteSync', function() {
             }
         });
         await sync.run({
-            site: 'edge-icht-1',
+            site: 'edge-drive-1',
             from: '2026-09-10T00:00:00.000Z',
             to: '2026-09-12T00:00:00.000Z',
-            machines: ['icht1'],
+            machines: ['drive1'],
             kinds: ['segments']
         });
         assert.strictEqual(
@@ -215,11 +215,11 @@ describe('siteSync', function() {
     it('reports after each machine kind write', async function() {
         const seen = [];
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1' }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1' }],
             queryFor() {
                 return fakeQuery({
-                    machines: [{ id: 'icht1' }],
-                    segments: [{ machine: 'icht1', name: 'on', start: '2026-09-11T00:00:00.000Z' }],
+                    machines: [{ id: 'drive1' }],
+                    segments: [{ machine: 'drive1', name: 'on', start: '2026-09-11T00:00:00.000Z' }],
                     operations: []
                 });
             },
@@ -232,10 +232,10 @@ describe('siteSync', function() {
             }
         });
         await sync.run({
-            site: 'edge-icht-1',
+            site: 'edge-drive-1',
             from: '2026-09-10T00:00:00.000Z',
             to: '2026-09-12T00:00:00.000Z',
-            machines: ['icht1'],
+            machines: ['drive1'],
             kinds: ['segments']
         }, {
             report(progress) {
@@ -243,7 +243,7 @@ describe('siteSync', function() {
             }
         });
         assert.strictEqual(
-            seen.length === 1 && seen[0].kind === 'segments' && seen[0].machine === 'icht1',
+            seen.length === 1 && seen[0].kind === 'segments' && seen[0].machine === 'drive1',
             true,
             'siteSync did not report after a kind write'
         );
@@ -253,9 +253,9 @@ describe('siteSync', function() {
         const controller = new AbortController();
         controller.abort();
         const sync = siteSync({
-            sites: [{ id: 'edge-icht-1', url: 'http://edge/api/v1' }],
+            sites: [{ id: 'edge-drive-1', url: 'http://edge/api/v1' }],
             queryFor() {
-                return fakeQuery({ machines: [{ id: 'icht1' }], segments: [], operations: [] });
+                return fakeQuery({ machines: [{ id: 'drive1' }], segments: [], operations: [] });
             },
             targets: {
                 segments: {
@@ -268,10 +268,10 @@ describe('siteSync', function() {
         let stopped = false;
         try {
             await sync.run({
-                site: 'edge-icht-1',
+                site: 'edge-drive-1',
                 from: '2026-09-10T00:00:00.000Z',
                 to: '2026-09-12T00:00:00.000Z',
-                machines: ['icht1'],
+                machines: ['drive1'],
                 kinds: ['segments']
             }, { signal: controller.signal });
         } catch {

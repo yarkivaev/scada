@@ -11,7 +11,7 @@ describe('segmentStateMemory kinds', function() {
         const start = new Date();
         const port = segmentStateMemory(storeWith([
             { machine, kind: 'phase', name: 'on', start_time: start, end_time: start, duration: 1 },
-            { machine, kind: 'ladle_moving', name: '1', start_time: start, end_time: start, duration: 0 }
+            { machine, kind: 'axis_moving', name: '1', start_time: start, end_time: start, duration: 0 }
         ]));
         const rows = port.listForMachine(machine, {});
         assert.strictEqual(rows.length, 1, 'default list leaked non-phase rows');

@@ -3,7 +3,7 @@ import metricsStatePg from '../../../../src/infrastructure/persistence/pg/metric
 
 describe('metricsStatePg risesForTopic', function() {
     it('queries a lag prefix of 0 to 1 edges', async function() {
-        const topic = `OPCUA/tlc-${Math.random()}/GET/pipe_cast/VALUE`;
+        const topic = `OPCUA/tlc-${Math.random()}/GET/item_count/VALUE`;
         const start = new Date('2026-09-30T00:00:00.000Z').toISOString();
         const end = new Date('2026-09-30T08:00:00.000Z').toISOString();
         let sql = '';

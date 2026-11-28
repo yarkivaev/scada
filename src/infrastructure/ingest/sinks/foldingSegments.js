@@ -13,9 +13,14 @@ function uniqueStarts(records) {
     return [...kept.values()];
 }
 
-async function foldMachine(runner, machine, batch) {
+async function foldMachine(runner, machine, batch, { preserveCoverage, isAuthoritative }) {
+    const inferred = batch.filter((row) => { return !isAuthoritative(row); });
+    if (!inferred.length || (preserveCoverage && inferred.every((row) => { return row.duration === 0; }))) {
+        return uniqueStarts(batch);
+    }
     await runner.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`history:${machine}`]);
-    return historyAbsorb(runner, machine, uniqueStarts(historyFold([], batch)));
+    const folded = await historyAbsorb(runner, machine, uniqueStarts(historyFold([], inferred)));
+    return folded.concat(batch.filter(isAuthoritative));
 }
 
 function grouped(records) {
@@ -28,10 +33,10 @@ function grouped(records) {
     return groups;
 }
 
-function foldAll(runner, groups) {
+function foldAll(runner, groups, policy) {
     return [...groups].reduce(async (prior, [machine, batch]) => {
         const acc = await prior;
-        acc.push(...await foldMachine(runner, machine, batch));
+        acc.push(...await foldMachine(runner, machine, batch, policy));
         return acc;
     }, Promise.resolve([]));
 }
@@ -43,15 +48,15 @@ function stamped(records) {
     });
 }
 
-async function writeOwned(pool, inner, records) {
+async function writeOwned(pool, inner, records, policy) {
     if (typeof pool.connect !== 'function') {
-        const next = stamped(uniqueStarts(await foldAll(pool, grouped(records))));
+        const next = stamped(uniqueStarts(await foldAll(pool, grouped(records), policy)));
         return inner.write(next, pool);
     }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const next = stamped(uniqueStarts(await foldAll(client, grouped(records))));
+        const next = stamped(uniqueStarts(await foldAll(client, grouped(records), policy)));
         const result = await inner.write(next, client);
         await client.query('COMMIT');
         return result;
@@ -74,13 +79,14 @@ async function writeOwned(pool, inner, records) {
  *   const sink = foldingSegments(segmentSink, pool);
  *   await sink.write([record], client);
  */
-export default function foldingSegments(inner, pool) {
+export default function foldingSegments(inner, pool, { preserveCoverage = false, isAuthoritative = () => { return false; } } = {}) {
+    const policy = { preserveCoverage, isAuthoritative };
     return {
         async write(records, client) {
             if (client && typeof client.query === 'function') {
-                return inner.write(stamped(uniqueStarts(await foldAll(client, grouped(records)))), client);
+                return inner.write(stamped(uniqueStarts(await foldAll(client, grouped(records), policy))), client);
             }
-            return writeOwned(pool, inner, records);
+            return writeOwned(pool, inner, records, policy);
         }
     };
 }

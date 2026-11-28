@@ -76,7 +76,7 @@ describe('split family replace on postgres', function() {
 
     it('drops a stale middle piece and leaves the neighboring on segment', async function() {
         this.timeout(30000);
-        const machine = `ичт-${Date.now()}`;
+        const machine = `линия-${Date.now()}`;
         const start = new Date('2026-10-19T06:02:18.000Z');
         const stale = new Date('2026-10-19T06:20:00.000Z');
         const cut = new Date('2026-10-19T06:25:00.000Z');
@@ -85,7 +85,7 @@ describe('split family replace on postgres', function() {
         await adminPool.query(
             `INSERT INTO segments (machine, kind, name, start_time, end_time, duration, tags, properties, resolved)
              VALUES
-               ($1, 'phase', 'off', $2, $3, 2690, '["шлак"]', $4, true),
+               ($1, 'phase', 'off', $2, $3, 2690, '["этап_б"]', $4, true),
                ($1, 'phase', 'off', $5, $3, 1600, null, $4, true),
                ($1, 'phase', 'on', $6, $7, 600, '["heating"]', '{}', true)`,
             [machine, start, end, JSON.stringify({ split_of: String(start.getTime()) }), stale, onStart, new Date(onStart.getTime() + 600000)]
@@ -93,7 +93,7 @@ describe('split family replace on postgres', function() {
         const pieces = splitRows(machine, checkSplit({
             name: 'off', start_time: start, end_time: end, duration: 2690
         }, [
-            { start, end: cut, tag: 'шлак' },
+            { start, end: cut, tag: 'этап_б' },
             { start: cut, end, tag: '' }
         ]));
         await replaceSplit(sinkPool, { machine, origin: start.getTime(), pieces });
@@ -112,7 +112,7 @@ describe('split family replace on postgres', function() {
         await adminPool.query(
             `INSERT INTO segments (machine, kind, name, start_time, end_time, duration, tags, resolved)
              VALUES
-               ($1, 'phase', 'off', $2, $3, $4, '["шлак"]', true),
+               ($1, 'phase', 'off', $2, $3, $4, '["этап_б"]', true),
                ($1, 'phase', 'on', $3, $5, 600, '["heating"]', true)`,
             [machine, start, end, (end.getTime() - start.getTime()) / 1000, neighbor]
         );
@@ -143,16 +143,16 @@ describe('split family replace on postgres', function() {
 
     it('keeps the original off bounds when every piece but one is removed', async function() {
         this.timeout(30000);
-        const machine = `ичт-${Date.now()}-схлоп`;
+        const machine = `линия-${Date.now()}-схлоп`;
         const start = new Date('2026-10-19T06:02:18.400Z');
         const cut = new Date('2026-10-19T06:25:00.000Z');
         const end = new Date('2026-10-19T06:47:06.700Z');
         await seedOff(machine, start, end);
         await applyPieces(machine, start, [
-            { start, end: cut, tag: 'шлак' },
-            { start: cut, end, tag: 'шихта' }
+            { start, end: cut, tag: 'этап_б' },
+            { start: cut, end, tag: 'шлинияа' }
         ]);
-        await applyPieces(machine, start, [{ start, end, tag: 'шлак' }]);
+        await applyPieces(machine, start, [{ start, end, tag: 'этап_б' }]);
         const shown = await bounds(machine);
         assert.deepStrictEqual(shown, [
             { name: 'off', start: start.toISOString(), end: end.toISOString() },
@@ -162,13 +162,13 @@ describe('split family replace on postgres', function() {
 
     it('leaves the stored family in place when the replacement has no pieces', async function() {
         this.timeout(30000);
-        const machine = `ичт-${Date.now()}-пусто`;
+        const machine = `линия-${Date.now()}-пусто`;
         const start = new Date('2026-10-19T06:08:18.400Z');
         const cut = new Date('2026-10-19T06:31:00.000Z');
         const end = new Date('2026-10-19T06:53:06.700Z');
         await seedOff(machine, start, end);
         await applyPieces(machine, start, [
-            { start, end: cut, tag: 'шлак' },
+            { start, end: cut, tag: 'этап_б' },
             { start: cut, end, tag: '' }
         ]);
         const before = await bounds(machine);

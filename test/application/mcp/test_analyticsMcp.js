@@ -241,7 +241,7 @@ describe('analyticsMcp', function() {
 
     it('returns persisted segments when the plant timeline is postgres', async function() {
         const start = new Date('2024-11-02T03:04:05.137Z');
-        const tag = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const tag = `этап_б-α-${Math.floor(Math.random() * 90)}`;
         const pool = {
             async query() {
                 return {
@@ -257,7 +257,7 @@ describe('analyticsMcp', function() {
                 };
             }
         };
-        const tl = shopWithTimeline(`ихт-${Math.floor(Math.random() * 9000 + 1000)}`, { pool });
+        const tl = shopWithTimeline(`линия-${Math.floor(Math.random() * 9000 + 1000)}`, { pool });
         const { address, mcp, token } = await started({
             ports: {
                 segments() {
@@ -306,11 +306,11 @@ describe('analyticsMcp', function() {
     });
 
     it('returns the supplied tag catalog from plant tags', async function() {
-        const tag = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const tag = `этап_б-α-${Math.floor(Math.random() * 90)}`;
         const { address, mcp, token } = await started({
             catalog: {
                 entries() {
-                    return [{ id: tag, label: 'Шлак', parent: 'off' }];
+                    return [{ id: tag, label: 'Этап Б', parent: 'off' }];
                 }
             }
         });
@@ -349,7 +349,7 @@ describe('analyticsMcp', function() {
         await mcp.close();
         const text = body.result.contents[0].text;
         assert.strictEqual(
-            text.includes('operator_brigades'),
+            text.includes('fixture_private_table'),
             false,
             'postgres schema listed a plant brigade table'
         );
@@ -400,7 +400,7 @@ describe('analyticsMcp', function() {
     it('puts the overlapping timeline name on a coverage span', async function() {
         const from = '2024-11-02T03:04:05.137Z';
         const to = '2024-11-02T03:04:45.137Z';
-        const phase = `шлак-α-${Math.floor(Math.random() * 90)}`;
+        const phase = `этап_б-α-${Math.floor(Math.random() * 90)}`;
         const { address, mcp, token } = await started({
             ports: {
                 cursor() {

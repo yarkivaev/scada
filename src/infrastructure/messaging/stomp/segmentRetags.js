@@ -15,7 +15,7 @@ const DEFAULT_DESTINATION = '/exchange/scada.segments';
  *
  * @example
  *   const retags = segmentRetags({ stompUrl });
- *   await retags.publish(retagBody('icht1', row, ['to_ladle'], {}));
+ *   await retags.publish(retagBody('drive1', row, ['inspection'], {}));
  */
 export default function segmentRetags(config) {
     if (!config.stompUrl) {

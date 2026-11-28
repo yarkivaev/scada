@@ -239,7 +239,7 @@ describe('modbusSource', () => {
     const collector = { accept: () => {} };
     const clk = fakeClock(Math.floor(Math.random() * 10000));
     assert.throws(
-      () => {return modbusSource('192.168.2.148', -1, 4000, 14, 5, collector, clk)},
+      () => {return modbusSource('192.0.2.148', -1, 4000, 14, 5, collector, clk)},
       /Port must be a positive number/u,
       'Should reject negative port'
     );
@@ -249,7 +249,7 @@ describe('modbusSource', () => {
     const collector = { accept: () => {} };
     const clk = fakeClock(Math.floor(Math.random() * 10000));
     assert.throws(
-      () => {return modbusSource('192.168.2.148', 502, -1, 14, 5, collector, clk)},
+      () => {return modbusSource('192.0.2.148', 502, -1, 14, 5, collector, clk)},
       /Address must be a non-negative number/u,
       'Should reject negative address'
     );
@@ -259,7 +259,7 @@ describe('modbusSource', () => {
     const collector = { accept: () => {} };
     const clk = fakeClock(Math.floor(Math.random() * 10000));
     assert.throws(
-      () => {return modbusSource('192.168.2.148', 502, 4000, 0, 5, collector, clk)},
+      () => {return modbusSource('192.0.2.148', 502, 4000, 0, 5, collector, clk)},
       /Count must be a positive number/u,
       'Should reject zero count'
     );
@@ -268,7 +268,7 @@ describe('modbusSource', () => {
   it('throws on missing collector', () => {
     const clk = fakeClock(Math.floor(Math.random() * 10000));
     assert.throws(
-      () => {return modbusSource('192.168.2.148', 502, 4000, 14, 5, null, clk)},
+      () => {return modbusSource('192.0.2.148', 502, 4000, 14, 5, null, clk)},
       /Collector must have an accept\(\) method/u,
       'Should reject null collector'
     );
@@ -277,7 +277,7 @@ describe('modbusSource', () => {
   it('throws on missing clock', () => {
     const collector = { accept: () => {} };
     assert.throws(
-      () => {return modbusSource('192.168.2.148', 502, 4000, 14, 5, collector, null)},
+      () => {return modbusSource('192.0.2.148', 502, 4000, 14, 5, collector, null)},
       /Clock must have a millis\(\) method/u,
       'Should reject null clock'
     );

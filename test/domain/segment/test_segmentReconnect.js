@@ -50,7 +50,7 @@ describe('segmentDispatch reconnect after silence', function() {
     it('keeps an open segment growing across a short break without silence close', async function() {
         const sink = upsertSink();
         const dispatch = route(sink);
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_200_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const mid = new Date(Date.parse(start) + 10_000).toISOString();
         const later = new Date(Date.parse(start) + 20_000).toISOString();
@@ -64,7 +64,7 @@ describe('segmentDispatch reconnect after silence', function() {
     it('extends a silence-closed segment when the completed event arrives after a long break', async function() {
         const sink = upsertSink();
         const dispatch = route(sink);
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_300_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const frozen = new Date(Date.parse(start) + 30_000).toISOString();
         const completed = new Date(Date.parse(start) + 120_000).toISOString();
@@ -82,7 +82,7 @@ describe('segmentDispatch reconnect after silence', function() {
     it('does not reopen a silence-closed segment with a pointed heartbeat', async function() {
         const sink = upsertSink();
         const dispatch = route(sink);
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_400_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const frozen = new Date(Date.parse(start) + 40_000).toISOString();
         const pending = new Date(Date.parse(start) + 55_000).toISOString();
@@ -97,7 +97,7 @@ describe('segmentDispatch reconnect after silence', function() {
     it('drains a long backlog after silence close into the final continuous timeline', async function() {
         const sink = upsertSink();
         const dispatch = route(sink);
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = new Date(1_700_500_000_000 + Math.floor(Math.random() * 1e8)).toISOString();
         const frozen = new Date(Date.parse(start) + 25_000).toISOString();
         await dispatch.accept(openSegment(machine, start, frozen));

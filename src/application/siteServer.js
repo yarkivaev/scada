@@ -21,7 +21,7 @@ function stompFromEnv(env) {
         login: env.STOMP_LOGIN || 'guest',
         passcode: env.STOMP_PASSCODE || 'guest',
         host: env.STOMP_HOST || '/',
-        operatorUser: env.HMI_OPERATOR_USER || 'hmi-kiosk'
+        operatorUser: env.HMI_OPERATOR_USER
     };
 }
 
@@ -135,7 +135,7 @@ async function runSiteSink(sink, http, env) {
  */
 export default async function siteServer(config) {
     const env = collectionEnvironment(config);
-    const sink = supervisorSink(env, { stateData: config.stateData });
+    const sink = supervisorSink(env, { ...config.sinkOptions, stateData: config.stateData });
     const ops = bindSiteOperations(sink, config.kindSources || config.operationSources);
     const http = edgeApi(sink.dataAccess, {
         port: sink.apiPort,

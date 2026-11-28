@@ -5,7 +5,7 @@ describe('postgresPool', function() {
     it('survives an idle client error', async function() {
         const noise = `печь-${Math.random().toString(36).slice(2)}`;
         const pool = postgresPool({
-            connectionString: `postgres://external:secret@dbitsokol.tw1.ru:5432/${noise}`
+            connectionString: `postgres://external:secret@database.example.test:5432/${noise}`
         });
         const { write } = process.stderr;
         process.stderr.write = () => {

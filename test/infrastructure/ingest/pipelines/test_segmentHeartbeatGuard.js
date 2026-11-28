@@ -30,10 +30,10 @@ describe('segmentUpdateWhere split heartbeat', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 120000);
         const end = new Date(start.getTime() + 360000);
-        const rows = splitRows('ичт-π', checkSplit({
+        const rows = splitRows('линия-π', checkSplit({
             name: 'off', start_time: start, end_time: end, duration: 360
         }, [
-            { start, end: cut, tag: 'шлак' },
+            { start, end: cut, tag: 'этап_б' },
             { start: cut, end, tag: '' }
         ]));
         const later = new Date(end.getTime() + 90000).toISOString();
@@ -71,10 +71,10 @@ describe('segmentUpdateWhere split heartbeat', function() {
         const start = new Date('2026-10-19T06:02:18.137Z');
         const cut = new Date(start.getTime() + 120000);
         const now = new Date(start.getTime() + 360000);
-        const rows = splitRows('ичт-π', checkSplit({
+        const rows = splitRows('линия-π', checkSplit({
             name: 'off', start_time: start, end_time: now, duration: 0
         }, [
-            { start, end: cut, tag: 'шлак' },
+            { start, end: cut, tag: 'этап_б' },
             { start: cut, end: now, tag: '', open: true }
         ]));
         const later = new Date(now.getTime() + 90000).toISOString();

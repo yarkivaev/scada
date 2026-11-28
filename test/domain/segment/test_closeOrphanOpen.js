@@ -16,14 +16,14 @@ describe('closeOrphanOpen', function() {
     it('executes exactly one query per close call', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        await closer.close(`ičt-${Math.random()}`, '2024-01-01T00:00:00.000Z');
+        await closer.close(`mást-${Math.random()}`, '2024-01-01T00:00:00.000Z');
         assert.strictEqual(pool.queries.length, 1, 'close call must execute one query');
     });
 
     it('updates only open rows for the target machine', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        await closer.close(`ičt-${Math.random()}`, '2024-01-01T00:00:00.000Z');
+        await closer.close(`mást-${Math.random()}`, '2024-01-01T00:00:00.000Z');
         assert.ok(pool.queries[0].sql.includes('duration = 0'), 'close query must target open rows only');
     });
 
@@ -31,7 +31,7 @@ describe('closeOrphanOpen', function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
         const start = '2024-03-01T12:00:00.000Z';
-        await closer.close(`ičt-${Math.random()}`, start);
+        await closer.close(`mást-${Math.random()}`, start);
         const sql = pool.queries[0].sql;
         assert.ok(
             sql.includes('start_time > $2') && sql.includes('start_time < $2'),
@@ -42,7 +42,7 @@ describe('closeOrphanOpen', function() {
     it('binds machine start_time phase kind and null name by default', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const start = '2024-03-01T12:00:00.000Z';
         await closer.close(machine, start);
         assert.deepStrictEqual(
@@ -57,7 +57,7 @@ describe('closeOrphanOpen', function() {
         const closer = closeOrphanOpen(pool);
         const machine = `cm${Math.floor(Math.random() * 90 + 10)}`;
         const start = '2024-03-01T12:00:00.000Z';
-        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const kind = `axis_${Math.random().toString(36).slice(2, 8)}`;
         await closer.close(machine, start, kind);
         assert.ok(pool.queries[0].sql.includes('kind = $3'), 'close query must filter by kind');
         assert.deepStrictEqual(
@@ -70,7 +70,7 @@ describe('closeOrphanOpen', function() {
     it('does not collapse competing opens to a one-second ghost', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        await closer.close(`ičt-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'off');
+        await closer.close(`mást-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'off');
         assert.equal(
             pool.queries[0].sql.includes('interval \'1 second\'') || /duration\s*=\s*1\b/u.test(pool.queries[0].sql),
             false,
@@ -81,7 +81,7 @@ describe('closeOrphanOpen', function() {
     it('drops nested later opens instead of leaving point segments', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        await closer.close(`ičt-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'off');
+        await closer.close(`mást-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'off');
         assert.ok(
             pool.queries[0].sql.includes('DELETE FROM segments') && pool.queries[0].sql.includes('start_time > $2'),
             'orphan close did not delete nested later opens'
@@ -91,7 +91,7 @@ describe('closeOrphanOpen', function() {
     it('leaves a same-name covering open untouched', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        await closer.close(`ičt-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'off');
+        await closer.close(`mást-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'off');
         assert.ok(
             pool.queries[0].sql.includes('name IS DISTINCT FROM $4'),
             'orphan close still closes a same-name covering open'
@@ -101,7 +101,7 @@ describe('closeOrphanOpen', function() {
     it('closes an earlier different-name open at the incoming start', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        await closer.close(`ičt-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'on');
+        await closer.close(`mást-${Math.random()}`, '2024-03-01T12:00:00.000Z', 'phase', null, 'on');
         assert.ok(
             pool.queries[0].sql.includes('end_time = $2::timestamptz') && pool.queries[0].sql.includes('start_time < $2'),
             'orphan close did not end the previous phase at the incoming start'
@@ -111,7 +111,7 @@ describe('closeOrphanOpen', function() {
     it('binds the incoming segment name', async function() {
         const pool = fakePool();
         const closer = closeOrphanOpen(pool);
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const start = '2024-03-01T12:00:00.000Z';
         const label = `off-${Math.random().toString(36).slice(2, 8)}`;
         await closer.close(machine, start, 'phase', null, label);

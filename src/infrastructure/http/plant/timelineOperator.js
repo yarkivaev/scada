@@ -21,7 +21,7 @@ function anonymousName(body, cfg) {
     if (typeof key === 'string' && Object.hasOwn(map, key)) {
         return map[key];
     }
-    return cfg.defaultUser || 'hmi-kiosk';
+    return cfg.defaultUser || 'anonymous';
 }
 
 /**
@@ -32,7 +32,7 @@ function anonymousName(body, cfg) {
  *
  * @example
  *   const gate = timelineOperator({
- *     provider, requireOperator: true, defaultUser: 'hmi-kiosk',
+ *     provider, requireOperator: true, defaultUser: 'example-workstation',
  *     anonymousUsers: { hmi: 'Anonymous HMI user' }
  *   });
  *   const audit = await gate.resolve({ operatorId: 2 });

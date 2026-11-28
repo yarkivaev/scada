@@ -68,8 +68,8 @@ describe('publishSplit wire time', function() {
         const end = new Date(start.getTime() + 360000);
         try {
             const decisions = userDecisions({ stompUrl: `stomp://127.0.0.1:${broker.port}` });
-            await decisions.publishSplit('ичт-π', start, [
-                { start, end: cut, tag: 'шлак' },
+            await decisions.publishSplit('линия-π', start, [
+                { start, end: cut, tag: 'этап_б' },
                 { start: cut, end, tag: '', open: true }
             ], { displayName: 'Елена', id: 7, decidedAt: new Date('2026-10-19T08:00:00.137Z') });
             const body = JSON.parse(broker.bodies[0]);

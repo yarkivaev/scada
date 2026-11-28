@@ -13,8 +13,22 @@ export default function stateDataFromPool(pool, options = {}) {
         segments: segmentStatePg(pool),
         alerts: alertsStatePg(pool),
         metrics,
-        history: metricsEnabled ? historyPg(pool, { retentionDays: options.historyRetentionDays ?? 30 }) : undefined,
-        checkpoints: checkpointStatePg(pool, metricsEnabled),
+        history: metricsEnabled ? historyPg(pool, { retentionDays: options.historyRetentionDays ?? 30, ...options.historyPolicy }) : undefined,
+        checkpoints: checkpointStatePg(pool, metricsEnabled, options.checkpointPolicy),
         operations: operationStatePg(pool)
+    };
+}
+
+
+/** Route telemetry and checkpoint readings to the selected backend, preserving business state. */
+export function withTelemetryState(data, metrics, history = data.history) {
+    return {
+        ...data,
+        metrics,
+        history,
+        checkpoints: {
+            ...data.checkpoints,
+            readings(topics, from) { return metrics.readings(topics, from); }
+        }
     };
 }

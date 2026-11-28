@@ -7,7 +7,7 @@
  * @returns {object[]} frozen sites with id, url, optional token and machines
  *
  * @example
- *   siteSyncSites({ SYNC_SITES: '[{"id":"edge-icht-1","url":"http://edge/api/v1"}]' });
+ *   siteSyncSites({ SYNC_SITES: '[{"id":"edge-drive-1","url":"http://edge/api/v1"}]' });
  */
 function parseJson(raw, label) {
     try {

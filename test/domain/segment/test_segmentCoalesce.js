@@ -35,7 +35,7 @@ function heartbeat(machine, start, end) {
         start,
         end,
         duration: 0,
-        tags: ['to_ladle']
+        tags: ['inspection']
     });
 }
 
@@ -46,7 +46,7 @@ describe('segmentCoalesce', function() {
             async accept(raw) { revisions.push(JSON.parse(raw.payload).properties.phase_revision); }
         }, { size: 2, interval: 60 });
         for (const revision of ['12', '11']) {
-            const payload = JSON.parse(heartbeat('cm8', 10, 10));
+            const payload = JSON.parse(heartbeat('line-8', 10, 10));
             payload.properties = { phase_revision: revision };
             // eslint-disable-next-line no-await-in-loop
             await coalesce.accept({ destination: '/queue/scada.segments.ingest', payload: JSON.stringify(payload), settle: settle() });
@@ -62,7 +62,7 @@ describe('segmentCoalesce', function() {
             }
         };
         const coalesce = segmentCoalesce(codec, { size: 2, interval: 60 });
-        const machine = `ičt-${Math.random().toString(16).slice(2)}`;
+        const machine = `mást-${Math.random().toString(16).slice(2)}`;
         const start = 1700000000000 + Math.floor(Math.random() * 1000);
         await coalesce.accept({
             destination: '/queue/scada.segments.ingest',
@@ -81,7 +81,7 @@ describe('segmentCoalesce', function() {
     it('acks every coalesced heartbeat after one successful write', async function() {
         const codec = { accept() { return Promise.resolve(); } };
         const coalesce = segmentCoalesce(codec, { size: 3, interval: 60 });
-        const machine = `ičt-${Math.random().toString(16).slice(2)}`;
+        const machine = `mást-${Math.random().toString(16).slice(2)}`;
         const start = 1700001000000;
         const settles = [settle(), settle(), settle()];
         await settles.reduce((chain, item, index) => {
@@ -106,7 +106,7 @@ describe('segmentCoalesce', function() {
             }
         };
         const coalesce = segmentCoalesce(codec, { size: 50, interval: 60 });
-        const machine = `ičt-${Math.random().toString(16).slice(2)}`;
+        const machine = `mást-${Math.random().toString(16).slice(2)}`;
         const start = 1700002000000;
         await coalesce.accept({
             destination: '/q',

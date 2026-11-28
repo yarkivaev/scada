@@ -2,10 +2,14 @@ import assert from 'assert';
 import timelineOperator from '../../../../src/infrastructure/http/plant/timelineOperator.js';
 
 describe('timelineOperator anonymous clients', function () {
+    it('uses a neutral default audit identity when the application supplies no user', async function () {
+        const audit = await timelineOperator().resolve({});
+        assert.equal(audit.displayName, 'anonymous');
+    });
     it('uses the configured anonymousUsers map for a known client', async function () {
         const label = `Anon_${Math.floor(Math.random() * 9000 + 1000)}`;
         const gate = timelineOperator({
-            defaultUser: 'hmi-kiosk',
+            defaultUser: 'example-workstation',
             anonymousUsers: { monitoring: label }
         });
         const audit = await gate.resolve({ client: 'monitoring' });

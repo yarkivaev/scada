@@ -13,7 +13,7 @@ import segmentCodec from '../codecs/segmentCodec.js';
 import processingErrorLog from '../processingErrorLog.js';
 import silentOpenWatch from '../silentOpenWatch.js';
 import abutSegments from '../sinks/abutSegments.js';
-import foldCastingPhases from '../sinks/foldCastingPhases.js';
+import repairPhaseOverlaps from '../sinks/repairPhaseOverlaps.js';
 import closeOrphanOpen from '../sinks/closeOrphanOpen.js';
 import closeSilentOpen from '../sinks/closeSilentOpen.js';
 import continuedSegments from '../sinks/continuedSegments.js';
@@ -26,6 +26,7 @@ export const segmentConflict = ['machine', 'kind', 'start_time'];
 export const segmentUpdateColumns = ['name', 'end_time', 'duration', 'options', 'resolved', 'updated_at'];
 export const splitUpdateColumns = ['name', 'end_time', 'duration', 'tags', 'options', 'properties', 'resolved'];
 export const segmentUpdateWhere = '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\')) AND (NOT EXISTS (SELECT 1 FROM segments AS later WHERE later.machine = segments.machine AND later.kind = segments.kind AND later.start_time > segments.start_time) OR (segments.duration > 0 AND EXCLUDED.duration = segments.duration AND EXCLUDED.name = segments.name AND EXCLUDED.end_time = segments.end_time))';
+const coveringSegmentUpdateWhere = '(segments.duration = 0 OR EXCLUDED.duration > 0 OR EXCLUDED.end_time > segments.end_time) AND NOT (EXCLUDED.duration = 0 AND EXCLUDED.end_time < segments.end_time) AND NOT (segments.duration > 0 AND EXCLUDED.duration = 0 AND COALESCE(segments.properties, \'\') LIKE \'%"split_of"%\' AND EXISTS (SELECT 1 FROM segments AS kin WHERE kin.machine = segments.machine AND kin.kind = segments.kind AND kin.start_time > segments.start_time AND COALESCE(kin.properties, \'\') LIKE \'%"split_of"%\')) AND NOT EXISTS (SELECT 1 FROM segments AS later WHERE later.machine = segments.machine AND later.kind = segments.kind AND later.start_time > segments.start_time)';
 export const segmentsIngestDestination = '/queue/scada.segments.ingest';
 
 export { default as segmentDispatch } from '../../../domain/segment/dispatch.js';
@@ -37,13 +38,15 @@ export { default as segmentDispatch } from '../../../domain/segment/dispatch.js'
  * @param {object} pool - shared pg pool
  * @returns {{ segmentSink: object, splitSink: object }}
  */
-function segmentSinks(postgres, pool) {
-    const shared = { pool, conflict: segmentConflict, updateWhere: segmentUpdateWhere };
+function segmentSinks(postgres, pool, policy) {
+    const updateWhere = policy.preserveCoverage ? coveringSegmentUpdateWhere : segmentUpdateWhere;
+    const shared = { pool, conflict: segmentConflict, updateWhere };
+    const update = policy.preserveCoverage ? [...segmentUpdateColumns, 'properties'] : segmentUpdateColumns;
     return {
         segmentSink: foldingSegments(postgresSink(postgres, 'segments', segmentColumns,
-            { ...shared, update: segmentUpdateColumns }), pool),
+            { ...shared, update }), pool, policy),
         splitSink: foldingSegments(postgresSink(postgres, 'segments', segmentColumns,
-            { ...shared, update: splitUpdateColumns }), pool)
+            { ...shared, update: splitUpdateColumns }), pool, policy)
     };
 }
 
@@ -51,6 +54,11 @@ function pipelineSettings(config) {
     const settings = config.transactions?.enabled ? { ...config, transactions: segmentBatchPolicy(config.transactions) } : config;
     if (settings.repairHistoryOnStart !== undefined && typeof settings.repairHistoryOnStart !== 'boolean') {
         throw new TypeError('repairHistoryOnStart must be boolean');
+    }
+    const { phaseRepairMachines } = settings;
+    if (phaseRepairMachines !== undefined && (!Array.isArray(phaseRepairMachines)
+        || phaseRepairMachines.some((machine) => { return typeof machine !== 'string' || !machine.trim(); }))) {
+        throw new TypeError('phaseRepairMachines must be an array of machine ids');
     }
     return settings;
 }
@@ -63,18 +71,34 @@ async function repairHistory(pool, budget, protectedTracks) {
     }
 }
 
-function repairCasting(pool, protectedTracks) {
-    foldCastingPhases(pool, protectedTracks).catch((error) => {
-        processingErrorLog('fold_casting_phases', error, {});
+function repairConfiguredPhases(pool, settings, protectedTracks) {
+    repairPhaseOverlaps(pool, settings.phaseRepairMachines, protectedTracks, settings).catch((error) => {
+        processingErrorLog('repair_phase_overlaps', error, {});
     });
 }
 
-export function segmentRecipient(postgres,pool,config) {
-    const { segmentSink, splitSink } = segmentSinks(postgres, pool);
-    const continued = continuedSegments(segmentSink, pool, silenceBudget(config.segmentWindow || 15));
+function phasePolicy({ preserveCoverage, authoritativeProperty }) {
+    if (authoritativeProperty !== undefined && (typeof authoritativeProperty?.key !== 'string'
+        || !authoritativeProperty.key || typeof authoritativeProperty.value !== 'string')) {
+        throw new TypeError('authoritativeProperty must specify a property key and string value');
+    }
+    return {
+        preserveCoverage,
+        isAuthoritative(row) {
+            if (!authoritativeProperty) { return false; }
+            const properties = typeof row.properties === 'string' ? JSON.parse(row.properties) : row.properties;
+            return properties?.[authoritativeProperty.key] === authoritativeProperty.value;
+        }
+    };
+}
+
+export function segmentRecipient(postgres, pool, config) {
+    const policy = phasePolicy(config);
+    const { segmentSink, splitSink } = segmentSinks(postgres, pool, policy);
+    const continued = continuedSegments(segmentSink, pool, silenceBudget(config.segmentWindow || 15), policy);
     const dispatch = contiguousPhases(pool, config.phaseAnchors,
-        segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool));
-    return fencedSegments(pool,dispatch,config);
+        segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool, policy));
+    return fencedSegments(pool, dispatch, config);
 }
 
 /**
@@ -129,7 +153,7 @@ export default function segmentPipeline(stomp, postgres, pool, config, recipient
             await source.start();
             await silence.start();
             if (settings.repairHistoryOnStart !== false) {
-                repairCasting(pool, protectedTracks);
+                repairConfiguredPhases(pool, settings, protectedTracks);
             }
         },
         stop() {

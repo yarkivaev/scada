@@ -27,7 +27,7 @@ await job.run({ kind: 'segments', machine: 'furnace-α', from, to });
 import { siteSync } from '@yarkivaev/scada';
 
 await siteSync({ sites, queryFor, targets }).run({
-  site: 'edge-icht-1',
+  site: 'edge-drive-1',
   from,
   to,
   kinds: ['segments']

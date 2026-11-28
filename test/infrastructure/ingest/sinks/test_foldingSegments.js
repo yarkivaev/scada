@@ -3,7 +3,7 @@ import foldingSegments from '../../../../src/infrastructure/ingest/sinks/folding
 
 function phase(name, start, end, tags, properties) {
     return {
-        machine: 'icht4',
+        machine: 'drive4',
         kind: 'phase',
         name,
         start_time: new Date(start).toISOString(),
@@ -80,10 +80,10 @@ describe('foldingSegments', function () {
     it('does not keep an empty covering off over a tagged ladle split', async function () {
         const origin = 1_702_500_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', origin, origin + 15_000, []);
-        const pour = phase('off', origin + 700, origin + 15_000, ['to_ladle'], { split_of: String(origin) });
+        const pour = phase('off', origin + 700, origin + 15_000, ['inspection'], { split_of: String(origin) });
         const db = store([cover]);
         await foldingSegments(db, db).write([pour]);
-        const tagged = db.state.rows.find((row) => { return row.tags === JSON.stringify(['to_ladle']); });
+        const tagged = db.state.rows.find((row) => { return row.tags === JSON.stringify(['inspection']); });
         const crossed = db.state.rows.some((left, i) => {
             return db.state.rows.slice(i + 1).some((right) => { return overlaps(left, right); });
         });
@@ -93,7 +93,7 @@ describe('foldingSegments', function () {
     it('does not leave overlapping offs after an empty stream then a ladle split', async function () {
         const origin = 1_702_600_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', origin, origin + 15_000, []);
-        const pour = phase('off', origin + 700, origin + 15_000, ['to_ladle'], { split_of: String(origin) });
+        const pour = phase('off', origin + 700, origin + 15_000, ['inspection'], { split_of: String(origin) });
         const db = store([]);
         const sink = foldingSegments(db, db);
         await sink.write([cover]);
@@ -107,7 +107,7 @@ describe('foldingSegments', function () {
     it('keeps exclusive empty tails after a nested tagged write', async function () {
         const origin = 1_702_850_000_000 + Math.floor(Math.random() * 1e8);
         const cover = phase('off', origin, origin + 15_000, []);
-        const tagged = phase('off', origin + 700, origin + 4_000, ['to_ladle']);
+        const tagged = phase('off', origin + 700, origin + 4_000, ['inspection']);
         const db = store([cover]);
         await foldingSegments(db, db).write([tagged]);
         const start = Math.min(...db.state.rows.map((row) => { return Date.parse(row.start_time); }));
@@ -124,8 +124,8 @@ describe('foldingSegments', function () {
     });
     it('does not leave overlap after concurrent writes of different tagged offs', async function () {
         const origin = 1_702_870_000_000 + Math.floor(Math.random() * 1e8);
-        const first = phase('off', origin, origin + 10_000, ['в_ковш-ζ']);
-        const second = phase('off', origin + 4_000, origin + 12_000, ['шлак-ζ']);
+        const first = phase('off', origin, origin + 10_000, ['этап_а-ζ']);
+        const second = phase('off', origin + 4_000, origin + 12_000, ['этап_б-ζ']);
         const db = store([]);
         const sink = foldingSegments(db, db);
         await Promise.all([sink.write([first]), sink.write([second])]);

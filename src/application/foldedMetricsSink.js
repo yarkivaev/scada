@@ -12,7 +12,7 @@ import opcuaLocate from '../infrastructure/ingest/telemetry/opcuaLocate.js';
  * @returns {object} sink
  *
  * @example
- *   const sink = foldedMetricsSink(pgMetrics, pool, { 'tlc-cm8': 'cm8' });
+ *   const sink = foldedMetricsSink(pgMetrics, pool, { 'tlc-line-8': 'line-8' });
  */
 export default function foldedMetricsSink(inner, pool, devices) {
     if (!devices || Object.keys(devices).length === 0) {

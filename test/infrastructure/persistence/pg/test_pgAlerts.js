@@ -3,7 +3,7 @@ import pgAlerts from '../../../../src/infrastructure/persistence/pg/alerts.js';
 
 describe('pgAlerts list', function() {
     it('reads persisted rows for a machine and time window', async function() {
-        const machine = `ихт-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const machine = `линия-γ-${Math.floor(Math.random() * 9000 + 1000)}`;
         const from = new Date('2024-11-02T03:04:05.137Z');
         const to = new Date('2024-11-03T03:04:05.137Z');
         const name = `низкий-cosφ-${Math.floor(Math.random() * 90)}`;

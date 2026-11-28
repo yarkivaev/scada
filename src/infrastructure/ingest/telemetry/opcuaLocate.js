@@ -5,8 +5,8 @@
  * @returns {function(object): object|null} locator
  *
  * @example
- *   const locate = opcuaLocate({ 'tlc-cm8': 'cm8' });
- *   locate({ topic: 'OPCUA/tlc-cm8/GET/ladle_moving/VALUE', value: 1, ts: 1 });
+ *   const locate = opcuaLocate({ 'tlc-line-8': 'line-8' });
+ *   locate({ topic: 'OPCUA/tlc-line-8/GET/axis_moving/VALUE', value: 1, ts: 1 });
  */
 export default function opcuaLocate(devices) {
     const map = devices || {};

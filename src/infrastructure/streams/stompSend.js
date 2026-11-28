@@ -43,7 +43,7 @@ function connectParams(parsed, options) {
  *
  * @example
  * await stompSend('stomp://rabbitmq:61613', '/exchange/scada.user_decisions',
- *   { machine: 'icht2', start: 1700000000, user: 'hmi', tags: ['heating'] },
+ *   { machine: 'drive2', start: 1700000000, user: 'hmi', tags: ['heating'] },
  *   { login: 'guest', passcode: 'guest', host: '/' });
  *
  * @param {string} url - STOMP broker URL

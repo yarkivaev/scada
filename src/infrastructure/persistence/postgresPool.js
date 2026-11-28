@@ -19,6 +19,11 @@ export function holdClient(pool) {
     return pool;
 }
 
+/** Open a pool for an application-owned connection and handle idle socket errors. */
+export function openPostgresPool(connectionString) {
+    return holdClient(new pg.Pool({ connectionString }));
+}
+
 /**
  * Creates a PostgreSQL pool for supervisor state reads.
  *
@@ -39,5 +44,5 @@ export default function postgresPool(options = {}) {
     if (!url) {
         return undefined;
     }
-    return holdClient(new pg.Pool({ connectionString: url }));
+    return openPostgresPool(url);
 }

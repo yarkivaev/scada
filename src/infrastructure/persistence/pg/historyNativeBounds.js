@@ -30,6 +30,37 @@ function retainExterior(segments, current, owners, until) {
         }
     }
 }
+/** Replace pages keep only the observed until; the open tail continues through the checkpoint. */
+export function clipReplacePage(segments, latest, timeScale) {
+    if (!latest?.context?.page) { return segments; }
+    const until = Math.round(latest.context.page.until / timeScale);
+    return segments.flatMap((item) => {
+        const start = instant(item.start_time);
+        const end = instant(item.end_time);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= until) { return []; }
+        if (end <= until) { return [item]; }
+        return [{ ...item, end_time: new Date(until).toISOString(), duration: (until - start) / 1000 }];
+    });
+}
+/** Coalesces overlapping pieces that carry the same classification. */
+export function joinReplacePage(segments) {
+    return [...segments].sort((left, right) => { return instant(left.start_time) - instant(right.start_time); })
+        .reduce((rows, item) => {
+            const prior = rows.at(-1);
+            if (!prior || prior.name !== item.name || (prior.kind ?? 'phase') !== (item.kind ?? 'phase')) {
+                return [...rows, item];
+            }
+            const start = instant(prior.start_time);
+            const incoming = instant(item.start_time);
+            const priorEnd = instant(prior.end_time);
+            const end = Math.max(priorEnd, instant(item.end_time));
+            if (!Number.isFinite(start) || !Number.isFinite(incoming) || incoming < start || incoming > priorEnd) {
+                return [...rows, item];
+            }
+            return [...rows.slice(0, -1), { ...item, start_time: prior.start_time,
+                end_time: new Date(end).toISOString(), duration: (end - start) / 1000 }];
+        }, []);
+}
 /** A bounded native correction may carry existing exterior, never classify new exterior. */
 export default function nativeHistoryBounds(segments, latest, base, timeScale) {
     if (!latest) { return []; }

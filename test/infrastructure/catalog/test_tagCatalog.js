@@ -1,64 +1,45 @@
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import tagCatalog from '../../../src/infrastructure/catalog/tagCatalog.js';
 import catalogRoute from '../../../src/infrastructure/http/plant/routes/catalogRoute.js';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+
+const path = fileURLToPath(new URL('./fixture.json', import.meta.url));
+
+async function catalogResponse(catalog) {
+    const [endpoint] = catalogRoute('/api/v1', catalog);
+    let body;
+    const response = {
+        writeHead() {},
+        end(payload) {
+            body = JSON.parse(payload);
+        }
+    };
+    await endpoint.handle({ method: 'GET', url: '/api/v1/tag-catalog', headers: {} }, response, {});
+    return body;
+}
 
 describe('tagCatalog', function () {
-    it('loads embedded catalog with heating under on', function () {
-        const catalog = tagCatalog({});
-        assert.equal(
-            catalog.get('heating').parent,
-            'on',
-            'heating was not parented to on'
-        );
-        assert.ok(
-            catalog.children('off').includes('idle'),
-            'off roots did not include idle'
-        );
+    it('starts with an empty catalog when no file is configured', function () {
+        assert.deepEqual(tagCatalog({}).entries(), []);
     });
 
-    it('reads labels for a leaf reason', function () {
-        const catalog = tagCatalog({});
-        assert.equal(
-            catalog.labels().maintenance,
-            'Maintenance',
-            'maintenance label was missing'
-        );
-    });
-
-    it('loads catalog from TAG_CATALOG_PATH override', function () {
-        const path = join(dirname(fileURLToPath(import.meta.url)), '../../../src/infrastructure/catalog/tag-catalog.json');
+    it('loads the configured hierarchy and labels from disk', function () {
         const catalog = tagCatalog({ TAG_CATALOG_PATH: path });
-        assert.ok(catalog.entries().length >= 3, 'override catalog was too small');
+        assert.deepEqual(catalog.children('parent'), ['leaf']);
+        assert.deepEqual(catalog.get('leaf'), { id: 'leaf', label: 'Leaf', parent: 'parent' });
+        assert.deepEqual(catalog.labels(), { parent: 'Parent', leaf: 'Leaf' });
     });
 });
 
 describe('catalogRoute', function () {
-    it('exposes GET tag-catalog items', async function () {
-        const [endpoint] = catalogRoute('/api/v1', tagCatalog({}));
-        let body;
-        const res = {
-            writeHead() {},
-            end(payload) {
-                body = JSON.parse(payload);
-            }
-        };
-        await endpoint.handle({ method: 'GET', url: '/api/v1/tag-catalog', headers: {} }, res, {});
-        assert.ok(Array.isArray(body.items), 'tag-catalog response had no items array');
+    it('exposes an empty catalog without configuration', async function () {
+        assert.deepEqual(await catalogResponse(tagCatalog({})), { items: [] });
     });
-    it('includes heating among tag-catalog items', async function () {
-        const [endpoint] = catalogRoute('/api/v1', tagCatalog({}));
-        let body;
-        const res = {
-            writeHead() {},
-            end(payload) {
-                body = JSON.parse(payload);
-            }
-        };
-        await endpoint.handle({ method: 'GET', url: '/api/v1/tag-catalog', headers: {} }, res, {});
-        assert.ok(body.items.some((row) => {
-            return row.id === 'heating';
-        }), 'heating missing from API catalog');
+
+    it('serves the supplied catalog unchanged', async function () {
+        assert.deepEqual(await catalogResponse(tagCatalog({ TAG_CATALOG_PATH: path })), {
+            items: [{ id: 'parent', label: 'Parent', parent: null },
+                { id: 'leaf', label: 'Leaf', parent: 'parent' }]
+        });
     });
 });

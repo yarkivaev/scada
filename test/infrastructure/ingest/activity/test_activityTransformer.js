@@ -12,7 +12,7 @@ describe('activityCodec', function() {
             RequestPath: '/api/metrics',
             DownstreamStatus: 200,
             Duration: 45000000,
-            ClientHost: '192.168.1.100',
+            ClientHost: '192.0.2.100',
             'request_Remote-User': 'admin',
             'request_Remote-Email': 'admin@example.com'
         };
@@ -23,7 +23,7 @@ describe('activityCodec', function() {
         assert.strictEqual(received[0].method, 'GET', 'should extract method');
         assert.strictEqual(received[0].path, '/api/metrics', 'should extract path');
         assert.strictEqual(received[0].status, 200, 'should extract status');
-        assert.strictEqual(received[0].ip, '192.168.1.100', 'should extract ip');
+        assert.strictEqual(received[0].ip, '192.0.2.100', 'should extract ip');
     });
 
     it('converts duration from nanoseconds to seconds', function() {

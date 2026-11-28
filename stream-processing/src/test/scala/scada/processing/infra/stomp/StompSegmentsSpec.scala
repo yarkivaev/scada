@@ -37,7 +37,7 @@ final class StompSegmentsSpec extends CatsEffectSuite:
       base            <- store
       (sender, bodies) <- recording
       decorator        = StompSegments(base, sender, "/exchange/scada.segments")
-      mid              = MachineId("icht3")
+      mid              = MachineId("drive3")
       _               <- decorator.upsert(mid, tagged("off", 100, 100, 0, tags = List("metal_ready")))
       _               <- bodies.set(Nil)
       _               <- decorator.upsert(mid, tagged("off", 100, 200, 100, options = List("a", "b")))
@@ -53,7 +53,7 @@ final class StompSegmentsSpec extends CatsEffectSuite:
       base            <- store
       (sender, bodies) <- recording
       decorator        = StompSegments(base, sender, "/exchange/scada.segments")
-      mid              = MachineId("icht3")
+      mid              = MachineId("drive3")
       _               <- decorator.upsert(mid, tagged("off", 50, 50, 0, options = List("a", "b")))
       _               <- decorator.resolve(mid, Segment("off", Timestamp(50.0), Timestamp(50.0), 0.0), List("inspection"), Nil, Map.empty)
       _               <- bodies.set(Nil)
@@ -80,7 +80,7 @@ final class StompSegmentsSpec extends CatsEffectSuite:
                             1.second,
                             clock.get
                           )
-      mid               = MachineId("icht2")
+      mid               = MachineId("drive2")
       _                <- decorator.upsert(mid, tagged("off", 10, 10, 0))
       _                <- decorator.upsert(mid, tagged("off", 10, 20, 0))
       _                <- clock.set(1_500L)
@@ -95,7 +95,7 @@ final class StompSegmentsSpec extends CatsEffectSuite:
       base             <- store
       (sender, bodies) <- recording
       decorator         = StompSegments(base, sender, "/exchange/scada.segments")
-      mid               = MachineId("icht-2")
+      mid               = MachineId("drive-2")
       origin            = Timestamp(100.0)
       rows              = SplitPieces.materialize(
                             Segment("off", origin, Timestamp(400.0), 300.0),
@@ -117,7 +117,7 @@ final class StompSegmentsSpec extends CatsEffectSuite:
       base             <- store
       (sender, bodies) <- recording
       decorator         = StompSegments(base, sender, "/exchange/scada.segments")
-      mid               = MachineId("icht-millis")
+      mid               = MachineId("drive-millis")
       origin            = Timestamp(100.0)
       rows              = SplitPieces.materialize(
                             Segment("off", origin, Timestamp(250.0), 0.0),
@@ -164,7 +164,7 @@ final class StompSegmentsSpec extends CatsEffectSuite:
       base             <- store
       (sender, bodies) <- recording
       decorator         = StompSegments(base, sender, "/exchange/scada.segments")
-      mid               = MachineId("icht-beat")
+      mid               = MachineId("drive-beat")
       origin            = Timestamp(100.0)
       rows              = SplitPieces.materialize(
                             Segment("off", origin, Timestamp(250.0), 0.0),

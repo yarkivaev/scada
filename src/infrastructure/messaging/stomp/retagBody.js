@@ -18,7 +18,7 @@ function asList(raw) {
  * @returns {object} STOMP JSON body
  *
  * @example
- *   retagBody('icht1', row, ['to_ladle'], {})
+ *   retagBody('drive1', row, ['inspection'], {})
  */
 export default function retagBody(machine, row, tags, properties) {
     const options = asList(row.options);

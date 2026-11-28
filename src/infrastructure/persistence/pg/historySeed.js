@@ -1,5 +1,5 @@
 /** Complete carried parameters at the left context boundary within the last continuous run. */
-export default async function historySeed(pool, machine, before, maxGap, {observations,timeScale=1}={}) {
+export default async function historySeed(pool, machine, before, maxGap, {observations,timeScale=1,bounded = false}={}) {
     const external = observations?.seed ? await observations.seed(machine,before,maxGap) : undefined;
     if (external === null) { return null; }
     if (external !== undefined) {
@@ -9,13 +9,13 @@ export default async function historySeed(pool, machine, before, maxGap, {observ
         return {...external,segment:prior.rows[0] ?? null};
     }
     const result = await pool.query(`WITH times AS (
-        SELECT DISTINCT time_ms FROM history_observations WHERE machine=$1 AND time_ms<$2
+        SELECT DISTINCT time_ms FROM history_observations WHERE machine=$1 AND time_ms<$2${bounded ? ' AND time_ms>=$4' : ''}
     ), gaps AS (
         SELECT time_ms,time_ms-lag(time_ms) OVER (ORDER BY time_ms) AS gap FROM times
     ), boundary AS MATERIALIZED (
         SELECT COALESCE(max(time_ms) FILTER (WHERE gap>$3),min(time_ms)) AS at FROM gaps
     ) SELECT DISTINCT ON (channel) channel,time_ms AS time,value,boundary.at AS since FROM history_observations,boundary
-        WHERE machine=$1 AND time_ms>=boundary.at AND time_ms<$2 ORDER BY channel,time_ms DESC`, [machine,before,maxGap]);
+        WHERE machine=$1 AND time_ms>=boundary.at AND time_ms<$2 ORDER BY channel,time_ms DESC`, [machine,before,maxGap,...(bounded ? [before-maxGap] : [])]);
     if (!result.rows.length) { return null; }
     const time = Math.max(...result.rows.map((row) => { return Number(row.time); }));
     const since = Number(result.rows[0].since);

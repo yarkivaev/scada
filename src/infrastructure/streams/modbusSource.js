@@ -79,7 +79,7 @@ function modbusPollingSource(options) {
  * collector via pollingSource.
  *
  * @example
- * const source = modbusSource('192.168.2.148', 502, 4000, 14, 5, collector, clock);
+ * const source = modbusSource('192.0.2.148', 502, 4000, 14, 5, collector, clock);
  * source.start();
  *
  * @param {string} host - Modbus TCP host address

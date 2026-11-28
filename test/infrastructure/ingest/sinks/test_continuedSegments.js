@@ -31,7 +31,7 @@ describe('continuedSegments', function() {
             end_time: new Date(origin + 10_000).toISOString()
         }), 30);
         await wrapped.write([{
-            machine: `ičt-${Math.random()}`,
+            machine: `mást-${Math.random()}`,
             kind: 'phase',
             name: 'on',
             start_time: new Date(origin + 15_000).toISOString(),
@@ -51,7 +51,7 @@ describe('continuedSegments', function() {
             end_time: new Date(origin + 10_000).toISOString()
         }), 30);
         await wrapped.write([{
-            machine: `ičt-${Math.random()}`,
+            machine: `mást-${Math.random()}`,
             kind: 'phase',
             name: 'on',
             start_time: incoming,
@@ -72,7 +72,7 @@ describe('continuedSegments', function() {
             end_time: heartbeat
         }), 30);
         await wrapped.write([{
-            machine: `ičt-${Math.random()}`,
+            machine: `mást-${Math.random()}`,
             kind: 'phase',
             name: 'on',
             start_time: new Date(origin + 549).toISOString(),
@@ -113,7 +113,7 @@ describe('continuedSegments', function() {
             end_time: new Date(origin + 10_000).toISOString()
         }), 30);
         await wrapped.write([{
-            machine: `ičt-${Math.random()}`,
+            machine: `mást-${Math.random()}`,
             kind: 'phase',
             name: 'on',
             start_time: new Date(origin + 15_000).toISOString(),
@@ -139,7 +139,7 @@ describe('continuedSegments', function() {
     it('loads the previous row once for a same-machine batch', async function() {
         let selects = 0;
         const origin = 1_701_500_000_000 + Math.floor(Math.random() * 1e8);
-        const machine = `ičt-${Math.random()}`;
+        const machine = `mást-${Math.random()}`;
         const pool = {
             query() {
                 selects += 1;

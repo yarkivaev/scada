@@ -3,7 +3,7 @@ import checkpointStateMemory from '../../../../src/infrastructure/persistence/me
 
 describe('checkpointStateMemory pending segments', function() {
     it('lists heartbeated open rows where end is past start', function() {
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const start = '2024-06-01T10:00:00.000Z';
         const end = '2024-06-01T10:00:45.000Z';
         const store = {
@@ -33,7 +33,7 @@ describe('checkpointStateMemory pending segments', function() {
     });
 
     it('excludes silence-closed rows from pending list', function() {
-        const machine = `ičt-${Math.random().toString(36).slice(2)}`;
+        const machine = `mást-${Math.random().toString(36).slice(2)}`;
         const store = {
             segments: [{
                 machine,

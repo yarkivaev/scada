@@ -42,10 +42,11 @@ function continued(records) {
     });
 }
 
-function collapsed(records) {
+function collapsed(records, preserveCoverage) {
     const next = [];
     for (const batch of grouped(continued(records)).values()) {
-        next.push(...uniqueStarts(historyFold([], batch)).map(pointed));
+        const rows = uniqueStarts(historyFold([], batch));
+        next.push(...(preserveCoverage ? rows : rows.map(pointed)));
     }
     return next;
 }
@@ -60,23 +61,21 @@ function collapsed(records) {
  * @returns {Promise<void>}
  */
 async function pendingInClient(segmentSink, closer, record, transaction) {
-    const live = pointed(record);
-    await closer.close(live.machine, live.start_time, live.kind || 'phase', transaction, live.name);
-    await segmentSink.write([live], transaction);
+    await closer.close(record.machine, record.start_time, record.kind || 'phase', transaction, record.name);
+    await segmentSink.write([record], transaction);
 }
 async function persistPending(segmentSink, closer, pool, record) {
-    const live = pointed(record);
-    const kind = live.kind || 'phase';
+    const kind = record.kind || 'phase';
     if (!pool || typeof pool.connect !== 'function') {
-        await closer.close(live.machine, live.start_time, kind, null, live.name);
-        await segmentSink.write([live]);
+        await closer.close(record.machine, record.start_time, kind, null, record.name);
+        await segmentSink.write([record]);
         return;
     }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        await closer.close(live.machine, live.start_time, kind, client, live.name);
-        await segmentSink.write([live], client);
+        await closer.close(record.machine, record.start_time, kind, client, record.name);
+        await segmentSink.write([record], client);
         await client.query('COMMIT');
     } catch (error) {
         await client.query('ROLLBACK').catch((ignored) => { return ignored; });
@@ -124,16 +123,18 @@ async function writeCompleted(segmentSink, closer, record, transaction) {
 }
 
 /** Writes a consecutive run of phase records through one sink call. */
-async function writeOwned(segmentSink, closer, records, transaction) {
+async function writeOwned(segmentSink, closer, records, transaction, preserveCoverage) {
     if (!records.length) {
         return;
     }
-    const folded = collapsed(records);
+    const folded = collapsed(records, preserveCoverage);
     await closePending(closer, folded, transaction);
     await segmentSink.write(folded, transaction);
 }
 
-export default function segmentDispatch(segmentSink, retag, splitSink, closer, pool) {
+// eslint-disable-next-line max-params -- Existing sink ports and pool retain their public call convention.
+export default function segmentDispatch(segmentSink, retag, splitSink, closer, pool, { preserveCoverage = false } = {}) {
+    function normalize(record) { return preserveCoverage ? record : pointed(record); }
     return {
         async accept(record, transaction) {
             if (record.type === 'retag') {
@@ -155,7 +156,8 @@ export default function segmentDispatch(segmentSink, retag, splitSink, closer, p
                 await writeCompleted(segmentSink, closer, record, transaction);
                 return;
             }
-            await (transaction ? pendingInClient(segmentSink, closer, record, transaction) : persistPending(segmentSink, closer, pool, record));
+            await (transaction ? pendingInClient(segmentSink, closer, normalize(record), transaction)
+                : persistPending(segmentSink, closer, pool, normalize(record)));
         },
         async acceptMany(records, transaction) {
             const phases = [];
@@ -164,12 +166,12 @@ export default function segmentDispatch(segmentSink, retag, splitSink, closer, p
                     phases.push(record);
                 } else {
                     // eslint-disable-next-line no-await-in-loop
-                    await writeOwned(segmentSink, closer, phases.splice(0), transaction);
+                    await writeOwned(segmentSink, closer, phases.splice(0), transaction, preserveCoverage);
                     // eslint-disable-next-line no-await-in-loop
                     await this.accept(record, transaction);
                 }
             }
-            await writeOwned(segmentSink, closer, phases, transaction);
+            await writeOwned(segmentSink, closer, phases, transaction, preserveCoverage);
         }
     };
 }

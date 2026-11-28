@@ -76,7 +76,10 @@ shutdown. Fatal cleanup or an uncertain MQTT acceptance/write timeout makes
 liveness fail; configure an external restart policy. Transient MQTT errors mark
 the task degraded until broker reconnect; terminal timeouts require a fresh
 executor after the old process drains its IO. A blocked event loop cannot answer
-an external probe; synchronous infinite loops/native crashes still affect the
+an external probe. Set `COLLECTOR_STARTUP_PORT` to expose `/startup` on a
+separate listener using the same host. It opens after local recovery and tracks
+fatal errors and shutdown independently of task readiness or control quorum.
+Synchronous infinite loops and native crashes still affect the
 entire process. No hard CPU or native-memory isolation is claimed.
 
 The process defaults to 16 MiB / 16,384 buffered records, each task to 1 MiB /
@@ -116,6 +119,14 @@ use `holding:<integer>[:abcd|cdab]` within the 16-bit register address range.
 Explicit plans replace `maps`; mixing the two or repeating a topic is rejected.
 All devices still share one poll window.
 
+## Read queued observations by machine
+
+The collector history surface uses the device identifier from the second
+component of a telemetry topic as its default machine identifier. When machine
+IDs differ from device IDs, supply `spoolMachine(topic)` to `runCollector`. The
+callback receives the slash-delimited wire topic and returns a machine ID or
+`null` for observations outside the history scope.
+
 ## Enable task-state storage
 
 Collector state is optional for live-only assignments. Ordinary supervisor-sink
@@ -124,10 +135,18 @@ Call `migrate(pool, migrationsDir, profile, { runtimeState: true })` only when
 explicitly enabling task-state storage, or apply its SQL separately.
 The runner accepts `COLLECTOR_STATE_URL` for PostgreSQL. Apply
 `db/migrations/V0009__collector_task_state.sql` explicitly and grant the service
-role access before starting stateful assignments; the runner never runs schema
-migrations or falls back to local disk. The storage must be reachable from every
-eligible node. The built-in store rejects unsupported ownership tokens rather
-than pretending to enforce an external fencing protocol.
+role access before starting stateful assignments. The storage must be reachable
+from every eligible node. For process-local checkpoints, call
+`runCollector({ ...options, localTaskState: true })` with `COLLECTOR_SPOOL_DIR`
+set. Without a supplied `stateStore` or PostgreSQL URL, the runner opens and
+owns `task-state.sqlite` in that directory. The path and schema support existing
+collector checkpoints. Both built-in stores reject unsupported ownership
+tokens. Node-local SQLite checkpoints belong to the node that owns their disk.
+
+Plant adapters with JSON AMQP payloads can use `spooledOutput(context,
+destinations)` from `@yarkivaev/scada/runtime` to add collector, task and event
+IDs and await durable queue acceptance for each observation. Use
+`amqpDestinations(url, exchange)` for a single durable topic exchange.
 
 ## Verification
 

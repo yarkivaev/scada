@@ -12,7 +12,7 @@ See the [edge assignment controller](collect/edge-controller.md) for placement, 
 
 [Configure first-write-wins receipts](reference/edge-history.md#raw-telemetry-first-choice).
 
-## External raw observations and stateful casting corrections
+## External raw observations and stateful timeline corrections
 
 [Read the stateful correction protocol](reference/edge-history.md#external-raw-observations-and-stateful-corrections).
 

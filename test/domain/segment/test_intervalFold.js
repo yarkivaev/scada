@@ -36,7 +36,7 @@ describe('intervalFold', function() {
         const port = memoryPort();
         const fold = intervalFold(port);
         const machine = `cm${Math.floor(Math.random() * 90 + 10)}`;
-        const kind = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const kind = `axis_${Math.random().toString(36).slice(2, 8)}`;
         await fold.accept({ machine, kind, value: 1, ts: Date.now() });
         assert.strictEqual(port.rows.length, 1, 'fold did not insert the first interval');
         assert.strictEqual(port.rows[0].name, '1', 'fold stored the wrong interval name');
@@ -73,7 +73,7 @@ describe('intervalFold', function() {
         const port = memoryPort();
         const fold = intervalFold(port);
         const machine = `cm${Math.floor(Math.random() * 90 + 10)}`;
-        const first = `ladle_${Math.random().toString(36).slice(2, 8)}`;
+        const first = `axis_${Math.random().toString(36).slice(2, 8)}`;
         const second = `pipe_${Math.random().toString(36).slice(2, 8)}`;
         const ts = Date.now();
         await fold.accept({ machine, kind: first, value: 1, ts });

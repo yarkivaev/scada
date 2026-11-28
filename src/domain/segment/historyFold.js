@@ -37,7 +37,8 @@ function overlaps(left, right) {
 
 function liveJoin(left, right) {
     return left.name === right.name && (left.duration === 0 || right.duration === 0)
-        && instant(left.start_time) <= instant(right.start_time);
+        && instant(left.start_time) <= instant(right.start_time)
+        && instant(left.end_time) >= instant(right.start_time);
 }
 
 function covers(outer, inner) {
