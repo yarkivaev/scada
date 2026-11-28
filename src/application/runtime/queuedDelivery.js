@@ -8,6 +8,7 @@ export default function queuedDelivery(env, secrets, supplied) {
     let burst = 0;
     const queue = supplied ?? (env.COLLECTOR_SPOOL_DIR ? deliveryQueue(env.COLLECTOR_SPOOL_DIR, {
         maxBytes: Number(env.COLLECTOR_SPOOL_MAX_BYTES), maxRecords: Number(env.COLLECTOR_SPOOL_MAX_RECORDS ?? 100000), factory(spec) { return sinks().get(spec.type)(spec, { secrets }); },
+        walCheckpoint: env.COLLECTOR_SPOOL_WAL_CHECKPOINT === 'managed' ? {} : undefined,
         onError(error) { process.stderr.write(`Collector delivery delayed: ${error.message}\n`); }
     }) : undefined);
     function nextDelay(result) {
