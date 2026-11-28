@@ -33,6 +33,12 @@ export default function historyRoutes(token, history, liveSegments) {
         endpoint('GET', 'context', token, (input) => {
             return history.context(input.machine, Number(input.from), Number(input.until), input.paddingMs === undefined ? 60000 : Number(input.paddingMs), {classifierKey:input.classifierKey,workId:input.workId,workToken:input.workToken,cursor:input.cursor === undefined ? null : Number(input.cursor),end:input.end === undefined ? null : Number(input.end)});
         }),
-        endpoint('POST', 'commit', token, (input) => { return history.commit(input.machine, input.workId, input.segments, input.context); })
+        endpoint('POST', 'commit', token, (input) => {
+            if (input.context?.replication !== undefined) { throw new TypeError('Use the history outbox endpoint'); }
+            return history.commit(input.machine, input.workId, input.segments, input.context);
+        }),
+        ...(history.commitOutbox ? [endpoint('POST', 'commit-outbox', token, input => {
+            return history.commitOutbox(input.machine, input.workId, input.segments, input.context, input.replication);
+        })] : [])
     ];
 }

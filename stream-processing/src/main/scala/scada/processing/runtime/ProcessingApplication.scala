@@ -220,7 +220,7 @@ final class ProcessingApplication(profile: RuntimeProfile):
           HistoryRun(profile, writer, observe,
             (settings, source) => decisionSegments.fold(Stream.empty.covaryAll[IO, Unit])(
               profile.decisions(settings, source, _))
-          ).gated(config, machine, aliases, sender, api, observationMs, segmentEndMs)
+          ).gated(config, machine, aliases, api, observationMs, segmentEndMs)
         case _ =>
           val body = (database: Option[WorkerDatabase]) =>
             profileSegments.flatMap(profile.live(config, machine, aliases, _, checkpoint, seeding, outputs, database)).getOrElse:

@@ -2,6 +2,7 @@ import { phaseAnchors } from '../infrastructure/ingest/sinks/contiguousPhases.js
 import ingestHealth from './ingestHealth.js';
 import segmentTransactionConfig from './segmentTransactionConfig.js';
 import segmentBatchStats from './segmentBatchStats.js';
+import historyReplicaRelay from './historyReplicaRelay.js';
 import historyTelemetry from '../infrastructure/ingest/telemetry/historyTelemetry.js';
 import segmentPipeline, {
     segmentRecipient, segmentsIngestDestination
@@ -57,6 +58,7 @@ export function readDeploymentConfig(env) {
     return {
         dbPoolMax,
         stomp: env.STOMP_URL,
+        replicaBroker: env.HISTORY_REPLICA_AMQP_URL ?? env.HISTORY_AMQP_URL,
         postgres: env.POSTGRES_URL,
         postgresAdmin: env.POSTGRES_ADMIN_URL,
         migrationsMode: migrationMode(env.SUPERVISOR_MIGRATIONS),
@@ -142,7 +144,8 @@ export default function supervisorSink(env = process.env, options = {}) {
         return recipient;
     }
     const state = options.stateData ? options.stateData(data, pool) : data;
-    const dataAccess = metricsEnabled ? {...state,liveSegments:{
+    const replicaRelay = metricsEnabled && state.history && cfg.replicaBroker ? historyReplicaRelay(cfg.replicaBroker, pool) : undefined;
+    const dataAccess = metricsEnabled ? {...state,...(replicaRelay && {history:replicaRelay.history(state.history)}),liveSegments:{
         revision(machine) { return segments().live.revision(machine); },
         apply(input) { return segments().live.apply(input); }
     }} : state;
@@ -150,6 +153,7 @@ export default function supervisorSink(env = process.env, options = {}) {
     return {
         health: () => {return health.status()},
         historyTelemetry: localTelemetry,
+        historyReplicaRelay: replicaRelay,
         apiPort: cfg.apiPort,
         apiToken: cfg.apiToken,
         sinkDbProfile: cfg.sinkDbProfile,
@@ -162,6 +166,7 @@ export default function supervisorSink(env = process.env, options = {}) {
         async run(httpServer) {
             await prepareDatabase(cfg, pool);
             await localTelemetry?.start();
+            replicaRelay?.start();
             if (cfg.pipelines) {
                 await startPipelines(cfg, pool, health, segments());
             }

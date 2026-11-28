@@ -22,6 +22,12 @@ Pair E0009 with a supervisor that supports continuation cursors and bounded over
 
 Each continuation also re-evaluates its original parameter dependency and existing segment boundary. Its finite envelope can grow to include already stored observations or a live correction that overtook the historical work, so a historical page cannot erase an already-processed live tail and then retire prematurely. Envelope growth follows stored dependency evidence rather than wall-clock time; each page retains the same bounded read limits.
 
+## Delivering committed segments to replicas
+
+Replicated historical corrections use `POST /v1/history/commit-outbox`. The edge receiver stores segment notifications for the rows actually written alongside the correction, write receipt, and work cursor in one PostgreSQL transaction. Staged pages queue their notifications when the final projection is written. The relay sends persistent AMQP messages in commit order per machine and removes them only after a publisher confirm. Unroutable messages remain pending. If the receiver or relay restarts, it resumes pending sends. A repeat carries the same output ID and the replica applies it once.
+
+The receiver reads its broker URL from `HISTORY_REPLICA_AMQP_URL` or `HISTORY_AMQP_URL`. In verify-only migration mode, apply edge migrations E0021 and E0022 before starting the receiver. The configured segment exchange needs a durable bound queue for the existing replication path. Bring up the outbox endpoint before starting a worker configured to replicate history.
+
 ## External raw observations and stateful corrections
 
 `historyPg` is a public state port. With `observations(connection)` it reads measurements from an external raw store while retaining transactional PostgreSQL work, segment and annotation state. The observation source implements bounded boundary/page/read/seed access and registration. `timeScale:1000` plus an exact timestamp parser preserves ClickHouse microseconds; ordinary PostgreSQL history keeps millisecond coordinates.
