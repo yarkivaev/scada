@@ -1,3 +1,5 @@
+export const historyReplicaProtocol = 'transactional-history-outbox-v1';
+
 export function historyReplication(value) {
     if (!value || typeof value.exchange !== 'string' || !/^[\w.-]{1,255}$/u.test(value.exchange) ||
         typeof value.routingKey !== 'string' || Buffer.byteLength(value.routingKey) > 255 ||

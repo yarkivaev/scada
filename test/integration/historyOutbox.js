@@ -17,7 +17,26 @@ import { segmentRecipient } from '../../src/infrastructure/ingest/pipelines/segm
 
 describe('historical replication outbox', function () {
     this.timeout(120000);
-    let brokerUrl; let channel; let connection; let dbUrl; let pool; let postgres; let rabbit; let relay;
+    let brokerUrl;
+    let channel;
+    let connection;
+    let dbUrl;
+    let pool;
+    let postgres;
+    let rabbit;
+    let relay;
+    let replicaPool;
+
+    async function migrate(connectionPool) {
+        for (const file of [
+            'V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'V0013__contiguous_phase_inbox.sql',
+            'V0015__segment_write_receipts.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql',
+            'E0009__history_continuation.sql', 'E0019__segment_write_fence.sql', 'E0021__history_replica_outbox.sql'
+        ]) {
+            // eslint-disable-next-line no-await-in-loop
+            await connectionPool.query(await readFile(new URL(`../../db/migrations/${file}`, import.meta.url), 'utf8'));
+        }
+    }
 
     before(async function () {
         postgres = await new GenericContainer('postgres:16-alpine')
@@ -25,14 +44,9 @@ describe('historical replication outbox', function () {
             .withWaitStrategy(Wait.forLogMessage('database system is ready to accept connections', 2)).start();
         dbUrl = `postgresql://postgres:test@${postgres.getHost()}:${postgres.getMappedPort(5432)}/postgres`;
         pool = new pg.Pool({ connectionString: dbUrl });
-        for (const file of [
-            'V0001__baseline.sql', 'V0008__segments_updated_at.sql', 'V0013__contiguous_phase_inbox.sql',
-            'V0015__segment_write_receipts.sql', 'E0001__edge_metrics.sql', 'E0006__historical_telemetry.sql',
-            'E0009__history_continuation.sql', 'E0019__segment_write_fence.sql', 'E0021__history_replica_outbox.sql'
-        ]) {
-            // eslint-disable-next-line no-await-in-loop
-            await pool.query(await readFile(new URL(`../../db/migrations/${file}`, import.meta.url), 'utf8'));
-        }
+        await pool.query('CREATE DATABASE replica');
+        replicaPool = new pg.Pool({ connectionString: dbUrl.replace(/postgres$/u, 'replica') });
+        await Promise.all([migrate(pool), migrate(replicaPool)]);
         rabbit = await new GenericContainer('rabbitmq:3.13-alpine').withExposedPorts(5672)
             .withWaitStrategy(Wait.forLogMessage(/Server startup complete/u)).start();
         brokerUrl = `amqp://guest:guest@${rabbit.getHost()}:${rabbit.getMappedPort(5672)}`;
@@ -48,6 +62,7 @@ describe('historical replication outbox', function () {
         await relay?.stop();
         await connection?.close();
         await pool?.end();
+        await replicaPool?.end();
         await rabbit?.stop();
         await postgres?.stop();
     });
@@ -107,9 +122,9 @@ describe('historical replication outbox', function () {
         assert.equal(first.properties.deliveryMode, 2);
         assert.equal(await channel.get('history-replica', { noAck: true }), false);
         const body = JSON.parse(first.content);
-        const replica = segmentRecipient(dbUrl, pool, { acceptReplicaSegments: true });
+        const replica = segmentRecipient(dbUrl.replace(/postgres$/u, 'replica'), replicaPool, { acceptReplicaSegments: true });
         const applied = await replica.dispatch.accept(decodeSegmentBody(body));
-        await pool.query("UPDATE segments SET tags='[\"operator\"]' WHERE machine=$1", [body.machine]);
+        await replicaPool.query("UPDATE segments SET tags='[\"operator\"]' WHERE machine=$1", [body.machine]);
         const afterEdit = await replica.live.revision(body.machine);
         const duplicate = await replica.dispatch.accept(decodeSegmentBody(JSON.parse(second.content)));
         assert.equal(applied.applied, true);
