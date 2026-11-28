@@ -16,7 +16,8 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `exportQuery`, `exportStream`, `exportSink`, `exportJob` | Generic export ports over plantApi / `@yarkivaev/scada/client` |
 | `siteSync`, `siteSyncSites`, `siteSyncBind` | Pull kinds from an allowlisted remote plantApi into local persistence |
 | `metricsPlant`, `shopWithTimeline`, `machineInPlant` | Plant wiring helpers |
-| `supervisorSink`, `readDeploymentConfig` | STOMP ingest + PG persistence |
+| `supervisorSink`, `readDeploymentConfig` | HTTP state writes, STOMP ingest and PostgreSQL persistence |
+| `historyPg`, `historyProtocol`, `historyReplicaProtocol` | [History work, correction and replication protocols](edge-history.md) |
 | `edgeApi`, `stateHttpClient`, `metricsSensor` | Edge HTTP read/write |
 | `clickhouseConnection`, `clickhouseSensor`, `pgMetricsSensor` | Metric storage |
 | `pgTimeline`, `pgAlerts`, `stateDataFromPool`, `stateDataFromMemory` | State ports |

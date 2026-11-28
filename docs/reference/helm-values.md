@@ -110,6 +110,8 @@ When `rabbitmq.enabled` is true the chart loads definitions for topic exchanges 
 
 A routing key replaces `/` with `.`. The path `*` is `#`. A path that ends in `/*` is that prefix plus `.#`.
 
+For timeline replication, pass the [outbox configuration](environment.md) through the chart environment. Define the durable queue and binding for each replica route in the deployment topology. See [Upgrade timeline replication to v2](../operations/upgrades.md#upgrade-timeline-replication-to-v2).
+
 ## Release values
 
 The blocks below are what `releases` emits for one cluster. They are not the system document. `cell-b` owns `unit-2` and has no fan-in:

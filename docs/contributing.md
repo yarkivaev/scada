@@ -7,7 +7,7 @@ Develop and verify SCADA changes in the repository. Follow the [testing and rele
 ## Testing
 
 ```bash
-npm test                        # all Mocha unit tests
+npm test                        # standard Mocha suite, including tests with local services
 npm test -- --grep "pattern"    # filter by name
 npm run test:deep               # domain + ingest (integration needs Docker)
 npm run coverage
@@ -15,7 +15,7 @@ npm run lint
 npm run lint:eo                 # Elegant Objects naming audit
 ```
 
-Tests mirror `src/` under `test/`. Use fakes instead of mocks; one assertion per test. Integration tests under `test/infrastructure/**/integration/` use testcontainers.
+Tests mirror `src/` under `test/`. Use fakes instead of mocks; one assertion per test. Docker-backed integration tests use Testcontainers. Some suites live in `test/integration/` and run explicitly in the release workflow.
 
 For HTTP/state tests without PostgreSQL:
 

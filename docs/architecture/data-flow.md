@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Site server (`siteServer`) | Plant application process | Serves plant routes and can run the edge HTTP interface and optional MQTT ingest. |
 | [Stream processing](../../stream-processing/README.md) | Scala workload with a plant profile | Reads telemetry, produces segments and restores classifier history. |
-| [State sink](README.md#state-sink) (`supervisor-sink`) | Site process or dedicated workload | Consumes STOMP deliveries and persists segments, decisions and alerts in PostgreSQL. |
+| [State sink](README.md#state-sink) (`supervisor-sink`) | Site process or dedicated workload | Accepts fenced timeline writes over HTTP and ingests segment, decision and alert deliveries over STOMP. Persists state in PostgreSQL. |
 | Agent (`scada-collector`) | Host or container with access to the source | Runs assigned device or stream tasks and delivers their output to configured destinations. |
 | Controller (`scada-controller`) | Edge control deployment | Uses etcd to place collector tasks. Collectors read assignments and report progress. |
 
@@ -32,11 +32,11 @@ Deploy etcd and the controller when task placement should move between eligible 
 
 With prepared Stream Worker candidates on different edge nodes, a shared writer lease coordinates ownership per machine. A worker can resume historical correction from the durable cursor and checkpoint. See [High availability](high-availability.md#replicated-stream-processing-and-history-workers).
 
-## Classification and replay
+## Classification and historical correction
 
 1. A collector reads a device or stream and publishes readings to the configured broker or sink.
 2. The stream processor maps readings to machine parameters and emits timeline segments. Configuration selects the live source and the historical processing path.
-3. The state sink consumes STOMP events and writes PostgreSQL. Recovery uses the configured checkpoint API, durable history work or classifier cursors as appropriate for the selected mode.
+3. The worker sends timeline writes to the state HTTP API. For v2 replication, PostgreSQL commits timeline changes and outbox entries together. The relay publishes them to RabbitMQ and replica sinks consume them over STOMP.
 4. The site API serves measurements and state to consumers. Central archives can independently ingest selected raw readings into ClickHouse.
 
 [Stream processing and history modes](../../stream-processing/README.md).
@@ -56,6 +56,8 @@ plantApi → REST + SSE → frontend / @yarkivaev/scada/client
 ```
 STOMP (`/queue/scada.segments.ingest`, `/exchange/scada.alerts`, `/exchange/scada.user_decisions`)
   → ingest/codecs → domain/segment → ingest/sinks → PostgreSQL
+Stream Worker → edgeApi (:8081) → PostgreSQL timeline + outbox (v2)
+PostgreSQL outbox → AMQP relay → RabbitMQ → replica state sink
 edgeApi (:8081) ← metrics batch, checkpoints, retention (edge profile)
 ```
 

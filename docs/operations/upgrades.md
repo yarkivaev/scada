@@ -16,6 +16,14 @@ Use the following procedures to replace a reader or adopt resources already pres
 
 Publish the shared engine version from a checked SCADA main commit before building a plant image that pins it. Verify the plant profile, segment messages and historical recovery against the new engine. Follow the plant release procedure to roll the classifier and preserve its durable state. See [Stream processing](../../stream-processing/README.md).
 
+## Upgrade timeline replication to v2
+
+1. Apply the [timeline migrations](database-migrations.md) and upgrade all replica consumers, including central consumers.
+2. Stop the v1 live and history writers for the machine. Let the running relay drain its PostgreSQL outbox, then drain the v1 broker queues and in-flight deliveries.
+3. Start a compatible state sink and worker together. Check that the authority can commit and relay new changes and that replica sinks can apply them.
+
+See [edge history](../reference/edge-history.md#delivering-committed-segments-to-replicas) for configuration and delivery guarantees.
+
 ## Replace collectors
 
 A release can replace old collectors using

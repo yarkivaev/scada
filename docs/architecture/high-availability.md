@@ -37,6 +37,12 @@ A standby readiness check compares local observation progress with a positive re
 
 The shared engine supports rule-based classification from a per-machine queue. A site profile can use the durable history API for historical correction. A page commit validates the work token and context revision. It records the page result and advances durable progress inside the same transaction. Stateful workers stage computation under the current work generation, then apply the result atomically with current operator metadata. A stale claim or a changed context requires a fresh read. A restarted worker resumes from the committed cursor and checkpoint. See [edge history protocols](../reference/edge-history.md) and [stream processing configuration](../../stream-processing/README.md).
 
+## Timeline replicas
+
+With [timeline replication v2](../reference/edge-history.md#delivering-committed-segments-to-replicas), fenced live writes and historical corrections share one PostgreSQL outbox. The authority commits the final row changes, their outbox records and any history progress together. The relay removes a record after a persistent RabbitMQ publication is confirmed.
+
+Replicas apply insertions, updates and deletions with the latest position for each segment key and authority database. A repeated insertion cannot revive a deleted key. A delayed deletion leaves a later live write at the same key intact. This convergence guarantee applies to fenced writes from one authoritative database per machine. Authority changes, direct edits and local maintenance have separate paths.
+
 ## Failure guarantees
 
 | Failure | What the system can preserve | What recovery depends on |
@@ -46,6 +52,7 @@ The shared engine supports rule-based classification from a per-machine queue. A
 | A collector node stops | A healthy copy may keep collecting. With sufficient eligible capacity, the controller can place a replacement. | A live source, a reachable destination or available spool space, and another eligible host. A pinned device stays with its physical host. |
 | Broker or link is interrupted | A durable path can retain queued or spooled records and retry each recipient. | Retained queue and spool data, sufficient capacity and a destination that handles replay. |
 | Stream processor or history worker stops | Committed segments and history progress remain available from durable state. A prepared writer or worker can resume. | The previous lock releases, the candidate has the required input and state, and the destination remains reachable. |
+| Authority or relay stops after a timeline commit | Pending v2 changes remain in the PostgreSQL outbox. A repeated delivery uses the same ID and position. | The authority database survives and the configured replica queues and consumers recover. |
 | Storage or raw history is lost | Recovery can use the data and checkpoints that survived. | Deployment-managed replication and backups set the recovery limit. |
 
 These guarantees apply to individual paths. They do not establish a fixed failover time, zero data loss or end-to-end exactly-once delivery for an entire site. Plan broker and datastore replication and backups independently of the controller.

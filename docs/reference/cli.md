@@ -9,9 +9,9 @@ Use Node.js 22 or later for the npm package and JDK 21 for the Scala classifier.
 | `scada` | Inspects and reconciles SCADA contexts over the management API. |
 | `scada-collector` | Runs collection tasks from a manifest or controller assignment. |
 | `scada-controller` | Places collector tasks through etcd. |
-| `supervisor-sink` | Consumes STOMP events, writes PostgreSQL state and serves the internal state API. |
+| `supervisor-sink` | Serves the internal state API, ingests STOMP events and runs the edge timeline relay when configured. |
 | `modbus-to-mqtt` | Polls Modbus and publishes the configured `STREAM` and `MAPPING` paths. |
-| `java -jar scada-stream-processing.jar` | Classifies readings, restores history and publishes segments. |
+| `java -jar scada-stream-processing.jar` | Classifies readings, recalculates history and submits timeline writes to the state API. |
 | Plant Node.js entrypoint | Composes `siteServer` with the plant model, sensors and routes. |
 
 ## Manage SCADA from a workstation
