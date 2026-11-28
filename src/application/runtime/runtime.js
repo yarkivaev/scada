@@ -55,6 +55,7 @@ async function remove(ctx, input, slot) {
     slot.generation = input.generation;
     slot.removed = true;
     await halt(slot, ctx);
+    await ctx.services.stateStore?.forget?.(slot.taskId);
     Object.assign(slot, { state: 'stopped' });
     return view(slot);
 }

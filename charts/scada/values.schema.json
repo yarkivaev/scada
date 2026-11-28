@@ -87,6 +87,7 @@
               }
             }
           },
+          "readOnlyRootFilesystem": { "type": "boolean" },
           "hostDevices": {
             "type": "array",
             "uniqueItems": true,

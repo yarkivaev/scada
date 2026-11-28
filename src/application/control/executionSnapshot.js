@@ -1,5 +1,7 @@
-import { checkSnapshot } from './snapshotFile.js';
 export function remoteSnapshot(snapshot) {
+    if (!snapshot || !Number.isSafeInteger(snapshot.generation) || snapshot.generation < 0 || !Array.isArray(snapshot.assignments)) {
+        throw new TypeError('Invalid assignment snapshot');
+    }
     const remote = { ...snapshot };
     delete remote.localGeneration;
     delete remote.executionGenerations;
@@ -7,15 +9,12 @@ export function remoteSnapshot(snapshot) {
 }
 function epoch(snapshot) { return snapshot?.controlEpoch ?? 'initial'; }
 /** Local runtime generations remain monotonic even when an operator restores etcd. */
-export default function executionSnapshot(snapshot, previous, tasks, restored = false) {
-    checkSnapshot(snapshot);
-    const remote = remoteSnapshot(snapshot);
+export default function executionSnapshot(remote, previous, tasks) {
     if (previous && epoch(previous) === epoch(remote)) {
         if (remote.generation < previous.generation) { throw new Error('Stale assignment snapshot'); }
         if (remote.generation === previous.generation && JSON.stringify(remote) !== JSON.stringify(remoteSnapshot(previous))) { throw new Error('Conflicting assignment snapshot'); }
         if (remote.generation === previous.generation) { return previous; }
     }
-    if (restored && Number.isSafeInteger(snapshot.localGeneration) && snapshot.executionGenerations) { return snapshot; }
     const localGeneration = Math.max(previous?.localGeneration ?? 0, remote.generation, ...tasks.map((row) => { return row.generation ?? 0; })) + 1;
     const executionGenerations = Object.fromEntries(remote.assignments.map((row) => {
         const prior = previous?.assignments.find((item) => { return item.taskId === row.taskId; });

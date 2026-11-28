@@ -40,7 +40,7 @@ Controller replicas reconcile assignments through an etcd quorum. Each agent rea
 
 ![Controller replicas and agents exchange assignments and progress through etcd while agents send telemetry to the broker](diagrams/managed-agents.svg)
 
-If etcd loses quorum, new placement pauses and running agents can continue using their saved assignments. Pin tasks that require a physical device to the node where that device is attached. See [Edge assignment controller](../collect/edge-controller.md).
+If etcd loses quorum, new placement pauses and running agents can continue using their in-memory assignments. Pin tasks that require a physical device to the node where that device is attached. See [Edge assignment controller](../collect/edge-controller.md).
 
 ## Replicated stream processing and historical workers
 

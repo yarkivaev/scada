@@ -5,7 +5,7 @@ function settings(options) {
     if (options.groupCommit !== undefined && (!options.groupCommit || typeof options.groupCommit !== 'object' || Array.isArray(options.groupCommit))) {
         throw new TypeError('groupCommit must be an object');
     }
-    const { maxRecords = 64, maxBytes = 1048576, maxDelayMs = 25 } = options.groupCommit ?? {};
+    const { maxRecords = 64, maxBytes = 1048576, maxDelayMs = 0 } = options.groupCommit ?? {};
     const group = { maxRecords, maxBytes, maxDelayMs };
     const config = { ...group, maxOperations: options.maxOperations ?? 128, maxPendingBytes: options.maxPendingBytes ?? 4194304 };
     Object.entries(config).forEach(([name, value]) => { positive(value, name, name === 'maxDelayMs'); });
@@ -27,7 +27,10 @@ export default function deliveryOperations(apply, options = {}) {
         state.operations += 1;
         return true;
     }
-    function wait() { return new Promise((resolve) => { waiters.push(resolve); }); }
+    function wait() {
+        if (waiters.length >= config.maxOperations) { return Promise.reject(new Error('Delivery operation capacity exceeded')); }
+        return new Promise((resolve) => { waiters.push(resolve); });
+    }
     function notifyIdle() {
         if (!state.operations && !state.running && !waiters.length) { state.wake?.(); Object.assign(state, { idle: null, wake: null }); }
     }
@@ -117,7 +120,7 @@ export default function deliveryOperations(apply, options = {}) {
             if (occupy()) {
                 try { return hold(build).commit(); } catch (error) { return Promise.reject(error); }
             }
-            return wait().then(() => { return hold(build).commit(); });
+            return Promise.reject(new Error('Delivery operation capacity exceeded'));
         },
         barrier(action) {
             if (occupy()) { return enqueue({ kind: 'barrier', action, bytes: 0 }); }

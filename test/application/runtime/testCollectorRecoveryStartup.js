@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import runCollector from '../../../src/application/runtime/runCollector.js';
 
 async function freePort() {
@@ -89,43 +86,47 @@ describe('collector recovery startup', function() {
         assert.deepEqual(events, []);
     });
 
-    for (const cached of [true, false]) {
-        it(`does not wait for quorum before completing local recovery (cached assignment=${cached})`, async function() {
-            const directory = await mkdtemp(path.join(tmpdir(), 'collector-recovery-'));
-            const file = path.join(directory, 'assignment.json');
-            if (cached) { await writeFile(file, JSON.stringify({ generation: 1, assignments: [
-                { taskId: 'sensor', generation: 1, specVersion: 1, spec: { adapter: 'test' } }
-            ] })); }
-            let observed; let paused = true; const held = [];
-            const request = new Promise(resolve => { observed = resolve; });
-            const body = JSON.stringify({ kvs: [], succeeded: true, header: { revision: '1' } });
-            const gateway = createServer((input, response) => {
-                input.resume();
-                if (paused) { held.push(response); observed(); }
-                else { response.end(body); }
-            });
-            await new Promise(resolve => { gateway.listen(0, '127.0.0.1', resolve); });
-            const port = await freePort();
-            const events = [];
-            let started = false;
-            const startup = runCollector({ registry: registry(events), signals: false, argv: [], env: {
-                COLLECTOR_NODE_ID: 'a', COLLECTOR_ASSIGNMENT_FILE: file, COLLECTOR_HEALTH_PORT: String(port),
-                COLLECTOR_CONTROL_ENDPOINTS: `http://127.0.0.1:${gateway.address().port}`
-            } }).then(collector => { started = true; return collector; });
-            try {
-                await request;
-                assert.equal(started, true, 'The first control request must not block cached collection or health startup');
-                assert.equal(events.includes('reading'), cached);
-                assert.equal((await fetch(`http://127.0.0.1:${port}/live`)).status, 200);
-                assert.equal((await fetch(`http://127.0.0.1:${port}/ready`)).status, cached ? 200 : 503);
-            } finally {
-                paused = false;
-                held.forEach(response => { response.end(body); });
-                await (await startup).stop();
-                gateway.closeAllConnections();
-                await new Promise(resolve => { gateway.close(resolve); });
-                await rm(directory, { recursive: true, force: true });
+    it('starts local health while waiting for its first controller assignment', async function() {
+        let observed; let reported;
+        const assignmentRequested = new Promise(resolve => { observed = resolve; });
+        const assignmentReported = new Promise(resolve => { reported = resolve; });
+        const snapshot = { generation: 1, assignments: [
+            { taskId: 'sensor', generation: 1, specVersion: 1, spec: { adapter: 'test' } }
+        ] };
+        const range = JSON.stringify({ kvs: [{ value: Buffer.from(JSON.stringify(snapshot)).toString('base64') }] });
+        const gateway = createServer((input, response) => {
+            input.resume();
+            if (input.url === '/v3/kv/range') {
+                observed(response);
+                return;
             }
+            input.on('end', () => { response.end('{}'); reported(); });
         });
-    }
+        await new Promise(resolve => { gateway.listen(0, '127.0.0.1', resolve); });
+        const port = await freePort();
+        const health = `http://127.0.0.1:${port}`;
+        const events = [];
+        const startup = runCollector({ registry: registry(events), signals: false, argv: [], env: {
+            COLLECTOR_NODE_ID: 'a', COLLECTOR_HEALTH_PORT: String(port),
+            COLLECTOR_CONTROL_ENDPOINTS: `http://127.0.0.1:${gateway.address().port}`
+        } });
+        let pending;
+        try {
+            await startup;
+            pending = await assignmentRequested;
+            assert.deepEqual(events, []);
+            assert.equal((await fetch(`${health}/live`)).status, 200);
+            assert.equal((await fetch(`${health}/ready`)).status, 503);
+
+            pending.end(range);
+            await assignmentReported;
+            assert.deepEqual(events, ['reading']);
+            assert.equal((await fetch(`${health}/ready`)).status, 200);
+        } finally {
+            if (pending && !pending.writableEnded) { pending.end(range); }
+            gateway.closeAllConnections();
+            await (await startup.catch(() => { return null; }))?.stop();
+            await new Promise(resolve => { gateway.close(resolve); });
+        }
+    });
 });

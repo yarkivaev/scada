@@ -101,9 +101,14 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- end }}
-          {{- if .hostDevices }}
+          {{- if or .hostDevices .readOnlyRootFilesystem }}
           securityContext:
+            {{- if .hostDevices }}
             privileged: true
+            {{- end }}
+            {{- if .readOnlyRootFilesystem }}
+            readOnlyRootFilesystem: true
+            {{- end }}
           {{- end }}
           {{- if or .hostDevices .volumeMounts }}
           volumeMounts:
