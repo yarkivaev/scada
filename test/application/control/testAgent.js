@@ -1,43 +1,54 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import agent from '../../../src/application/control/agent.js';
 describe('embedded control agent', () => {
-    it('persists before applying, survives offline restart, and removes omitted tasks', async () => {
+    it('ignores legacy assignment files and reads the controller after restart', async () => {
         const directory = await mkdtemp(path.join(tmpdir(), 'assignment-'));
         const file = path.join(directory, 'snapshot.json');
+        const legacy = JSON.stringify({ generation: 90, assignments: [
+            { taskId: 'legacy', generation: 1, specVersion: 1, spec: { adapter: 'test' } }
+        ] });
         let snapshot = { generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test' } }] };
-        let offline = false;
-        const runtime = { rows: [], apply(input) { this.rows = [input]; }, remove() { this.rows = []; }, status() { return { tasks: this.rows, fatal: false }; } };
-        const store = { assignment() { if (offline) { throw new Error('offline'); } return Promise.resolve(snapshot); }, report() { return Promise.resolve(); } };
+        const store = { assignment() { if (!snapshot) { throw new Error('offline'); } return snapshot; }, report() {} };
+        function runtime() {
+            return { rows: [], apply(input) { this.rows = [input]; }, remove() { this.rows = []; }, status() { return { tasks: this.rows, fatal: false }; } };
+        }
+        await writeFile(file, legacy);
+        const firstRuntime = runtime();
+        const first = agent({ nodeId: 'a', file, store, runtime: firstRuntime, validate() {} });
+        const secondRuntime = runtime();
+        let second;
         try {
-            const first = agent({ nodeId: 'a', file, store, runtime, validate() {} });
             await first.start();
-            assert.equal(runtime.rows.length, 1);
+            assert.deepEqual(firstRuntime.rows.map(row => { return row.taskId; }), ['s']);
+            assert.equal(await readFile(file, 'utf8'), legacy);
             await first.stop();
-            runtime.rows = [];
-            offline = true;
-            const second = agent({ nodeId: 'a', file, store, runtime, validate() {} });
+
+            snapshot = null;
+            second = agent({ nodeId: 'a', store, runtime: secondRuntime, validate() {} });
             await second.start();
-            assert.equal(runtime.rows.length, 1);
-            offline = false;
-            snapshot = { generation: 2, assignments: [] };
+            assert.equal(second.status().hasAssignment, false);
+            assert.deepEqual(secondRuntime.rows, []);
+
+            snapshot = { generation: 2, assignments: [{ taskId: 's', generation: 2, specVersion: 1, spec: { adapter: 'test' } }] };
             await second.tick();
-            assert.equal(runtime.rows.length, 0);
-            await second.stop();
-        } finally { await rm(directory, { recursive: true, force: true }); }
-    });
-    it('does not stop a running task when control is unavailable', async () => {
-        const directory = await mkdtemp(path.join(tmpdir(), 'assignment-'));
-        const runtime = { status() { return { tasks: [{ taskId: 's' }] }; }, remove() { throw new Error('must not remove'); } };
-        const instance = agent({ nodeId: 'a', file: path.join(directory, 'snapshot.json'), runtime, store: { assignment() { throw new Error('offline'); } }, validate() {} });
-        try { await instance.start(); await instance.tick(); await instance.stop(); } finally { await rm(directory, { recursive: true, force: true }); }
+            assert.equal(second.status().appliedGeneration, 2);
+            assert.equal(secondRuntime.rows[0].taskId, 's');
+            snapshot = { generation: 3, assignments: [] };
+            await second.tick();
+            assert.deepEqual(secondRuntime.rows, []);
+        } finally {
+            await first.stop();
+            await second?.stop();
+            await rm(directory, { recursive: true, force: true });
+        }
     });
 });
 
 describe('assignment startup retry', () => {
-    it('retries a failed task start on the same saved generation', async () => {
+    it('retries a failed task start on the same generation', async () => {
         const { default: createRuntime } = await import('../../../src/application/runtime/runtime.js');
         let attempts = 0;
         const runtime = createRuntime({ registry: new Map([['test', { validate() {}, resources() { return []; }, create() {
@@ -53,12 +64,11 @@ describe('assignment startup retry', () => {
 });
 describe('control snapshot recovery epoch', () => {
     it('accepts a new epoch with lower remote generation and rebases local execution monotonically', async () => {
-        const directory = await mkdtemp(path.join(tmpdir(), 'assignment-'));
         let snapshot = { controlEpoch: 'before', generation: 50, assignments: [{ taskId: 's', generation: 50, specVersion: 1, spec: { adapter: 'test', value: 1 } }] };
         const applied = [];
         const reports = [];
         const runtime = { apply(input) { applied.push(input); }, remove() {}, status() { return { tasks: applied.length ? [applied.at(-1)] : [] }; } };
-        const instance = agent({ nodeId: 'a', file: path.join(directory, 'snapshot.json'), runtime, validate() {}, store: { assignment() { return snapshot; }, report(id, value) { reports.push(value); } } });
+        const instance = agent({ nodeId: 'a', runtime, validate() {}, store: { assignment() { return snapshot; }, report(id, value) { reports.push(value); } } });
         try {
             await instance.start();
             snapshot = { controlEpoch: 'after', generation: 1, assignments: [{ taskId: 's', generation: 1, specVersion: 1, spec: { adapter: 'test', value: 2 } }] };
@@ -71,31 +81,28 @@ describe('control snapshot recovery epoch', () => {
             snapshot = { ...snapshot, generation: 0 };
             await instance.tick();
             assert.equal(applied.length, count);
-            await instance.stop();
-        } finally { await rm(directory, { recursive: true, force: true }); }
+        } finally { await instance.stop(); }
     });
 });
 
 describe('partial assignment failure isolation', () => {
-    it('starts healthy tasks after a failed source, including offline cached restart', async () => {
+    it('starts healthy tasks after a failed source and retries them while control is offline', async () => {
         const { default: createRuntime } = await import('../../../src/application/runtime/runtime.js');
-        const directory=await mkdtemp(path.join(tmpdir(),'partial-'));
-        const file=path.join(directory,'snapshot.json');
         const snapshot={generation:1,assignments:['bad','good'].map((taskId)=>{return {taskId,generation:1,specVersion:1,spec:{adapter:'test',fail:taskId==='bad'}};})};
         let available=false;
+        let online=true;
         function runtime() { return createRuntime({registry:new Map([['test',{validate(){},resources(){return [];},create(spec){return {start(){if(spec.fail&&!available){throw new Error('source offline');}},stop(){}};}}]])}); }
-        let host=runtime(); let instance;
+        const host=runtime();
+        const instance=agent({nodeId:'a',runtime:host,validate(){},store:{assignment(){if(!online){throw new Error('control offline');}return snapshot;},report(){}}});
         try {
-            instance=agent({nodeId:'a',file,runtime:host,validate(){},store:{assignment(){return snapshot;},report(){}}});
             await instance.start();
             assert.equal(host.status().tasks.find((row)=>{return row.taskId==='good';})?.state,'running');
-            await instance.stop(); await host.stop();
-            host=runtime();
-            instance=agent({nodeId:'a',file,runtime:host,validate(){},store:{assignment(){throw new Error('control offline');},report(){}}});
-            await instance.start();
-            assert.equal(host.status().tasks.find((row)=>{return row.taskId==='good';})?.state,'running');
+            assert.equal(instance.status().appliedGeneration,null);
+            online=false;
             available=true; await instance.tick();
             assert.equal(host.status().tasks.find((row)=>{return row.taskId==='bad';})?.state,'running');
-        } finally {await instance?.stop(); await host.stop(); await rm(directory,{recursive:true,force:true});}
+            assert.equal(host.status().tasks.find((row)=>{return row.taskId==='good';})?.state,'running');
+            assert.equal(instance.status().appliedGeneration,1);
+        } finally {await instance.stop(); await host.stop();}
     });
 });

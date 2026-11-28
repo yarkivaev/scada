@@ -1,7 +1,6 @@
 import executionSnapshot, { remoteSnapshot, remoteStatus } from './executionSnapshot.js';
 import localAssignment from './localAssignment.js';
 import { randomUUID } from 'node:crypto';
-import { checkSnapshot, loadSnapshot, saveSnapshot } from './snapshotFile.js';
 async function applyTasks(runtime,snapshot,nodeId,onError) {
     const ids=new Set(snapshot.assignments.map((row)=>{return row.taskId;}));
     const removals=runtime.status().tasks.filter((row)=>{return !ids.has(row.taskId);});
@@ -15,22 +14,19 @@ async function applyTasks(runtime,snapshot,nodeId,onError) {
     }
     return applied;
 }
-/** Control connectivity never determines whether the saved assignment may execute. */
-export default function assignmentAgent({ nodeId, file, store, runtime, validate, intervalMs = 5000, onError = () => {
+/** Keep reconciling the current assignment when the controller is unavailable. */
+export default function assignmentAgent({ nodeId, store, runtime, validate, intervalMs = 5000, onError = () => {
     // Optional diagnostic sink.
 } }) {
-    if (!nodeId || !file) { throw new TypeError('Control node id and assignment file required'); }
+    if (!nodeId) { throw new TypeError('Control node id required'); }
     const state = { desired: null, appliedGeneration: null, stopped: false, timer: null, pending: null, sequence: 0, bootId: randomUUID() };
     // Serialized by tick and startup; mutations cannot overlap.
     /* eslint-disable require-atomic-updates */
-    async function reconcile(input, restored = false) {
-        checkSnapshot(input);
-        await validate(remoteSnapshot(input));
-        const snapshot = executionSnapshot(input, state.desired, runtime.status().tasks, restored);
-        if (snapshot !== state.desired) {
-            await saveSnapshot(file, snapshot);
-            state.desired = snapshot;
-        }
+    async function reconcile(input) {
+        const remote = remoteSnapshot(input);
+        await validate(remote);
+        const snapshot = executionSnapshot(remote, state.desired, runtime.status().tasks);
+        state.desired = snapshot;
         const applied=await applyTasks(runtime,snapshot,nodeId,onError);
         state.appliedGeneration=applied?snapshot.generation:null;
     }
@@ -51,8 +47,6 @@ export default function assignmentAgent({ nodeId, file, store, runtime, validate
         tick,
         status() { return { hasAssignment: Boolean(state.desired), appliedGeneration: state.appliedGeneration }; },
         async start({ waitForInitialTick = true } = {}) {
-            const saved = await loadSnapshot(file);
-            if (saved) { await reconcile(saved, true); }
             if (waitForInitialTick) { await tick(); } else { void tick().catch(onError); }
             state.timer = setInterval(() => { void tick(); }, intervalMs);
         },

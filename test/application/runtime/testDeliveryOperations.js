@@ -18,7 +18,7 @@ describe('delivery operation batching',()=>{
         const queue=await factory(async operations=>{entered.resolve();await committed.promise;return operations.map(()=>{return {ok:true};});},{maxOperations:3,maxPendingBytes:30,groupCommit:{maxRecords:2,maxBytes:20,maxDelayMs:0}});
         const first=queue.mutate(build('a'));const second=queue.mutate(build('b'));await entered.promise;
         const third=queue.mutate(build('c'));assert.deepEqual(queue.status(),{operations:3,bytes:30});
-        const fourth=queue.mutate(build('d'));committed.resolve();await Promise.all([first,second,third,fourth]);
+        await assert.rejects(queue.mutate(build('d')),/operation capacity/u);committed.resolve();await Promise.all([first,second,third]);
         const bytes=await factory(async operations=>{return operations.map(()=>{return {ok:true};});},{maxPendingBytes:15});
         const retained=bytes.mutate(build('a'));await assert.rejects(bytes.mutate(build('b')),/byte capacity/u);await retained;
     });
@@ -54,9 +54,9 @@ describe('delivery operation batching',()=>{
     it('reserves receipt capacity before network publication and only queues its mutation after confirmation',async()=>{
         const groups=[];const queue=await factory(async operations=>{groups.push(operations);return operations.map(()=>{return {ok:true};});},{maxOperations:1});
         const ticket=await queue.prepare(build('receipt'));assert.equal(queue.status().operations,1);
-        const source=queue.mutate(build('source'));
+        await assert.rejects(queue.mutate(build('source')),/operation capacity/u);
         let idle=false;const waiting=queue.idle().then(()=>{idle=true;});await pause(5);assert.equal(idle,false);assert.deepEqual(groups,[]);
-        await ticket.commit();await source;await waiting;assert.deepEqual(groups,[['receipt'],['source']]);assert.equal(queue.status().operations,0);
+        await ticket.commit();await waiting;assert.deepEqual(groups,[['receipt']]);assert.equal(queue.status().operations,0);
         const cancelled=await queue.prepare(build('cancelled'));cancelled.cancel();await assert.rejects(cancelled.commit(),/settled/u);assert.equal(queue.status().operations,0);
     });
     it('accounts retained network bytes separately from committed mutation-group bytes',async()=>{
@@ -67,12 +67,12 @@ describe('delivery operation batching',()=>{
     it('rejects malformed grouped outcomes without releasing any reservation twice',async()=>{
         const queue=await factory(async()=>{return [undefined];});await assert.rejects(queue.mutate(build('a')),/Invalid grouped/u);assert.deepEqual(queue.status(),{operations:0,bytes:0});
     });
-    it('waits for a free slot instead of rejecting a later mutation',async()=>{
+    it('rejects excess producers without retaining their input builders',async()=>{
         const entered=gate();const committed=gate();
         const queue=await factory(async operations=>{entered.resolve();await committed.promise;return operations.map(()=>{return {ok:true};});},{maxOperations:1,groupCommit:{maxDelayMs:0}});
         const first=queue.mutate(build('a'));await entered.promise;
-        const second=queue.mutate(build('b'));committed.resolve();
-        await Promise.all([first,second]);
+        await assert.rejects(queue.mutate(()=>{throw new Error('should not snapshot');}),/operation capacity/u);committed.resolve();
+        await first;await queue.mutate(build('b'));
         assert.deepEqual(queue.status(),{operations:0,bytes:0},'a later mutation never occupied the released slot');
     });
 });

@@ -26,7 +26,7 @@ Keep plant state at the edge. Forward selected telemetry to central ingestion an
 
 ### Multiple collector nodes with edge control
 
-Deploy etcd and the controller when task placement should move between eligible nodes. Pin work that requires a physical device to its host. If etcd loses quorum, new placement pauses and existing collectors can continue their saved assignments. See [Edge assignment controller](../collect/edge-controller.md).
+Deploy etcd and the controller when task placement should move between eligible nodes. Pin work that requires a physical device to its host. If etcd loses quorum, new placement pauses and existing collectors can continue their in-memory assignments. See [Edge assignment controller](../collect/edge-controller.md).
 
 ### Replicated processing
 

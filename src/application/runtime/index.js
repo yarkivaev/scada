@@ -8,5 +8,4 @@ export { default as taskQueue } from './taskQueue.js';
 export { default as createRegistry } from './createRegistry.js';
 export { default as resolveSecrets } from './resolveSecrets.js';
 export { default as taskStatePg } from '../../infrastructure/persistence/runtime/taskStatePg.js';
-export { default as taskStateSqlite } from '../../infrastructure/persistence/runtime/taskStateSqlite.js';
 export { default as spooledOutput, amqpDestinations } from './spooledOutput.js';
